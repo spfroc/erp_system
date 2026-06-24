@@ -144,6 +144,19 @@ export interface Transaction {
   amount: number;
   date: string;
   status: "待匹配" | "已匹配";
+  account?: string;
+  counterpartyOrgId?: string;
+  remark?: string;
+}
+
+export interface OperationLog {
+  id: string;
+  action: string;
+  targetType: "项目" | "实体" | "商品" | "发票" | "流水" | "用户" | "权限" | "系统";
+  targetName: string;
+  operator: string;
+  createdAt: string;
+  detail?: string;
 }
 
 export interface OcrJob {
@@ -200,5 +213,6 @@ export interface AppData {
   onboardingRecords: OnboardingRecord[];
   invoices: Invoice[];
   transactions: Transaction[];
+  operationLogs: OperationLog[];
   ocrJobs: OcrJob[];
 }

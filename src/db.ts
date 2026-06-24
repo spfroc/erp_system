@@ -23,8 +23,9 @@ export async function loadData(): Promise<AppData> {
       ...(current as Partial<AppData>),
       users: (current as Partial<AppData>).users ?? seedData.users,
       roles: (current as Partial<AppData>).roles ?? seedData.roles,
+      operationLogs: (current as Partial<AppData>).operationLogs ?? seedData.operationLogs,
     } as AppData;
-    if (!(current as Partial<AppData>).users || !(current as Partial<AppData>).roles) {
+    if (!(current as Partial<AppData>).users || !(current as Partial<AppData>).roles || !(current as Partial<AppData>).operationLogs) {
       await db.put(STORE, migrated, KEY);
     }
     return migrated;

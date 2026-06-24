@@ -460,6 +460,10 @@ nav button:hover {
   border-bottom: 1px solid #edf1f5;
 }
 
+.table-row.tx-table {
+  grid-template-columns: 1.5fr 0.55fr 0.7fr 0.75fr 0.65fr 1fr;
+}
+
 .table-row:last-child {
   border-bottom: 0;
 }
@@ -518,6 +522,61 @@ nav button:hover {
   border-radius: 8px;
   padding: 0 10px;
   outline: 0;
+}
+
+.transaction-form {
+  display: grid;
+  grid-template-columns: 1.5fr 120px 120px 140px minmax(180px, 1fr) auto;
+  gap: 10px;
+}
+
+.transaction-form input,
+.transaction-form select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.compact-metrics {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.log-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 220px minmax(220px, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #dfe7ef;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.log-card strong,
+.log-card span,
+.log-card em {
+  display: block;
+}
+
+.log-card strong {
+  margin-top: 7px;
+}
+
+.log-card p,
+.log-card em,
+.log-card span:not(.tag) {
+  margin: 4px 0 0;
+  color: #697586;
+  font-style: normal;
+  line-height: 1.5;
 }
 
 .product-form textarea {
@@ -779,6 +838,9 @@ nav button:hover {
   .form-grid,
   .form-grid.entity-form,
   .product-form,
+  .transaction-form,
+  .compact-metrics,
+  .log-card,
   .user-form,
   .user-card {
     grid-template-columns: 1fr;

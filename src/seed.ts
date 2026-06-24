@@ -284,9 +284,14 @@ export const seedData: AppData = {
     { id: "inv-2", projectId: "pj-2", type: "销项", counterpartyOrgId: "org-5", amount: 2000, status: "草稿" },
   ],
   transactions: [
-    { id: "tx-1", projectId: "pj-1", type: "收款", amount: 1830, date: "2026-06-19", status: "已匹配" },
-    { id: "tx-2", projectId: "pj-2", type: "收款", amount: 2000, date: "2026-06-24", status: "已匹配" },
-    { id: "tx-3", projectId: "pj-3", type: "收款", amount: 1000, date: "2026-06-24", status: "已匹配" },
+    { id: "tx-1", projectId: "pj-1", type: "收款", amount: 1830, date: "2026-06-19", status: "已匹配", counterpartyOrgId: "org-1", account: "公户", remark: "客户货款" },
+    { id: "tx-2", projectId: "pj-2", type: "收款", amount: 2000, date: "2026-06-24", status: "已匹配", counterpartyOrgId: "org-5", account: "公户", remark: "平台入驻服务费" },
+    { id: "tx-3", projectId: "pj-3", type: "收款", amount: 1000, date: "2026-06-24", status: "已匹配", counterpartyOrgId: "org-6", account: "微信", remark: "续办服务费" },
+  ],
+  operationLogs: [
+    { id: "log-1", action: "创建项目", targetType: "项目", targetName: "示例政务服务中心空调采购", operator: "老板", createdAt: now, detail: "从订单表导入生成项目" },
+    { id: "log-2", action: "匹配收款流水", targetType: "流水", targetName: "XM20260619001", operator: "财务同事", createdAt: now, detail: "收款 1830 元匹配销售订单" },
+    { id: "log-3", action: "营业执照 OCR 回填", targetType: "实体", targetName: "示例智能科技有限公司", operator: "平台运营", createdAt: now, detail: "识别统一社会信用代码并创建平台入驻客户身份" },
   ],
   ocrJobs: [
     {

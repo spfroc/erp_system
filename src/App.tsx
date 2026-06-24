@@ -6,6 +6,7 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  History,
   FileScan,
   FileText,
   Home,
@@ -14,13 +15,14 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  WalletCards,
   UserPlus,
   Users,
 } from "lucide-react";
 import { createId, loadData, resetData, saveData } from "./db";
-import type { AppData, EntityType, Organization, OrganizationRole, PermissionKey, Product, Project, ProjectStatus, SupplierPrice, User } from "./types";
+import type { AppData, EntityType, OperationLog, Organization, OrganizationRole, PermissionKey, Product, Project, ProjectStatus, SupplierPrice, Transaction, User } from "./types";
 
-type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "finance" | "access";
+type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "invoices" | "transactions" | "logs" | "access";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "总览", icon: Home },
@@ -28,7 +30,9 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "entities", label: "实体", icon: Building2 },
   { id: "products", label: "商品", icon: Boxes },
   { id: "onboarding", label: "入驻服务", icon: ShieldCheck },
-  { id: "finance", label: "发票流水", icon: Banknote },
+  { id: "invoices", label: "发票", icon: FileText },
+  { id: "transactions", label: "交易流水", icon: WalletCards },
+  { id: "logs", label: "操作日志", icon: History },
   { id: "access", label: "用户权限", icon: Users },
 ];
 
@@ -78,9 +82,15 @@ export default function App() {
     loadData().then(setData);
   }, []);
 
-  async function commit(next: AppData) {
-    setData(next);
-    await saveData(next);
+  async function commit(next: AppData, log?: Omit<OperationLog, "id" | "createdAt">) {
+    const withLog = log
+      ? {
+          ...next,
+          operationLogs: [{ id: createId("log"), createdAt: today(), ...log }, ...next.operationLogs],
+        }
+      : next;
+    setData(withLog);
+    await saveData(withLog);
   }
 
   if (!data) {
@@ -144,7 +154,9 @@ export default function App() {
         {view === "entities" && <Entities data={data} commit={commit} query={query} />}
         {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
-        {view === "finance" && <Finance data={data} />}
+        {view === "invoices" && <Invoices data={data} />}
+        {view === "transactions" && <Transactions data={data} commit={commit} />}
+        {view === "logs" && <OperationLogs data={data} />}
         {view === "access" && <AccessControl data={data} commit={commit} />}
       </main>
     </div>
@@ -331,7 +343,7 @@ function Projects({
   );
 }
 
-function Entities({ data, commit, query }: { data: AppData; commit: (data: AppData) => Promise<void>; query: string }) {
+function Entities({ data, commit, query }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void>; query: string }) {
   const [name, setName] = useState("");
   const [creditCode, setCreditCode] = useState("");
   const [legalPerson, setLegalPerson] = useState("");
@@ -370,7 +382,10 @@ function Entities({ data, commit, query }: { data: AppData; commit: (data: AppDa
             }
           : org,
       );
-      await commit({ ...data, organizations: updated });
+      await commit(
+        { ...data, organizations: updated },
+        { action: "合并实体身份", targetType: "实体", targetName: duplicate.name, operator: "当前用户", detail: `追加身份：${role}` },
+      );
       setName("");
       setCreditCode("");
       setLegalPerson("");
@@ -388,7 +403,10 @@ function Entities({ data, commit, query }: { data: AppData; commit: (data: AppDa
       status: "正常",
       createdAt: today(),
     };
-    await commit({ ...data, organizations: [organization, ...data.organizations] });
+    await commit(
+      { ...data, organizations: [organization, ...data.organizations] },
+      { action: "新增实体", targetType: "实体", targetName: organization.name, operator: "当前用户", detail: `身份：${role}` },
+    );
     setName("");
     setCreditCode("");
     setLegalPerson("");
@@ -440,7 +458,7 @@ function Entities({ data, commit, query }: { data: AppData; commit: (data: AppDa
   );
 }
 
-function Products({ data, commit }: { data: AppData; commit: (data: AppData) => Promise<void> }) {
+function Products({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
   const [form, setForm] = useState({
     code: "",
     name: "",
@@ -482,11 +500,14 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData) => 
     const newSupplierPrice: SupplierPrice | null = supplierOrgId && supplierPrice
       ? { id: createId("sp"), productId: product.id, supplierOrgId, purchasePrice: Number(supplierPrice), note: "新建商品默认渠道" }
       : null;
-    await commit({
-      ...data,
-      products: [product, ...data.products],
-      supplierPrices: newSupplierPrice ? [newSupplierPrice, ...data.supplierPrices] : data.supplierPrices,
-    });
+    await commit(
+      {
+        ...data,
+        products: [product, ...data.products],
+        supplierPrices: newSupplierPrice ? [newSupplierPrice, ...data.supplierPrices] : data.supplierPrices,
+      },
+      { action: "新建商品", targetType: "商品", targetName: product.name, operator: "当前用户", detail: `商品编码：${product.code}` },
+    );
     setForm({ code: "", name: "", category: "空调", capacity: "", energyLevel: "", shape: "", frameworkPrice: "", quotePrice: "", passThroughPrice: "", costPrice: "", platformCode: "", orderInfo: "" });
     setSupplierPrice("");
   }
@@ -585,26 +606,89 @@ function Onboarding({ data }: { data: AppData }) {
   );
 }
 
-function Finance({ data }: { data: AppData }) {
+function Invoices({ data }: { data: AppData }) {
   return (
-    <div className="two-col">
+    <div className="panel">
+      <PanelTitle title="发票台账" subtitle="发票需要关联项目、销售订单、采购订单、客户和供应商；验证版先展示项目关联。" />
+      <div className="table">
+        <div className="table-row head"><span>项目</span><span>类型</span><span>金额</span><span>状态</span></div>
+        {data.invoices.map((invoice) => {
+          const project = data.projects.find((item) => item.id === invoice.projectId);
+          return <div className="table-row" key={invoice.id}><span>{project?.name}</span><span>{invoice.type}</span><span>{money(invoice.amount)}</span><span>{invoice.status}</span></div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Transactions({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
+  const [projectId, setProjectId] = useState(data.projects[0]?.id ?? "");
+  const [type, setType] = useState<Transaction["type"]>("收款");
+  const [amount, setAmount] = useState("");
+  const [account, setAccount] = useState("公户");
+  const [remark, setRemark] = useState("");
+
+  async function addTransaction() {
+    const project = data.projects.find((item) => item.id === projectId);
+    const numericAmount = Number(amount);
+    if (!project || !numericAmount) return;
+    const transaction: Transaction = {
+      id: createId("tx"),
+      projectId,
+      type,
+      amount: numericAmount,
+      date: new Date().toISOString().slice(0, 10),
+      status: "已匹配",
+      account,
+      counterpartyOrgId: project.customerOrgId,
+      remark,
+    };
+    await commit(
+      { ...data, transactions: [transaction, ...data.transactions] },
+      { action: "新增交易流水", targetType: "流水", targetName: project.name, operator: "当前用户", detail: `${type} ${money(numericAmount)}，账户：${account}` },
+    );
+    setAmount("");
+    setRemark("");
+  }
+
+  const totals = data.transactions.reduce(
+    (acc, tx) => {
+      if (tx.type === "收款" || tx.type === "后返") acc.income += tx.amount;
+      if (tx.type === "付款" || tx.type === "垫付") acc.outcome += tx.amount;
+      return acc;
+    },
+    { income: 0, outcome: 0 },
+  );
+
+  return (
+    <div className="stack">
       <div className="panel">
-        <PanelTitle title="发票台账" subtitle="OCR 识别后生成待确认发票草稿。" />
-        <div className="table">
-          <div className="table-row head"><span>项目</span><span>类型</span><span>金额</span><span>状态</span></div>
-          {data.invoices.map((invoice) => {
-            const project = data.projects.find((item) => item.id === invoice.projectId);
-            return <div className="table-row" key={invoice.id}><span>{project?.name}</span><span>{invoice.type}</span><span>{money(invoice.amount)}</span><span>{invoice.status}</span></div>;
-          })}
+        <PanelTitle title="新增交易流水" subtitle="流水关联项目，可记录客户收款、供应商付款、垫付、后返。" />
+        <div className="transaction-form">
+          <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            {data.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </select>
+          <select value={type} onChange={(event) => setType(event.target.value as Transaction["type"])}>
+            {["收款", "付款", "垫付", "后返"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="金额" />
+          <input value={account} onChange={(event) => setAccount(event.target.value)} placeholder="账户，如 公户/微信" />
+          <input value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="备注" />
+          <button className="primary" onClick={addTransaction}><WalletCards size={16} />新增流水</button>
         </div>
       </div>
+      <div className="metric-grid compact-metrics">
+        <Metric label="收入流水" value={money(totals.income)} icon={Banknote} />
+        <Metric label="支出/垫付" value={money(totals.outcome)} icon={WalletCards} />
+        <Metric label="流水条数" value={data.transactions.length.toString()} icon={ClipboardList} />
+      </div>
       <div className="panel">
-        <PanelTitle title="交易流水" subtitle="收款、付款、垫付和后返统一关联项目。" />
+        <PanelTitle title="交易流水台账" subtitle="后续可增加银行/微信导入、未匹配流水、流水拆分匹配。" />
         <div className="table">
-          <div className="table-row head"><span>项目</span><span>类型</span><span>金额</span><span>状态</span></div>
+          <div className="table-row tx-table head"><span>项目</span><span>类型</span><span>金额</span><span>账户</span><span>状态</span><span>备注</span></div>
           {data.transactions.map((tx) => {
             const project = data.projects.find((item) => item.id === tx.projectId);
-            return <div className="table-row" key={tx.id}><span>{project?.name}</span><span>{tx.type}</span><span>{money(tx.amount)}</span><span>{tx.status}</span></div>;
+            return <div className="table-row tx-table" key={tx.id}><span>{project?.name}</span><span>{tx.type}</span><span>{money(tx.amount)}</span><span>{tx.account || "未录入"}</span><span>{tx.status}</span><span>{tx.remark || "无"}</span></div>;
           })}
         </div>
       </div>
@@ -612,7 +696,31 @@ function Finance({ data }: { data: AppData }) {
   );
 }
 
-function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData) => Promise<void> }) {
+function OperationLogs({ data }: { data: AppData }) {
+  return (
+    <div className="panel">
+      <PanelTitle title="操作日志" subtitle="记录关键业务操作，不允许物理删除；后续后端应记录字段变更前后值。" />
+      <div className="log-list">
+        {data.operationLogs.map((log) => (
+          <article className="log-card" key={log.id}>
+            <div>
+              <span className="tag">{log.targetType}</span>
+              <strong>{log.action}</strong>
+              <p>{log.targetName}</p>
+            </div>
+            <div>
+              <span>{log.operator}</span>
+              <em>{new Date(log.createdAt).toLocaleString("zh-CN")}</em>
+            </div>
+            <p>{log.detail || "无详情"}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [roleId, setRoleId] = useState(data.roles[0]?.id ?? "");
@@ -627,16 +735,25 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
       status: "启用",
       createdAt: today(),
     };
-    await commit({ ...data, users: [user, ...data.users] });
+    await commit(
+      { ...data, users: [user, ...data.users] },
+      { action: "新增用户", targetType: "用户", targetName: user.name, operator: "当前用户", detail: `角色：${data.roles.find((role) => role.id === roleId)?.name}` },
+    );
     setName("");
     setPhone("");
   }
 
   async function toggleUser(userId: string) {
-    await commit({
-      ...data,
-      users: data.users.map((user) => (user.id === userId ? { ...user, status: user.status === "启用" ? "停用" : "启用" } : user)),
-    });
+    const target = data.users.find((user) => user.id === userId);
+    if (!target) return;
+    const nextStatus = target.status === "启用" ? "停用" : "启用";
+    await commit(
+      {
+        ...data,
+        users: data.users.map((user) => (user.id === userId ? { ...user, status: nextStatus } : user)),
+      },
+      { action: `${nextStatus}用户`, targetType: "用户", targetName: target.name, operator: "当前用户" },
+    );
   }
 
   function roleNames(user: User) {
