@@ -54,9 +54,16 @@ export interface Product {
   name: string;
   kind: "实体商品" | "虚拟服务";
   category: string;
+  capacity?: string;
+  energyLevel?: string;
+  shape?: string;
+  frameworkPrice?: number;
+  passThroughPrice?: number;
   quotePrice: number;
   costPrice: number;
   platformCode?: string;
+  orderInfo?: string;
+  area?: string;
   description?: string;
 }
 

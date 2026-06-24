@@ -476,6 +476,57 @@ nav button:hover {
   gap: 10px;
 }
 
+.form-grid.entity-form {
+  grid-template-columns: 1.2fr 1.2fr 0.8fr 0.8fr 130px 130px auto auto;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.segmented button {
+  min-height: 34px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.segmented button.active {
+  border-color: #1f7a4d;
+  background: #e8f7ef;
+  color: #17603d;
+}
+
+.product-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.product-form input,
+.product-form select,
+.product-form textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.product-form textarea {
+  grid-column: 1 / -1;
+  min-height: 76px;
+  padding: 10px;
+  resize: vertical;
+}
+
 .org-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(240px, 1fr));
@@ -608,7 +659,9 @@ nav button:hover {
   .info-grid,
   .info-grid.compact,
   .org-grid,
-  .form-grid {
+  .form-grid,
+  .form-grid.entity-form,
+  .product-form {
     grid-template-columns: 1fr;
   }
 

@@ -9,7 +9,7 @@ import {
   FileScan,
   FileText,
   Home,
-  PackagePlus,
+  Package,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -17,18 +17,17 @@ import {
   UserPlus,
 } from "lucide-react";
 import { createId, loadData, resetData, saveData } from "./db";
-import type { AppData, EntityType, Organization, OrganizationRole, Project, ProjectStatus } from "./types";
+import type { AppData, EntityType, Organization, OrganizationRole, Product, Project, ProjectStatus, SupplierPrice } from "./types";
 
-type View = "dashboard" | "projects" | "organizations" | "products" | "onboarding" | "finance" | "ocr";
+type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "finance";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "总览", icon: Home },
   { id: "projects", label: "项目", icon: ClipboardList },
-  { id: "organizations", label: "往来单位", icon: Building2 },
+  { id: "entities", label: "实体", icon: Building2 },
   { id: "products", label: "商品", icon: Boxes },
   { id: "onboarding", label: "入驻服务", icon: ShieldCheck },
   { id: "finance", label: "发票流水", icon: Banknote },
-  { id: "ocr", label: "OCR", icon: FileScan },
 ];
 
 const statusColumns: ProjectStatus[] = ["已付款待办理", "待采购/平台操作", "履约中", "待开票/待结算", "已完成", "异常"];
@@ -110,17 +109,16 @@ export default function App() {
           </div>
           <div className="search">
             <Search size={18} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、客户、商品" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、实体、商品" />
           </div>
         </header>
 
         {view === "dashboard" && <Dashboard data={data} onOpenProject={(id) => { setSelectedProjectId(id); setView("projects"); }} />}
         {view === "projects" && <Projects data={data} query={query} selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
-        {view === "organizations" && <Organizations data={data} commit={commit} query={query} />}
-        {view === "products" && <Products data={data} />}
+        {view === "entities" && <Entities data={data} commit={commit} query={query} />}
+        {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
         {view === "finance" && <Finance data={data} />}
-        {view === "ocr" && <Ocr data={data} commit={commit} />}
       </main>
     </div>
   );
@@ -306,24 +304,50 @@ function Projects({
   );
 }
 
-function Organizations({ data, commit, query }: { data: AppData; commit: (data: AppData) => Promise<void>; query: string }) {
+function Entities({ data, commit, query }: { data: AppData; commit: (data: AppData) => Promise<void>; query: string }) {
   const [name, setName] = useState("");
   const [creditCode, setCreditCode] = useState("");
+  const [legalPerson, setLegalPerson] = useState("");
+  const [phone, setPhone] = useState("");
   const [entityType, setEntityType] = useState<EntityType>("企业");
   const [role, setRole] = useState<OrganizationRole>("客户");
+  const [roleFilter, setRoleFilter] = useState<OrganizationRole | "全部">("全部");
 
-  const filtered = data.organizations.filter((org) => `${org.name}${org.unifiedCreditCode}${org.roles.join("")}`.includes(query));
+  const filtered = data.organizations.filter((org) => {
+    const matchesQuery = `${org.name}${org.unifiedCreditCode}${org.roles.join("")}`.includes(query);
+    const matchesRole = roleFilter === "全部" || org.roles.includes(roleFilter);
+    return matchesQuery && matchesRole;
+  });
+
+  function fillFromLicenseOcr() {
+    setName("示例 OCR 科技有限公司");
+    setCreditCode("91370000OCR001");
+    setLegalPerson("李识别");
+    setPhone("18600000000");
+    setEntityType("企业");
+    setRole("客户");
+  }
 
   async function addOrganization() {
     if (!name.trim()) return;
     const duplicate = creditCode ? data.organizations.find((org) => org.unifiedCreditCode === creditCode) : undefined;
     if (duplicate) {
       const updated = data.organizations.map((org) =>
-        org.id === duplicate.id ? { ...org, roles: Array.from(new Set([...org.roles, role])) as OrganizationRole[] } : org,
+        org.id === duplicate.id
+          ? {
+              ...org,
+              name: name || org.name,
+              legalPerson: legalPerson || org.legalPerson,
+              phone: phone || org.phone,
+              roles: Array.from(new Set([...org.roles, role])) as OrganizationRole[],
+            }
+          : org,
       );
       await commit({ ...data, organizations: updated });
       setName("");
       setCreditCode("");
+      setLegalPerson("");
+      setPhone("");
       return;
     }
     const organization: Organization = {
@@ -332,32 +356,44 @@ function Organizations({ data, commit, query }: { data: AppData; commit: (data: 
       entityType,
       roles: [role],
       unifiedCreditCode: creditCode || undefined,
+      legalPerson: legalPerson || undefined,
+      phone: phone || undefined,
       status: "正常",
       createdAt: today(),
     };
     await commit({ ...data, organizations: [organization, ...data.organizations] });
     setName("");
     setCreditCode("");
+    setLegalPerson("");
+    setPhone("");
   }
 
   return (
     <div className="stack">
       <div className="panel">
-        <PanelTitle title="快速添加往来单位" subtitle="客户、供应商、使用单位共用一个实体，营业执照编号用于企业去重。" />
-        <div className="form-grid">
+        <PanelTitle title="快速添加实体" subtitle="实体是客户、供应商、使用单位等身份的统一基础资料；同一实体可拥有多个身份。" />
+        <div className="form-grid entity-form">
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="单位名称" />
           <input value={creditCode} onChange={(event) => setCreditCode(event.target.value)} placeholder="营业执照编号/统一社会信用代码" />
+          <input value={legalPerson} onChange={(event) => setLegalPerson(event.target.value)} placeholder="法人/负责人" />
+          <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="联系电话" />
           <select value={entityType} onChange={(event) => setEntityType(event.target.value as EntityType)}>
             {entityTypes.map((type) => <option key={type}>{type}</option>)}
           </select>
           <select value={role} onChange={(event) => setRole(event.target.value as OrganizationRole)}>
             {orgRoles.map((item) => <option key={item}>{item}</option>)}
           </select>
+          <button className="ghost" onClick={fillFromLicenseOcr}><FileScan size={16} />营业执照 OCR</button>
           <button className="primary" onClick={addOrganization}><UserPlus size={16} />添加/合并身份</button>
         </div>
       </div>
       <div className="panel">
-        <PanelTitle title="往来单位台账" subtitle="无删除功能；验证版展示停用/归档规则入口。" />
+        <PanelTitle title="实体台账" subtitle="按身份查看客户、供应商、使用单位；无物理删除，只能停用或归档。" />
+        <div className="segmented">
+          {["全部", ...orgRoles].map((item) => (
+            <button key={item} className={roleFilter === item ? "active" : ""} onClick={() => setRoleFilter(item as OrganizationRole | "全部")}>{item}</button>
+          ))}
+        </div>
         <div className="org-grid">
           {filtered.map((org) => (
             <article className="org-card" key={org.id}>
@@ -366,6 +402,7 @@ function Organizations({ data, commit, query }: { data: AppData; commit: (data: 
                 <span>{org.entityType} · {org.status}</span>
               </div>
               <p>{org.unifiedCreditCode || "暂无统一社会信用代码"}</p>
+              <p>{org.legalPerson || "暂无法人"} · {org.phone || "暂无电话"}</p>
               <div className="tags">{org.roles.map((item) => <em key={item}>{item}</em>)}</div>
               <button className="ghost" title="产品规则：不提供物理删除，仅支持停用、作废或归档。"><Trash2 size={15} />无物理删除</button>
             </article>
@@ -376,9 +413,84 @@ function Organizations({ data, commit, query }: { data: AppData; commit: (data: 
   );
 }
 
-function Products({ data }: { data: AppData }) {
+function Products({ data, commit }: { data: AppData; commit: (data: AppData) => Promise<void> }) {
+  const [form, setForm] = useState({
+    code: "",
+    name: "",
+    category: "空调",
+    capacity: "",
+    energyLevel: "",
+    shape: "",
+    frameworkPrice: "",
+    quotePrice: "",
+    passThroughPrice: "",
+    costPrice: "",
+    platformCode: "",
+    orderInfo: "",
+  });
+  const [supplierOrgId, setSupplierOrgId] = useState(data.organizations.find((org) => org.roles.includes("供应商"))?.id ?? "");
+  const [supplierPrice, setSupplierPrice] = useState("");
+  const suppliers = data.organizations.filter((org) => org.roles.includes("供应商"));
+
+  async function addProduct() {
+    if (!form.code.trim() || !form.name.trim()) return;
+    const exists = data.products.some((product) => product.code === form.code);
+    if (exists) return;
+    const product: Product = {
+      id: createId("prd"),
+      code: form.code,
+      name: form.name,
+      kind: form.category === "平台入驻" ? "虚拟服务" : "实体商品",
+      category: form.category,
+      capacity: form.capacity || undefined,
+      energyLevel: form.energyLevel || undefined,
+      shape: form.shape || undefined,
+      frameworkPrice: Number(form.frameworkPrice) || undefined,
+      quotePrice: Number(form.quotePrice) || 0,
+      passThroughPrice: Number(form.passThroughPrice) || undefined,
+      costPrice: Number(form.costPrice) || 0,
+      platformCode: form.platformCode || undefined,
+      orderInfo: form.orderInfo || undefined,
+    };
+    const newSupplierPrice: SupplierPrice | null = supplierOrgId && supplierPrice
+      ? { id: createId("sp"), productId: product.id, supplierOrgId, purchasePrice: Number(supplierPrice), note: "新建商品默认渠道" }
+      : null;
+    await commit({
+      ...data,
+      products: [product, ...data.products],
+      supplierPrices: newSupplierPrice ? [newSupplierPrice, ...data.supplierPrices] : data.supplierPrices,
+    });
+    setForm({ code: "", name: "", category: "空调", capacity: "", energyLevel: "", shape: "", frameworkPrice: "", quotePrice: "", passThroughPrice: "", costPrice: "", platformCode: "", orderInfo: "" });
+    setSupplierPrice("");
+  }
+
   return (
     <div className="stack">
+      <div className="panel">
+        <PanelTitle title="新建商品" subtitle="字段参考价格体系表：商品编码唯一，价格体系和供应商进货价分开维护。" />
+        <div className="product-form">
+          <input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="商品编码，如 25MDKT-001" />
+          <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="商品名称/型号/品牌/规格" />
+          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+            {["空调", "冰箱", "办公用品", "平台入驻"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <input value={form.capacity} onChange={(event) => setForm({ ...form, capacity: event.target.value })} placeholder="匹数/规格" />
+          <input value={form.energyLevel} onChange={(event) => setForm({ ...form, energyLevel: event.target.value })} placeholder="能效" />
+          <input value={form.shape} onChange={(event) => setForm({ ...form, shape: event.target.value })} placeholder="形状/类型" />
+          <input value={form.frameworkPrice} onChange={(event) => setForm({ ...form, frameworkPrice: event.target.value })} placeholder="框架批量价" />
+          <input value={form.quotePrice} onChange={(event) => setForm({ ...form, quotePrice: event.target.value })} placeholder="报价" />
+          <input value={form.passThroughPrice} onChange={(event) => setForm({ ...form, passThroughPrice: event.target.value })} placeholder="过单价" />
+          <input value={form.costPrice} onChange={(event) => setForm({ ...form, costPrice: event.target.value })} placeholder="默认成本进价" />
+          <input value={form.platformCode} onChange={(event) => setForm({ ...form, platformCode: event.target.value })} placeholder="美云销/平台编码" />
+          <select value={supplierOrgId} onChange={(event) => setSupplierOrgId(event.target.value)}>
+            <option value="">不绑定供应商</option>
+            {suppliers.map((supplier) => <option value={supplier.id} key={supplier.id}>{supplier.name}</option>)}
+          </select>
+          <input value={supplierPrice} onChange={(event) => setSupplierPrice(event.target.value)} placeholder="供应商进货价" />
+          <button className="primary" onClick={addProduct}><Package size={16} />新建商品</button>
+          <textarea value={form.orderInfo} onChange={(event) => setForm({ ...form, orderInfo: event.target.value })} placeholder="下单信息/链接/备注" />
+        </div>
+      </div>
       <div className="panel">
         <PanelTitle title="商品与供应商价格" subtitle="商品编码唯一，同一商品可维护多个进货渠道。" />
         <div className="product-list">
@@ -389,7 +501,7 @@ function Products({ data }: { data: AppData }) {
                 <div>
                   <span className="tag">{product.kind}</span>
                   <h3>{product.name}</h3>
-                  <p>{product.code} · {product.category}</p>
+                  <p>{product.code} · {product.category} · {product.capacity || "无规格"} · {product.energyLevel || "无能效"}</p>
                 </div>
                 <strong>{money(product.quotePrice)}</strong>
                 <div className="supplier-prices">
@@ -467,66 +579,6 @@ function Finance({ data }: { data: AppData }) {
             const project = data.projects.find((item) => item.id === tx.projectId);
             return <div className="table-row" key={tx.id}><span>{project?.name}</span><span>{tx.type}</span><span>{money(tx.amount)}</span><span>{tx.status}</span></div>;
           })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Ocr({ data, commit }: { data: AppData; commit: (data: AppData) => Promise<void> }) {
-  async function confirmJob(id: string) {
-    const job = data.ocrJobs.find((item) => item.id === id);
-    if (!job) return;
-    const code = job.result["统一社会信用代码"];
-    const exists = data.organizations.some((org) => org.unifiedCreditCode === code);
-    const organizations = exists
-      ? data.organizations
-      : [
-          {
-            id: createId("org"),
-            name: job.result["企业名称"] || "OCR识别客户",
-            entityType: "企业" as const,
-            roles: ["客户", "平台入驻客户"] as OrganizationRole[],
-            unifiedCreditCode: code,
-            legalPerson: job.result["法定代表人"],
-            status: "正常" as const,
-            createdAt: today(),
-          },
-          ...data.organizations,
-        ];
-    await commit({
-      ...data,
-      organizations,
-      ocrJobs: data.ocrJobs.map((item) => (item.id === id ? { ...item, status: "已确认" } : item)),
-    });
-  }
-
-  return (
-    <div className="stack">
-      <div className="panel">
-        <PanelTitle title="OCR 工作台" subtitle="独立 Python 容器提供接口；前端验证版模拟识别结果确认和落库。" />
-        <div className="api-box">
-          <code>POST /ocr/business-license</code>
-          <code>POST /ocr/invoice</code>
-          <span>识别结果先进入待确认，员工确认后写入组织实体或发票台账。</span>
-        </div>
-      </div>
-      <div className="panel">
-        <PanelTitle title="待确认识别结果" subtitle="营业执照编号用于企业客户唯一去重。" />
-        <div className="ocr-list">
-          {data.ocrJobs.map((job) => (
-            <article className="ocr-card" key={job.id}>
-              <div>
-                <span className="tag">{job.type}</span>
-                <h3>{job.fileName}</h3>
-                <p>{Object.entries(job.result).map(([key, value]) => `${key}: ${value}`).join(" / ")}</p>
-              </div>
-              <button className="primary" disabled={job.status === "已确认"} onClick={() => confirmJob(job.id)}>
-                <PackagePlus size={16} />
-                {job.status === "已确认" ? "已落库" : "确认落库"}
-              </button>
-            </article>
-          ))}
         </div>
       </div>
     </div>
