@@ -220,6 +220,10 @@ nav button:hover {
   margin-bottom: 14px;
 }
 
+.action-title {
+  align-items: center;
+}
+
 .panel-title h2 {
   margin: 0;
   font-size: 18px;
@@ -482,6 +486,28 @@ nav button:hover {
 
 .form-grid.entity-form {
   grid-template-columns: 1.2fr 1.2fr 0.8fr 0.8fr 130px 130px auto auto;
+}
+
+.create-project {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.create-project input,
+.create-project select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: 0;
 }
 
 .segmented {

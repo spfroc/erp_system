@@ -11,6 +11,7 @@ import {
   FileText,
   Home,
   Package,
+  PackagePlus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -150,7 +151,7 @@ export default function App() {
         </header>
 
         {view === "dashboard" && <Dashboard data={data} onOpenProject={(id) => { setSelectedProjectId(id); setView("projects"); }} />}
-        {view === "projects" && <Projects data={data} query={query} selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
+        {view === "projects" && <Projects data={data} commit={commit} query={query} selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
         {view === "entities" && <Entities data={data} commit={commit} query={query} />}
         {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
@@ -262,25 +263,153 @@ function TodoList({ data }: { data: AppData }) {
 
 function Projects({
   data,
+  commit,
   query,
   selectedProject,
   onSelectProject,
 }: {
   data: AppData;
+  commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void>;
   query: string;
   selectedProject: Project;
   onSelectProject: (id: string) => void;
 }) {
+  const customers = data.organizations.filter((org) => org.roles.includes("客户"));
+  const usageUnits = data.organizations.filter((org) => org.roles.includes("使用单位"));
+  const suppliers = data.organizations.filter((org) => org.roles.includes("供应商"));
+  const [showCreate, setShowCreate] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: "",
+    type: "实体商品" as Project["type"],
+    customerOrgId: customers[0]?.id ?? "",
+    usageUnitOrgId: usageUnits[0]?.id ?? "",
+    sourcePlatform: "框架协议",
+    platformOrderNo: "",
+    owner: "当前用户",
+    productId: data.products[0]?.id ?? "",
+    supplierOrgId: suppliers[0]?.id ?? "",
+    quantity: "1",
+    salesUnitPrice: "",
+    purchaseUnitPrice: "",
+  });
+
   const filtered = data.projects.filter((project) => JSON.stringify(project).includes(query));
   const customer = data.organizations.find((org) => org.id === selectedProject.customerOrgId);
   const usageUnit = data.organizations.find((org) => org.id === selectedProject.usageUnitOrgId);
   const items = data.projectItems.filter((item) => item.projectId === selectedProject.id);
   const onboarding = data.onboardingRecords.find((record) => record.projectId === selectedProject.id);
+  const selectedProduct = data.products.find((product) => product.id === newProject.productId);
+  const selectedSupplierPrice = data.supplierPrices.find((price) => price.productId === newProject.productId && price.supplierOrgId === newProject.supplierOrgId);
+
+  function updateProduct(productId: string) {
+    const product = data.products.find((item) => item.id === productId);
+    const supplierPrice = data.supplierPrices.find((price) => price.productId === productId && price.supplierOrgId === newProject.supplierOrgId);
+    setNewProject({
+      ...newProject,
+      productId,
+      salesUnitPrice: product?.quotePrice ? String(product.quotePrice) : "",
+      purchaseUnitPrice: supplierPrice?.purchasePrice ? String(supplierPrice.purchasePrice) : product?.costPrice ? String(product.costPrice) : "",
+    });
+  }
+
+  function updateSupplier(supplierOrgId: string) {
+    const supplierPrice = data.supplierPrices.find((price) => price.productId === newProject.productId && price.supplierOrgId === supplierOrgId);
+    setNewProject({
+      ...newProject,
+      supplierOrgId,
+      purchaseUnitPrice: supplierPrice?.purchasePrice ? String(supplierPrice.purchasePrice) : newProject.purchaseUnitPrice,
+    });
+  }
+
+  async function createProject() {
+    const product = data.products.find((item) => item.id === newProject.productId);
+    if (!newProject.name.trim() || !newProject.customerOrgId || !product) return;
+    const quantity = Number(newProject.quantity) || 1;
+    const salesUnitPrice = Number(newProject.salesUnitPrice) || product.quotePrice;
+    const purchaseUnitPrice = Number(newProject.purchaseUnitPrice) || selectedSupplierPrice?.purchasePrice || product.costPrice;
+    const projectId = createId("pj");
+    const projectNo = `XM${new Date().toISOString().slice(0, 10).replaceAll("-", "")}${String(data.projects.length + 1).padStart(3, "0")}`;
+    const createdProject: Project = {
+      id: projectId,
+      projectNo,
+      name: newProject.name,
+      type: newProject.type,
+      customerOrgId: newProject.customerOrgId,
+      usageUnitOrgId: newProject.usageUnitOrgId || undefined,
+      sourcePlatform: newProject.sourcePlatform,
+      owner: newProject.owner || "当前用户",
+      status: newProject.type === "平台入驻服务" ? "已付款待办理" : "待采购/平台操作",
+      contractStatus: "待签",
+      paymentStatus: "未收",
+      purchaseStatus: newProject.type === "平台入驻服务" ? "无需采购" : "待采购",
+      invoiceStatus: "未开",
+      totalAmount: salesUnitPrice * quantity,
+      totalCost: purchaseUnitPrice * quantity,
+      currentBlocker: newProject.type === "平台入驻服务" ? "待平台入驻办理" : "待采购下单",
+      updatedAt: today(),
+    };
+    const projectItem = {
+      id: createId("pi"),
+      projectId,
+      productId: product.id,
+      productName: product.name,
+      quantity,
+      actualPrice: salesUnitPrice,
+      costPrice: purchaseUnitPrice,
+    };
+    await commit(
+      {
+        ...data,
+        projects: [createdProject, ...data.projects],
+        projectItems: [projectItem, ...data.projectItems],
+      },
+      { action: "新建项目", targetType: "项目", targetName: createdProject.name, operator: "当前用户", detail: `客户、商品、供应商和平台订单信息已录入；平台订单号：${newProject.platformOrderNo || "未录入"}` },
+    );
+    onSelectProject(projectId);
+    setShowCreate(false);
+    setNewProject({ ...newProject, name: "", platformOrderNo: "", quantity: "1" });
+  }
 
   return (
     <div className="split">
       <div className="panel list-panel">
-        <PanelTitle title="项目列表" subtitle="项目汇总客户、商品、发票、负责人和流程。" />
+        <div className="panel-title action-title">
+          <div>
+            <h2>项目列表</h2>
+            <p>项目汇总客户、使用单位、商品、供应商、发票、负责人和流程。</p>
+          </div>
+          <button className="primary" onClick={() => setShowCreate(!showCreate)}><PackagePlus size={16} />新建项目</button>
+        </div>
+        {showCreate && (
+          <div className="create-project">
+            <input value={newProject.name} onChange={(event) => setNewProject({ ...newProject, name: event.target.value })} placeholder="项目名称" />
+            <select value={newProject.type} onChange={(event) => setNewProject({ ...newProject, type: event.target.value as Project["type"] })}>
+              {["实体商品", "平台入驻服务", "混合项目"].map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <select value={newProject.customerOrgId} onChange={(event) => setNewProject({ ...newProject, customerOrgId: event.target.value })}>
+              {customers.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            </select>
+            <select value={newProject.usageUnitOrgId} onChange={(event) => setNewProject({ ...newProject, usageUnitOrgId: event.target.value })}>
+              <option value="">无使用单位</option>
+              {usageUnits.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            </select>
+            <select value={newProject.productId} onChange={(event) => updateProduct(event.target.value)}>
+              {data.products.map((product) => <option key={product.id} value={product.id}>{product.code} · {product.name}</option>)}
+            </select>
+            <select value={newProject.supplierOrgId} onChange={(event) => updateSupplier(event.target.value)}>
+              <option value="">无供应商</option>
+              {suppliers.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            </select>
+            <input value={newProject.quantity} onChange={(event) => setNewProject({ ...newProject, quantity: event.target.value })} placeholder="数量" />
+            <input value={newProject.salesUnitPrice || selectedProduct?.quotePrice || ""} onChange={(event) => setNewProject({ ...newProject, salesUnitPrice: event.target.value })} placeholder="销售单价" />
+            <input value={newProject.purchaseUnitPrice || selectedSupplierPrice?.purchasePrice || ""} onChange={(event) => setNewProject({ ...newProject, purchaseUnitPrice: event.target.value })} placeholder="进货单价" />
+            <select value={newProject.sourcePlatform} onChange={(event) => setNewProject({ ...newProject, sourcePlatform: event.target.value })}>
+              {["框架协议", "泉E采", "青慧采", "齐鲁云采", "美云销", "渠道", "直客"].map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <input value={newProject.platformOrderNo} onChange={(event) => setNewProject({ ...newProject, platformOrderNo: event.target.value })} placeholder="平台订单编号" />
+            <button className="primary" onClick={createProject}><PackagePlus size={16} />保存项目</button>
+          </div>
+        )}
         {filtered.map((project) => (
           <button key={project.id} className={`row-card ${selectedProject.id === project.id ? "selected" : ""}`} onClick={() => onSelectProject(project.id)}>
             <span>{project.projectNo}</span>
