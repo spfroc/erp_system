@@ -15,11 +15,12 @@ import {
   ShieldCheck,
   Trash2,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { createId, loadData, resetData, saveData } from "./db";
-import type { AppData, EntityType, Organization, OrganizationRole, Product, Project, ProjectStatus, SupplierPrice } from "./types";
+import type { AppData, EntityType, Organization, OrganizationRole, PermissionKey, Product, Project, ProjectStatus, SupplierPrice, User } from "./types";
 
-type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "finance";
+type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "finance" | "access";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "总览", icon: Home },
@@ -28,11 +29,36 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "products", label: "商品", icon: Boxes },
   { id: "onboarding", label: "入驻服务", icon: ShieldCheck },
   { id: "finance", label: "发票流水", icon: Banknote },
+  { id: "access", label: "用户权限", icon: Users },
 ];
 
 const statusColumns: ProjectStatus[] = ["已付款待办理", "待采购/平台操作", "履约中", "待开票/待结算", "已完成", "异常"];
 const entityTypes: EntityType[] = ["企业", "个体户", "政府", "事业单位", "学校", "医院", "其他"];
 const orgRoles: OrganizationRole[] = ["客户", "供应商", "使用单位", "平台入驻客户"];
+const permissionLabels: Record<PermissionKey, string> = {
+  "dashboard.view": "查看总览",
+  "project.view": "查看项目",
+  "project.create": "新建项目",
+  "project.edit": "编辑项目",
+  "entity.view": "查看实体",
+  "entity.create": "新建实体",
+  "product.view": "查看商品",
+  "product.manage": "管理商品",
+  "purchase.manage": "管理采购履约",
+  "finance.view": "查看财务",
+  "finance.manage": "管理流水",
+  "invoice.manage": "管理发票",
+  "onboarding.manage": "管理入驻服务",
+  "sensitive.view": "查看敏感信息",
+  "profit.view": "查看利润",
+  "user.manage": "管理用户权限",
+};
+const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage"] },
+  { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
+  { title: "安全", keys: ["sensitive.view", "user.manage"] },
+];
 
 function money(value: number) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 }).format(value);
@@ -119,6 +145,7 @@ export default function App() {
         {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
         {view === "finance" && <Finance data={data} />}
+        {view === "access" && <AccessControl data={data} commit={commit} />}
       </main>
     </div>
   );
@@ -579,6 +606,104 @@ function Finance({ data }: { data: AppData }) {
             const project = data.projects.find((item) => item.id === tx.projectId);
             return <div className="table-row" key={tx.id}><span>{project?.name}</span><span>{tx.type}</span><span>{money(tx.amount)}</span><span>{tx.status}</span></div>;
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [roleId, setRoleId] = useState(data.roles[0]?.id ?? "");
+
+  async function addUser() {
+    if (!name.trim() || !roleId) return;
+    const user: User = {
+      id: createId("user"),
+      name,
+      phone: phone || undefined,
+      roleIds: [roleId],
+      status: "启用",
+      createdAt: today(),
+    };
+    await commit({ ...data, users: [user, ...data.users] });
+    setName("");
+    setPhone("");
+  }
+
+  async function toggleUser(userId: string) {
+    await commit({
+      ...data,
+      users: data.users.map((user) => (user.id === userId ? { ...user, status: user.status === "启用" ? "停用" : "启用" } : user)),
+    });
+  }
+
+  function roleNames(user: User) {
+    return user.roleIds.map((id) => data.roles.find((role) => role.id === id)?.name).filter(Boolean).join("、");
+  }
+
+  return (
+    <div className="stack">
+      <div className="two-col access-layout">
+        <div className="panel">
+          <PanelTitle title="用户管理" subtitle="验证用户、角色和启停规则；不做物理删除。" />
+          <div className="user-form">
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="姓名" />
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="手机号" />
+            <select value={roleId} onChange={(event) => setRoleId(event.target.value)}>
+              {data.roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
+            </select>
+            <button className="primary" onClick={addUser}><UserPlus size={16} />新增用户</button>
+          </div>
+          <div className="user-list">
+            {data.users.map((user) => (
+              <article className="user-card" key={user.id}>
+                <div>
+                  <strong>{user.name}</strong>
+                  <span>{user.phone || "暂无手机号"} · {roleNames(user)}</span>
+                </div>
+                <em className={user.status === "启用" ? "status-on" : "status-off"}>{user.status}</em>
+                <button className="ghost" onClick={() => toggleUser(user.id)}>{user.status === "启用" ? "停用" : "启用"}</button>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="panel">
+          <PanelTitle title="角色说明" subtitle="小团队可一人多角色，系统按角色叠加权限。" />
+          <div className="role-list">
+            {data.roles.map((role) => (
+              <article className="role-card" key={role.id}>
+                <strong>{role.name}</strong>
+                <p>{role.description}</p>
+                <span>{role.permissions.length} 个权限点</span>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="panel">
+        <PanelTitle title="权限矩阵" subtitle="当前为产品验证矩阵，后续后端按相同权限点做接口鉴权。" />
+        <div className="permission-table">
+          <div className="permission-row permission-head">
+            <span>权限点</span>
+            {data.roles.map((role) => <strong key={role.id}>{role.name}</strong>)}
+          </div>
+          {permissionGroups.map((group) => (
+            <div className="permission-group" key={group.title}>
+              <div className="permission-section">{group.title}</div>
+              {group.keys.map((key) => (
+                <div className="permission-row" key={key}>
+                  <span>{permissionLabels[key]}</span>
+                  {data.roles.map((role) => (
+                    <b key={role.id} className={role.permissions.includes(key) ? "allowed" : "denied"}>
+                      {role.permissions.includes(key) ? "允许" : "无"}
+                    </b>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>

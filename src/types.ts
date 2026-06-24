@@ -155,7 +155,43 @@ export interface OcrJob {
   createdAt: string;
 }
 
+export type PermissionKey =
+  | "dashboard.view"
+  | "project.view"
+  | "project.create"
+  | "project.edit"
+  | "entity.view"
+  | "entity.create"
+  | "product.view"
+  | "product.manage"
+  | "purchase.manage"
+  | "finance.view"
+  | "finance.manage"
+  | "invoice.manage"
+  | "onboarding.manage"
+  | "sensitive.view"
+  | "profit.view"
+  | "user.manage";
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: PermissionKey[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  phone?: string;
+  roleIds: string[];
+  status: "启用" | "停用";
+  createdAt: string;
+}
+
 export interface AppData {
+  users: User[];
+  roles: Role[];
   organizations: Organization[];
   products: Product[];
   supplierPrices: SupplierPrice[];

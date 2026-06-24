@@ -17,7 +17,18 @@ async function getDatabase() {
 export async function loadData(): Promise<AppData> {
   const db = await getDatabase();
   const current = await db.get(STORE, KEY);
-  if (current) return current as AppData;
+  if (current) {
+    const migrated = {
+      ...seedData,
+      ...(current as Partial<AppData>),
+      users: (current as Partial<AppData>).users ?? seedData.users,
+      roles: (current as Partial<AppData>).roles ?? seedData.roles,
+    } as AppData;
+    if (!(current as Partial<AppData>).users || !(current as Partial<AppData>).roles) {
+      await db.put(STORE, migrated, KEY);
+    }
+    return migrated;
+  }
   await db.put(STORE, seedData, KEY);
   return seedData;
 }

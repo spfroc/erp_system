@@ -3,6 +3,61 @@ import type { AppData } from "./types";
 const now = new Date().toISOString();
 
 export const seedData: AppData = {
+  roles: [
+    {
+      id: "role-admin",
+      name: "老板/管理员",
+      description: "查看全局、管理用户权限、查看利润、处理异常。",
+      permissions: [
+        "dashboard.view",
+        "project.view",
+        "project.create",
+        "project.edit",
+        "entity.view",
+        "entity.create",
+        "product.view",
+        "product.manage",
+        "purchase.manage",
+        "finance.view",
+        "finance.manage",
+        "invoice.manage",
+        "onboarding.manage",
+        "sensitive.view",
+        "profit.view",
+        "user.manage",
+      ],
+    },
+    {
+      id: "role-sales",
+      name: "业务负责人",
+      description: "维护客户、项目、报价、合同和收款跟进。",
+      permissions: ["dashboard.view", "project.view", "project.create", "project.edit", "entity.view", "entity.create", "product.view"],
+    },
+    {
+      id: "role-purchase",
+      name: "采购/履约",
+      description: "维护供应商、采购、发货、安装和核销。",
+      permissions: ["dashboard.view", "project.view", "entity.view", "product.view", "purchase.manage"],
+    },
+    {
+      id: "role-finance",
+      name: "财务",
+      description: "维护发票、流水、垫付和财务状态。",
+      permissions: ["dashboard.view", "project.view", "entity.view", "finance.view", "finance.manage", "invoice.manage", "profit.view"],
+    },
+    {
+      id: "role-platform",
+      name: "平台运营",
+      description: "维护平台入驻、账号资料、备案、CA 和续费。",
+      permissions: ["dashboard.view", "project.view", "entity.view", "entity.create", "onboarding.manage", "sensitive.view"],
+    },
+  ],
+  users: [
+    { id: "user-1", name: "老板", phone: "18600000001", roleIds: ["role-admin"], status: "启用", createdAt: now },
+    { id: "user-2", name: "业务同事", phone: "18600000002", roleIds: ["role-sales"], status: "启用", createdAt: now },
+    { id: "user-3", name: "履约同事", phone: "18600000003", roleIds: ["role-purchase", "role-platform"], status: "启用", createdAt: now },
+    { id: "user-4", name: "财务同事", phone: "18600000004", roleIds: ["role-finance"], status: "启用", createdAt: now },
+  ],
   organizations: [
     {
       id: "org-1",
