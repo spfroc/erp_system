@@ -922,6 +922,7 @@ function Onboarding({ data }: { data: AppData }) {
 function PlatformAccounts({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
   const customers = data.organizations.filter((org) => org.roles.includes("客户") || org.roles.includes("平台入驻客户"));
   const [platformFilter, setPlatformFilter] = useState<PlatformAccount["platform"] | "全部">("全部");
+  const [copyTip, setCopyTip] = useState("");
   const [form, setForm] = useState({
     customerOrgId: customers[0]?.id ?? "",
     platform: "泉E采" as PlatformAccount["platform"],
@@ -936,6 +937,19 @@ function PlatformAccounts({ data, commit }: { data: AppData; commit: (data: AppD
     note: "",
   });
   const rows = data.platformAccounts.filter((account) => platformFilter === "全部" || account.platform === platformFilter);
+
+  async function copyText(text: string | undefined, label: string) {
+    if (!text) {
+      setCopyTip(`${label}未录入`);
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    setCopyTip(`已复制${label}`);
+  }
+
+  function copyPassword(label: string) {
+    setCopyTip(`${label}为敏感凭据；验证版不保存明文，接入凭据服务后可复制`);
+  }
 
   async function addAccount() {
     if (!form.customerOrgId) return;
@@ -993,6 +1007,7 @@ function PlatformAccounts({ data, commit }: { data: AppData; commit: (data: AppD
       </div>
       <div className="panel">
         <PanelTitle title="平台账号台账" subtitle="维护客户入驻平台账号、域名备案、亮照、公安备案、后台模板和 CA 办理进度。" />
+        {copyTip && <div className="copy-tip">{copyTip}</div>}
         <div className="segmented">
           {(["全部", "泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"] as const).map((item) => (
             <button key={item} className={platformFilter === item ? "active" : ""} onClick={() => setPlatformFilter(item)}>{item}</button>
@@ -1006,8 +1021,14 @@ function PlatformAccounts({ data, commit }: { data: AppData; commit: (data: AppD
               <div className="table-row platform-table" key={account.id}>
                 <span>{customer?.name ?? "未知客户"}<em>{account.salesOwner || "无负责人"}</em></span>
                 <span>{account.platform}</span>
-                <span>{account.accountName || "未录入"}<em>{account.accountPasswordMasked || "无密码记录"}</em></span>
-                <span>{account.supplierAccount || "未录入"}<em>{account.supplierPasswordMasked || "无密码记录"}</em></span>
+                <span>
+                  <button className="copy-link" onClick={() => copyText(account.accountName, "平台账号")}>{account.accountName || "未录入"}</button>
+                  <button className="copy-secret" onClick={() => copyPassword("平台密码")}>{account.accountPasswordMasked || "无密码记录"}</button>
+                </span>
+                <span>
+                  <button className="copy-link" onClick={() => copyText(account.supplierAccount, "供应商账号")}>{account.supplierAccount || "未录入"}</button>
+                  <button className="copy-secret" onClick={() => copyPassword("供应商密码")}>{account.supplierPasswordMasked || "无密码记录"}</button>
+                </span>
                 <span>{account.domain || "未录入"}<em>{account.icpRecordNo || "未备案"}</em></span>
                 <span>亮照 {account.licenseDisplayStatus}<em>公安 {account.publicSecurityStatus} / 模板 {account.backendTemplateStatus}</em></span>
                 <span>{account.caStatus}<em>{account.caAccount || "无CA账号"}</em></span>
