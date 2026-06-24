@@ -21,9 +21,9 @@ import {
   Users,
 } from "lucide-react";
 import { createId, loadData, resetData, saveData } from "./db";
-import type { AppData, EntityType, OperationLog, Organization, OrganizationRole, PermissionKey, Product, Project, ProjectStatus, SupplierPrice, Transaction, User } from "./types";
+import type { AppData, EntityType, OperationLog, Organization, OrganizationRole, PermissionKey, PlatformAccount, Product, Project, ProjectStatus, SupplierPrice, Transaction, User } from "./types";
 
-type View = "dashboard" | "projects" | "orders" | "entities" | "products" | "onboarding" | "invoices" | "transactions" | "logs" | "access";
+type View = "dashboard" | "projects" | "orders" | "entities" | "products" | "onboarding" | "platformAccounts" | "invoices" | "transactions" | "logs" | "access";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "总览", icon: Home },
@@ -32,6 +32,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "entities", label: "实体", icon: Building2 },
   { id: "products", label: "商品", icon: Boxes },
   { id: "onboarding", label: "入驻服务", icon: ShieldCheck },
+  { id: "platformAccounts", label: "平台账号", icon: FileScan },
   { id: "invoices", label: "发票", icon: FileText },
   { id: "transactions", label: "交易流水", icon: WalletCards },
   { id: "logs", label: "操作日志", icon: History },
@@ -157,6 +158,7 @@ export default function App() {
         {view === "entities" && <Entities data={data} commit={commit} query={query} />}
         {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
+        {view === "platformAccounts" && <PlatformAccounts data={data} commit={commit} />}
         {view === "invoices" && <Invoices data={data} />}
         {view === "transactions" && <Transactions data={data} commit={commit} />}
         {view === "logs" && <OperationLogs data={data} />}
@@ -282,6 +284,7 @@ function Projects({
   const ownCompanies = data.organizations.filter((org) => org.roles.includes("本方主体"));
   const [showCreate, setShowCreate] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [newProject, setNewProject] = useState({
     name: "",
     type: "实体商品" as Project["type"],
@@ -289,6 +292,7 @@ function Projects({
     usageUnitOrgId: usageUnits[0]?.id ?? "",
     ownCompanyOrgId: ownCompanies[0]?.id ?? "",
     sourcePlatform: "框架协议",
+    onboardingPlatform: "泉E采" as PlatformAccount["platform"],
     platformOrderNo: "",
     owner: "当前用户",
     productId: data.products[0]?.id ?? "",
@@ -311,6 +315,27 @@ function Projects({
   const onboarding = data.onboardingRecords.find((record) => record.projectId === selectedProject.id);
   const selectedProduct = data.products.find((product) => product.id === newProject.productId);
   const selectedSupplierPrice = data.supplierPrices.find((price) => price.productId === newProject.productId && price.supplierOrgId === newProject.supplierOrgId);
+  const customerOptions = customers.filter((org) => `${org.name}${org.unifiedCreditCode}${org.legalPerson}${org.phone}`.includes(customerSearch));
+
+  async function addCustomerFromLicense() {
+    const organization: Organization = {
+      id: createId("org"),
+      name: "营业执照识别客户有限公司",
+      entityType: "企业",
+      roles: ["客户", "平台入驻客户"],
+      unifiedCreditCode: `91370000OCR${String(data.organizations.length + 1).padStart(3, "0")}`,
+      legalPerson: "OCR法人",
+      phone: "18600000000",
+      status: "正常",
+      createdAt: today(),
+    };
+    await commit(
+      { ...data, organizations: [organization, ...data.organizations] },
+      { action: "营业执照新增客户", targetType: "实体", targetName: organization.name, operator: "当前用户", detail: "在创建平台入驻项目时通过营业执照 OCR 添加" },
+    );
+    setNewProject({ ...newProject, customerOrgId: organization.id, type: "平台入驻服务", sourcePlatform: newProject.onboardingPlatform });
+    setCustomerSearch(organization.name);
+  }
 
   function updateProduct(productId: string) {
     const product = data.products.find((item) => item.id === productId);
@@ -370,11 +395,27 @@ function Projects({
       actualPrice: salesUnitPrice,
       costPrice: purchaseUnitPrice,
     };
+    const platformAccount: PlatformAccount | null = newProject.type === "平台入驻服务"
+      ? {
+          id: createId("pa"),
+          customerOrgId: newProject.customerOrgId,
+          platform: newProject.onboardingPlatform,
+          licenseDisplayStatus: "未处理",
+          publicSecurityStatus: "未处理",
+          backendTemplateStatus: "未录入",
+          caStatus: "未办理",
+          serviceYears: 1,
+          salesOwner: newProject.owner || "当前用户",
+          currentStatus: "已付款待办理",
+          note: `由项目 ${projectNo} 创建`,
+        }
+      : null;
     await commit(
       {
         ...data,
         projects: [createdProject, ...data.projects],
         projectItems: [projectItem, ...data.projectItems],
+        platformAccounts: platformAccount ? [platformAccount, ...data.platformAccounts] : data.platformAccounts,
       },
       { action: "新建项目", targetType: "项目", targetName: createdProject.name, operator: "当前用户", detail: `客户、商品、供应商和平台订单信息已录入；平台订单号：${newProject.platformOrderNo || "未录入"}` },
     );
@@ -403,8 +444,15 @@ function Projects({
             <select value={newProject.type} onChange={(event) => setNewProject({ ...newProject, type: event.target.value as Project["type"] })}>
               {["实体商品", "平台入驻服务", "混合项目"].map((item) => <option key={item}>{item}</option>)}
             </select>
+            {newProject.type === "平台入驻服务" && (
+              <div className="inline-search">
+                <Search size={15} />
+                <input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="搜索入驻客户；没有则用营业执照添加" />
+                <button className="ghost" onClick={addCustomerFromLicense}><FileScan size={15} />营业执照添加</button>
+              </div>
+            )}
             <select value={newProject.customerOrgId} onChange={(event) => setNewProject({ ...newProject, customerOrgId: event.target.value })}>
-              {customers.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+              {(newProject.type === "平台入驻服务" ? customerOptions : customers).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
             </select>
             <select value={newProject.usageUnitOrgId} onChange={(event) => setNewProject({ ...newProject, usageUnitOrgId: event.target.value })}>
               <option value="">无使用单位</option>
@@ -426,6 +474,11 @@ function Projects({
             <select value={newProject.sourcePlatform} onChange={(event) => setNewProject({ ...newProject, sourcePlatform: event.target.value })}>
               {["框架协议", "泉E采", "青慧采", "齐鲁云采", "美云销", "渠道", "直客"].map((item) => <option key={item}>{item}</option>)}
             </select>
+            {newProject.type === "平台入驻服务" && (
+              <select value={newProject.onboardingPlatform} onChange={(event) => setNewProject({ ...newProject, onboardingPlatform: event.target.value as PlatformAccount["platform"], sourcePlatform: event.target.value })}>
+                {["泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"].map((item) => <option key={item}>{item}</option>)}
+              </select>
+            )}
             <input value={newProject.platformOrderNo} onChange={(event) => setNewProject({ ...newProject, platformOrderNo: event.target.value })} placeholder="平台订单编号" />
             <button className="primary" onClick={createProject}><PackagePlus size={16} />保存项目</button>
           </div>
@@ -861,6 +914,108 @@ function Onboarding({ data }: { data: AppData }) {
             </article>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function PlatformAccounts({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
+  const customers = data.organizations.filter((org) => org.roles.includes("客户") || org.roles.includes("平台入驻客户"));
+  const [platformFilter, setPlatformFilter] = useState<PlatformAccount["platform"] | "全部">("全部");
+  const [form, setForm] = useState({
+    customerOrgId: customers[0]?.id ?? "",
+    platform: "泉E采" as PlatformAccount["platform"],
+    accountName: "",
+    supplierAccount: "",
+    cloudAccount: "",
+    domain: "",
+    icpRecordNo: "",
+    currentStatus: "已付款待办理",
+    salesOwner: "当前用户",
+    serviceYears: "1",
+    note: "",
+  });
+  const rows = data.platformAccounts.filter((account) => platformFilter === "全部" || account.platform === platformFilter);
+
+  async function addAccount() {
+    if (!form.customerOrgId) return;
+    const customer = data.organizations.find((org) => org.id === form.customerOrgId);
+    const account: PlatformAccount = {
+      id: createId("pa"),
+      customerOrgId: form.customerOrgId,
+      platform: form.platform,
+      accountName: form.accountName || undefined,
+      accountPasswordMasked: form.accountName ? "已脱敏" : undefined,
+      supplierAccount: form.supplierAccount || undefined,
+      supplierPasswordMasked: form.supplierAccount ? "已脱敏" : undefined,
+      cloudAccount: form.cloudAccount || undefined,
+      cloudPasswordMasked: form.cloudAccount ? "已脱敏" : undefined,
+      domain: form.domain || undefined,
+      icpRecordNo: form.icpRecordNo || undefined,
+      licenseDisplayStatus: "未处理",
+      publicSecurityStatus: "未处理",
+      backendTemplateStatus: "未录入",
+      caStatus: "未办理",
+      serviceYears: Number(form.serviceYears) || 1,
+      salesOwner: form.salesOwner,
+      currentStatus: form.currentStatus,
+      note: form.note || undefined,
+    };
+    await commit(
+      { ...data, platformAccounts: [account, ...data.platformAccounts] },
+      { action: "新增平台账号", targetType: "实体", targetName: customer?.name ?? "平台账号", operator: "当前用户", detail: `${account.platform}：${account.currentStatus}` },
+    );
+    setForm({ ...form, accountName: "", supplierAccount: "", cloudAccount: "", domain: "", icpRecordNo: "", note: "" });
+  }
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <PanelTitle title="新增平台账号" subtitle="字段参考政采电商入驻客户统计名单；密码类字段只显示脱敏状态。" />
+        <div className="platform-form">
+          <select value={form.customerOrgId} onChange={(event) => setForm({ ...form, customerOrgId: event.target.value })}>
+            {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+          </select>
+          <select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value as PlatformAccount["platform"] })}>
+            {["泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <input value={form.accountName} onChange={(event) => setForm({ ...form, accountName: event.target.value })} placeholder="平台账号/齐鲁云采账号" />
+          <input value={form.supplierAccount} onChange={(event) => setForm({ ...form, supplierAccount: event.target.value })} placeholder="供应商账号" />
+          <input value={form.cloudAccount} onChange={(event) => setForm({ ...form, cloudAccount: event.target.value })} placeholder="阿里云/云服务账号" />
+          <input value={form.domain} onChange={(event) => setForm({ ...form, domain: event.target.value })} placeholder="域名" />
+          <input value={form.icpRecordNo} onChange={(event) => setForm({ ...form, icpRecordNo: event.target.value })} placeholder="备案号" />
+          <input value={form.currentStatus} onChange={(event) => setForm({ ...form, currentStatus: event.target.value })} placeholder="当前状态" />
+          <input value={form.salesOwner} onChange={(event) => setForm({ ...form, salesOwner: event.target.value })} placeholder="销售经理/负责人" />
+          <input value={form.serviceYears} onChange={(event) => setForm({ ...form, serviceYears: event.target.value })} placeholder="年限" />
+          <button className="primary" onClick={addAccount}><FileScan size={16} />保存账号</button>
+          <textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="备注/沟通情况" />
+        </div>
+      </div>
+      <div className="panel">
+        <PanelTitle title="平台账号台账" subtitle="维护客户入驻平台账号、域名备案、亮照、公安备案、后台模板和 CA 办理进度。" />
+        <div className="segmented">
+          {(["全部", "泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"] as const).map((item) => (
+            <button key={item} className={platformFilter === item ? "active" : ""} onClick={() => setPlatformFilter(item)}>{item}</button>
+          ))}
+        </div>
+        <div className="table">
+          <div className="table-row platform-table head"><span>客户</span><span>平台</span><span>账号</span><span>供应商账号</span><span>域名/备案</span><span>合规状态</span><span>CA</span><span>当前状态</span></div>
+          {rows.map((account) => {
+            const customer = data.organizations.find((org) => org.id === account.customerOrgId);
+            return (
+              <div className="table-row platform-table" key={account.id}>
+                <span>{customer?.name ?? "未知客户"}<em>{account.salesOwner || "无负责人"}</em></span>
+                <span>{account.platform}</span>
+                <span>{account.accountName || "未录入"}<em>{account.accountPasswordMasked || "无密码记录"}</em></span>
+                <span>{account.supplierAccount || "未录入"}<em>{account.supplierPasswordMasked || "无密码记录"}</em></span>
+                <span>{account.domain || "未录入"}<em>{account.icpRecordNo || "未备案"}</em></span>
+                <span>亮照 {account.licenseDisplayStatus}<em>公安 {account.publicSecurityStatus} / 模板 {account.backendTemplateStatus}</em></span>
+                <span>{account.caStatus}<em>{account.caAccount || "无CA账号"}</em></span>
+                <span>{account.currentStatus}<em>{account.note || "无备注"}</em></span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

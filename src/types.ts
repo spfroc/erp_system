@@ -128,6 +128,31 @@ export interface OnboardingRecord {
   note?: string;
 }
 
+export interface PlatformAccount {
+  id: string;
+  customerOrgId: string;
+  platform: "泉E采" | "青慧采" | "齐鲁云采" | "政采云" | "公采云" | "国铁" | "其他";
+  accountName?: string;
+  accountPasswordMasked?: string;
+  supplierAccount?: string;
+  supplierPasswordMasked?: string;
+  cloudAccount?: string;
+  cloudPasswordMasked?: string;
+  domain?: string;
+  icpRecordNo?: string;
+  licenseDisplayStatus: "未处理" | "已完成";
+  publicSecurityStatus: "未处理" | "已完成";
+  backendTemplateStatus: "未录入" | "已录入";
+  caAccount?: string;
+  caPasswordMasked?: string;
+  caStatus: "未办理" | "办理中" | "已完成";
+  serviceYears?: number;
+  expireDate?: string;
+  salesOwner?: string;
+  currentStatus: string;
+  note?: string;
+}
+
 export interface Invoice {
   id: string;
   projectId: string;
@@ -222,6 +247,7 @@ export interface AppData {
   projects: Project[];
   projectItems: ProjectItem[];
   onboardingRecords: OnboardingRecord[];
+  platformAccounts: PlatformAccount[];
   invoices: Invoice[];
   transactions: Transaction[];
   operationLogs: OperationLog[];

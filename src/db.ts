@@ -28,6 +28,7 @@ export async function loadData(): Promise<AppData> {
       users: partial.users ?? seedData.users,
       roles: partial.roles ?? seedData.roles,
       operationLogs: partial.operationLogs ?? seedData.operationLogs,
+      platformAccounts: partial.platformAccounts ?? seedData.platformAccounts,
     } as AppData;
     migrated.projects = migrated.projects.map((project) => ({
       ...project,
