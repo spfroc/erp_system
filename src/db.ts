@@ -18,16 +18,27 @@ export async function loadData(): Promise<AppData> {
   const db = await getDatabase();
   const current = await db.get(STORE, KEY);
   if (current) {
+    const partial = current as Partial<AppData>;
+    const organizationIds = new Set((partial.organizations ?? []).map((org) => org.id));
+    const missingSeedOrganizations = seedData.organizations.filter((org) => !organizationIds.has(org.id));
     const migrated = {
       ...seedData,
-      ...(current as Partial<AppData>),
-      users: (current as Partial<AppData>).users ?? seedData.users,
-      roles: (current as Partial<AppData>).roles ?? seedData.roles,
-      operationLogs: (current as Partial<AppData>).operationLogs ?? seedData.operationLogs,
+      ...partial,
+      organizations: [...(partial.organizations ?? []), ...missingSeedOrganizations],
+      users: partial.users ?? seedData.users,
+      roles: partial.roles ?? seedData.roles,
+      operationLogs: partial.operationLogs ?? seedData.operationLogs,
     } as AppData;
-    if (!(current as Partial<AppData>).users || !(current as Partial<AppData>).roles || !(current as Partial<AppData>).operationLogs) {
-      await db.put(STORE, migrated, KEY);
-    }
+    migrated.projects = migrated.projects.map((project) => ({
+      ...project,
+      ownCompanyOrgId: project.ownCompanyOrgId ?? seedData.projects.find((item) => item.id === project.id)?.ownCompanyOrgId ?? "org-7",
+      platformOrderNo: project.platformOrderNo ?? seedData.projects.find((item) => item.id === project.id)?.platformOrderNo,
+    }));
+    migrated.invoices = migrated.invoices.map((invoice) => {
+      const seedInvoice = seedData.invoices.find((item) => item.id === invoice.id);
+      return { ...seedInvoice, ...invoice };
+    });
+    await db.put(STORE, migrated, KEY);
     return migrated;
   }
   await db.put(STORE, seedData, KEY);

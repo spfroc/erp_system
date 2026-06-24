@@ -1,6 +1,6 @@
 export type EntityType = "企业" | "个体户" | "政府" | "事业单位" | "学校" | "医院" | "其他";
 
-export type OrganizationRole = "客户" | "供应商" | "使用单位" | "平台入驻客户";
+export type OrganizationRole = "客户" | "供应商" | "使用单位" | "平台入驻客户" | "本方主体";
 
 export type ProjectType = "实体商品" | "平台入驻服务" | "混合项目";
 
@@ -83,6 +83,8 @@ export interface Project {
   customerOrgId: string;
   usageUnitOrgId?: string;
   sourcePlatform?: string;
+  platformOrderNo?: string;
+  ownCompanyOrgId?: string;
   owner: string;
   status: ProjectStatus;
   contractStatus: "无需" | "待签" | "已签";
@@ -131,9 +133,18 @@ export interface Invoice {
   projectId: string;
   type: "销项" | "进项";
   counterpartyOrgId: string;
+  invoiceNo?: string;
+  invoiceDate?: string;
+  buyerOrgId?: string;
+  buyerName?: string;
+  buyerTaxNo?: string;
+  sellerOrgId?: string;
+  sellerName?: string;
+  sellerTaxNo?: string;
+  amountWithoutTax?: number;
+  taxAmount?: number;
   amount: number;
   status: "草稿" | "待确认" | "已开" | "已收";
-  invoiceNo?: string;
   date?: string;
 }
 

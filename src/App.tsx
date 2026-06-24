@@ -23,11 +23,12 @@ import {
 import { createId, loadData, resetData, saveData } from "./db";
 import type { AppData, EntityType, OperationLog, Organization, OrganizationRole, PermissionKey, Product, Project, ProjectStatus, SupplierPrice, Transaction, User } from "./types";
 
-type View = "dashboard" | "projects" | "entities" | "products" | "onboarding" | "invoices" | "transactions" | "logs" | "access";
+type View = "dashboard" | "projects" | "orders" | "entities" | "products" | "onboarding" | "invoices" | "transactions" | "logs" | "access";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "dashboard", label: "总览", icon: Home },
   { id: "projects", label: "项目", icon: ClipboardList },
+  { id: "orders", label: "订单", icon: FileText },
   { id: "entities", label: "实体", icon: Building2 },
   { id: "products", label: "商品", icon: Boxes },
   { id: "onboarding", label: "入驻服务", icon: ShieldCheck },
@@ -152,6 +153,7 @@ export default function App() {
 
         {view === "dashboard" && <Dashboard data={data} onOpenProject={(id) => { setSelectedProjectId(id); setView("projects"); }} />}
         {view === "projects" && <Projects data={data} commit={commit} query={query} selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
+        {view === "orders" && <Orders data={data} onOpenProject={(id) => { setSelectedProjectId(id); setView("projects"); }} />}
         {view === "entities" && <Entities data={data} commit={commit} query={query} />}
         {view === "products" && <Products data={data} commit={commit} />}
         {view === "onboarding" && <Onboarding data={data} />}
@@ -277,12 +279,15 @@ function Projects({
   const customers = data.organizations.filter((org) => org.roles.includes("客户"));
   const usageUnits = data.organizations.filter((org) => org.roles.includes("使用单位"));
   const suppliers = data.organizations.filter((org) => org.roles.includes("供应商"));
+  const ownCompanies = data.organizations.filter((org) => org.roles.includes("本方主体"));
   const [showCreate, setShowCreate] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
   const [newProject, setNewProject] = useState({
     name: "",
     type: "实体商品" as Project["type"],
     customerOrgId: customers[0]?.id ?? "",
     usageUnitOrgId: usageUnits[0]?.id ?? "",
+    ownCompanyOrgId: ownCompanies[0]?.id ?? "",
     sourcePlatform: "框架协议",
     platformOrderNo: "",
     owner: "当前用户",
@@ -293,9 +298,15 @@ function Projects({
     purchaseUnitPrice: "",
   });
 
-  const filtered = data.projects.filter((project) => JSON.stringify(project).includes(query));
+  const filtered = data.projects.filter((project) => {
+    const customerName = data.organizations.find((org) => org.id === project.customerOrgId)?.name ?? "";
+    const usageName = data.organizations.find((org) => org.id === project.usageUnitOrgId)?.name ?? "";
+    const haystack = `${JSON.stringify(project)}${customerName}${usageName}`;
+    return haystack.includes(query) && haystack.includes(projectSearch);
+  });
   const customer = data.organizations.find((org) => org.id === selectedProject.customerOrgId);
   const usageUnit = data.organizations.find((org) => org.id === selectedProject.usageUnitOrgId);
+  const ownCompany = data.organizations.find((org) => org.id === selectedProject.ownCompanyOrgId);
   const items = data.projectItems.filter((item) => item.projectId === selectedProject.id);
   const onboarding = data.onboardingRecords.find((record) => record.projectId === selectedProject.id);
   const selectedProduct = data.products.find((product) => product.id === newProject.productId);
@@ -336,7 +347,9 @@ function Projects({
       type: newProject.type,
       customerOrgId: newProject.customerOrgId,
       usageUnitOrgId: newProject.usageUnitOrgId || undefined,
+      ownCompanyOrgId: newProject.ownCompanyOrgId || undefined,
       sourcePlatform: newProject.sourcePlatform,
+      platformOrderNo: newProject.platformOrderNo || undefined,
       owner: newProject.owner || "当前用户",
       status: newProject.type === "平台入驻服务" ? "已付款待办理" : "待采购/平台操作",
       contractStatus: "待签",
@@ -380,6 +393,10 @@ function Projects({
           </div>
           <button className="primary" onClick={() => setShowCreate(!showCreate)}><PackagePlus size={16} />新建项目</button>
         </div>
+        <div className="project-search">
+          <Search size={16} />
+          <input value={projectSearch} onChange={(event) => setProjectSearch(event.target.value)} placeholder="搜索项目、客户、使用单位、平台订单号" />
+        </div>
         {showCreate && (
           <div className="create-project">
             <input value={newProject.name} onChange={(event) => setNewProject({ ...newProject, name: event.target.value })} placeholder="项目名称" />
@@ -392,6 +409,9 @@ function Projects({
             <select value={newProject.usageUnitOrgId} onChange={(event) => setNewProject({ ...newProject, usageUnitOrgId: event.target.value })}>
               <option value="">无使用单位</option>
               {usageUnits.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            </select>
+            <select value={newProject.ownCompanyOrgId} onChange={(event) => setNewProject({ ...newProject, ownCompanyOrgId: event.target.value })}>
+              {ownCompanies.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
             </select>
             <select value={newProject.productId} onChange={(event) => updateProduct(event.target.value)}>
               {data.products.map((product) => <option key={product.id} value={product.id}>{product.code} · {product.name}</option>)}
@@ -435,6 +455,8 @@ function Projects({
         <div className="info-grid">
           <Info label="客户" value={customer?.name} />
           <Info label="使用单位" value={usageUnit?.name ?? "无"} />
+          <Info label="对接公司" value={ownCompany?.name ?? "未选择"} />
+          <Info label="平台订单号" value={selectedProject.platformOrderNo ?? "未录入"} />
           <Info label="合同状态" value={selectedProject.contractStatus} />
           <Info label="收款状态" value={selectedProject.paymentStatus} />
           <Info label="采购状态" value={selectedProject.purchaseStatus} />
@@ -467,6 +489,57 @@ function Projects({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Orders({ data, onOpenProject }: { data: AppData; onOpenProject: (id: string) => void }) {
+  const [tab, setTab] = useState<"实体商品" | "入驻服务">("实体商品");
+  const [search, setSearch] = useState("");
+  const rows = data.projects
+    .filter((project) => (tab === "实体商品" ? project.type !== "平台入驻服务" : project.type === "平台入驻服务"))
+    .flatMap((project) => {
+      const customer = data.organizations.find((org) => org.id === project.customerOrgId);
+      const ownCompany = data.organizations.find((org) => org.id === project.ownCompanyOrgId);
+      const items = data.projectItems.filter((item) => item.projectId === project.id);
+      return (items.length ? items : [undefined]).map((item) => ({
+        project,
+        item,
+        customer,
+        ownCompany,
+        searchable: `${project.name}${project.projectNo}${project.platformOrderNo}${customer?.name}${item?.productName}`,
+      }));
+    })
+    .filter((row) => row.searchable.includes(search));
+
+  return (
+    <div className="panel">
+      <PanelTitle title="订单列表" subtitle="实体商品订单与入驻服务订单合并管理，通过页签区分查看。" />
+      <div className="orders-toolbar">
+        <div className="segmented">
+          {(["实体商品", "入驻服务"] as const).map((item) => (
+            <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>
+          ))}
+        </div>
+        <div className="project-search">
+          <Search size={16} />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索订单、客户、商品、平台订单号" />
+        </div>
+      </div>
+      <div className="table">
+        <div className="table-row order-table head"><span>项目/订单</span><span>客户</span><span>商品/服务</span><span>平台</span><span>平台订单号</span><span>金额</span><span>状态</span></div>
+        {rows.map(({ project, item, customer }) => (
+          <button className="table-row order-table clickable-row" key={`${project.id}-${item?.id ?? "empty"}`} onClick={() => onOpenProject(project.id)}>
+            <span>{project.name}<em>{project.projectNo}</em></span>
+            <span>{customer?.name ?? "未选择"}</span>
+            <span>{item?.productName ?? "未添加明细"}</span>
+            <span>{project.sourcePlatform ?? "未录入"}</span>
+            <span>{project.platformOrderNo ?? "未录入"}</span>
+            <span>{money(item ? item.actualPrice * item.quantity : project.totalAmount)}</span>
+            <span>{project.status}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -588,6 +661,7 @@ function Entities({ data, commit, query }: { data: AppData; commit: (data: AppDa
 }
 
 function Products({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
+  const [tab, setTab] = useState<"商品档案" | "渠道价格">("商品档案");
   const [form, setForm] = useState({
     code: "",
     name: "",
@@ -641,6 +715,49 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData, log
     setSupplierPrice("");
   }
 
+  async function importPriceSamples() {
+    const supplier = suppliers[0];
+    if (!supplier) return;
+    const samples: Product[] = [
+      {
+        id: createId("prd"),
+        code: `25MDKT-${String(data.products.length + 10).padStart(3, "0")}`,
+        name: "KFR-72LW/G3-1 示例品牌柜机 3匹 1级",
+        kind: "实体商品",
+        category: "空调",
+        capacity: "3匹",
+        energyLevel: "1级",
+        shape: "柜机",
+        frameworkPrice: 5100,
+        quotePrice: 4400,
+        passThroughPrice: 4500,
+        costPrice: 4050,
+        platformCode: "310220100DEMO72",
+        orderInfo: "从价格体系表导入的示例商品。",
+      },
+      {
+        id: createId("prd"),
+        code: `FW-RZ-${String(data.products.length + 10).padStart(3, "0")}`,
+        name: "政采电商平台入驻服务 1年",
+        kind: "虚拟服务",
+        category: "平台入驻",
+        quotePrice: 1000,
+        costPrice: 0,
+        orderInfo: "从入驻客户表抽象的服务商品。",
+      },
+    ];
+    const prices: SupplierPrice[] = samples
+      .filter((sample) => sample.kind === "实体商品")
+      .flatMap((sample) => [
+        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice, note: "导入价格体系-当前价" },
+        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice + 120, note: "导入价格体系-历史波动价" },
+      ]);
+    await commit(
+      { ...data, products: [...samples, ...data.products], supplierPrices: [...prices, ...data.supplierPrices] },
+      { action: "导入商品价格", targetType: "商品", targetName: "价格体系示例", operator: "当前用户", detail: `导入 ${samples.length} 个商品、${prices.length} 条渠道价格` },
+    );
+  }
+
   return (
     <div className="stack">
       <div className="panel">
@@ -669,29 +786,43 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData, log
         </div>
       </div>
       <div className="panel">
-        <PanelTitle title="商品与供应商价格" subtitle="商品编码唯一，同一商品可维护多个进货渠道。" />
-        <div className="product-list">
-          {data.products.map((product) => {
-            const prices = data.supplierPrices.filter((price) => price.productId === product.id);
-            return (
-              <article className="product-card" key={product.id}>
-                <div>
-                  <span className="tag">{product.kind}</span>
-                  <h3>{product.name}</h3>
-                  <p>{product.code} · {product.category} · {product.capacity || "无规格"} · {product.energyLevel || "无能效"}</p>
-                </div>
-                <strong>{money(product.quotePrice)}</strong>
-                <div className="supplier-prices">
-                  {prices.length === 0 && <span>无采购渠道</span>}
-                  {prices.map((price) => {
-                    const supplier = data.organizations.find((org) => org.id === price.supplierOrgId);
-                    return <span key={price.id}>{supplier?.name}: {money(price.purchasePrice)}</span>;
-                  })}
-                </div>
-              </article>
-            );
-          })}
+        <div className="panel-title action-title">
+          <div>
+            <h2>商品与价格管理</h2>
+            <p>商品档案和渠道价格分开管理；同一渠道价格可保留多条波动记录。</p>
+          </div>
+          <button className="ghost" onClick={importPriceSamples}>导入价格体系示例</button>
         </div>
+        <div className="segmented">
+          {(["商品档案", "渠道价格"] as const).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}
+        </div>
+        {tab === "商品档案" ? (
+          <div className="product-list">
+            {data.products.map((product) => (
+                <article className="product-card" key={product.id}>
+                  <div>
+                    <span className="tag">{product.kind}</span>
+                    <h3>{product.name}</h3>
+                    <p>{product.code} · {product.category} · {product.capacity || "无规格"} · {product.energyLevel || "无能效"}</p>
+                  </div>
+                  <strong>{money(product.quotePrice)}</strong>
+                  <div className="supplier-prices">
+                    <span>框架价 {product.frameworkPrice ? money(product.frameworkPrice) : "未录入"}</span>
+                    <span>过单价 {product.passThroughPrice ? money(product.passThroughPrice) : "未录入"}</span>
+                  </div>
+                </article>
+              ))}
+          </div>
+        ) : (
+          <div className="table">
+            <div className="table-row price-table head"><span>商品</span><span>供应商/渠道</span><span>进货价</span><span>备注/版本</span></div>
+            {data.supplierPrices.map((price) => {
+              const product = data.products.find((item) => item.id === price.productId);
+              const supplier = data.organizations.find((org) => org.id === price.supplierOrgId);
+              return <div className="table-row price-table" key={price.id}><span>{product?.name}</span><span>{supplier?.name}</span><span>{money(price.purchasePrice)}</span><span>{price.note || "当前价"}</span></div>;
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -740,10 +871,21 @@ function Invoices({ data }: { data: AppData }) {
     <div className="panel">
       <PanelTitle title="发票台账" subtitle="发票需要关联项目、销售订单、采购订单、客户和供应商；验证版先展示项目关联。" />
       <div className="table">
-        <div className="table-row head"><span>项目</span><span>类型</span><span>金额</span><span>状态</span></div>
+        <div className="table-row invoice-table head"><span>发票号码/日期</span><span>项目</span><span>买方</span><span>卖方</span><span>不含税</span><span>税额</span><span>价税合计</span><span>状态</span></div>
         {data.invoices.map((invoice) => {
           const project = data.projects.find((item) => item.id === invoice.projectId);
-          return <div className="table-row" key={invoice.id}><span>{project?.name}</span><span>{invoice.type}</span><span>{money(invoice.amount)}</span><span>{invoice.status}</span></div>;
+          return (
+            <div className="table-row invoice-table" key={invoice.id}>
+              <span>{invoice.invoiceNo || "未录入"}<em>{invoice.invoiceDate || invoice.date || "未录入日期"}</em></span>
+              <span>{project?.name || "未关联项目"}</span>
+              <span>{invoice.buyerName || "未录入"}<em>{invoice.buyerTaxNo || "无税号"}</em></span>
+              <span>{invoice.sellerName || "未录入"}<em>{invoice.sellerTaxNo || "无税号"}</em></span>
+              <span>{money(invoice.amountWithoutTax ?? 0)}</span>
+              <span>{money(invoice.taxAmount ?? 0)}</span>
+              <span>{money(invoice.amount)}</span>
+              <span>{invoice.status}</span>
+            </div>
+          );
         })}
       </div>
     </div>

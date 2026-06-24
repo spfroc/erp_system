@@ -468,6 +468,38 @@ nav button:hover {
   grid-template-columns: 1.5fr 0.55fr 0.7fr 0.75fr 0.65fr 1fr;
 }
 
+.table-row.order-table {
+  grid-template-columns: 1.2fr 1fr 1.25fr 0.75fr 0.9fr 0.7fr 0.8fr;
+}
+
+.table-row.invoice-table {
+  grid-template-columns: 1fr 1.1fr 1.2fr 1.2fr 0.65fr 0.65fr 0.75fr 0.55fr;
+}
+
+.table-row.price-table {
+  grid-template-columns: 1.6fr 1.2fr 0.7fr 1fr;
+}
+
+.clickable-row {
+  border: 0;
+  width: 100%;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: #f8fafc;
+}
+
+.table-row em {
+  display: block;
+  color: #697586;
+  font-style: normal;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .table-row:last-child {
   border-bottom: 0;
 }
@@ -508,6 +540,38 @@ nav button:hover {
   border-radius: 8px;
   padding: 0 10px;
   outline: 0;
+}
+
+.project-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 10px;
+  margin-bottom: 12px;
+}
+
+.project-search input {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  outline: 0;
+}
+
+.orders-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.orders-toolbar .project-search {
+  min-width: min(460px, 100%);
+  margin-bottom: 0;
 }
 
 .segmented {
@@ -870,6 +934,10 @@ nav button:hover {
   .user-form,
   .user-card {
     grid-template-columns: 1fr;
+  }
+
+  .orders-toolbar {
+    flex-direction: column;
   }
 
 
