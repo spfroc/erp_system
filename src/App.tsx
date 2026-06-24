@@ -75,6 +75,12 @@ function today() {
   return new Date().toISOString();
 }
 
+function latestSupplierPrice(prices: SupplierPrice[], productId: string, supplierOrgId: string) {
+  return prices
+    .filter((price) => price.productId === productId && price.supplierOrgId === supplierOrgId)
+    .sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""))[0];
+}
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [view, setView] = useState<View>("dashboard");
@@ -314,7 +320,7 @@ function Projects({
   const items = data.projectItems.filter((item) => item.projectId === selectedProject.id);
   const onboarding = data.onboardingRecords.find((record) => record.projectId === selectedProject.id);
   const selectedProduct = data.products.find((product) => product.id === newProject.productId);
-  const selectedSupplierPrice = data.supplierPrices.find((price) => price.productId === newProject.productId && price.supplierOrgId === newProject.supplierOrgId);
+  const selectedSupplierPrice = latestSupplierPrice(data.supplierPrices, newProject.productId, newProject.supplierOrgId);
   const customerOptions = customers.filter((org) => `${org.name}${org.unifiedCreditCode}${org.legalPerson}${org.phone}`.includes(customerSearch));
 
   async function addCustomerFromLicense() {
@@ -339,7 +345,7 @@ function Projects({
 
   function updateProduct(productId: string) {
     const product = data.products.find((item) => item.id === productId);
-    const supplierPrice = data.supplierPrices.find((price) => price.productId === productId && price.supplierOrgId === newProject.supplierOrgId);
+    const supplierPrice = latestSupplierPrice(data.supplierPrices, productId, newProject.supplierOrgId);
     setNewProject({
       ...newProject,
       productId,
@@ -349,7 +355,7 @@ function Projects({
   }
 
   function updateSupplier(supplierOrgId: string) {
-    const supplierPrice = data.supplierPrices.find((price) => price.productId === newProject.productId && price.supplierOrgId === supplierOrgId);
+    const supplierPrice = latestSupplierPrice(data.supplierPrices, newProject.productId, supplierOrgId);
     setNewProject({
       ...newProject,
       supplierOrgId,
@@ -714,7 +720,6 @@ function Entities({ data, commit, query }: { data: AppData; commit: (data: AppDa
 }
 
 function Products({ data, commit }: { data: AppData; commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void> }) {
-  const [tab, setTab] = useState<"商品档案" | "渠道价格">("商品档案");
   const [form, setForm] = useState({
     code: "",
     name: "",
@@ -731,6 +736,7 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData, log
   });
   const [supplierOrgId, setSupplierOrgId] = useState(data.organizations.find((org) => org.roles.includes("供应商"))?.id ?? "");
   const [supplierPrice, setSupplierPrice] = useState("");
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, { supplierOrgId: string; purchasePrice: string; effectiveDate: string; note: string }>>({});
   const suppliers = data.organizations.filter((org) => org.roles.includes("供应商"));
 
   async function addProduct() {
@@ -802,8 +808,8 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData, log
     const prices: SupplierPrice[] = samples
       .filter((sample) => sample.kind === "实体商品")
       .flatMap((sample) => [
-        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice, note: "导入价格体系-当前价" },
-        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice + 120, note: "导入价格体系-历史波动价" },
+        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice, effectiveDate: new Date().toISOString().slice(0, 10), note: "导入价格体系-当前价" },
+        { id: createId("sp"), productId: sample.id, supplierOrgId: supplier.id, purchasePrice: sample.costPrice + 120, effectiveDate: "2026-05-01", note: "导入价格体系-历史波动价" },
       ]);
     await commit(
       { ...data, products: [...samples, ...data.products], supplierPrices: [...prices, ...data.supplierPrices] },
@@ -846,36 +852,67 @@ function Products({ data, commit }: { data: AppData; commit: (data: AppData, log
           </div>
           <button className="ghost" onClick={importPriceSamples}>导入价格体系示例</button>
         </div>
-        <div className="segmented">
-          {(["商品档案", "渠道价格"] as const).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}
+        <div className="product-list">
+          {data.products.map((product) => {
+            const productPrices = data.supplierPrices
+              .filter((price) => price.productId === product.id)
+              .sort((a, b) => (b.effectiveDate || "").localeCompare(a.effectiveDate || ""));
+            const draft = priceDrafts[product.id] ?? {
+              supplierOrgId: suppliers[0]?.id ?? "",
+              purchasePrice: "",
+              effectiveDate: new Date().toISOString().slice(0, 10),
+              note: "",
+            };
+            async function addChannelPrice() {
+              if (!draft.supplierOrgId || !Number(draft.purchasePrice)) return;
+              const newPrice: SupplierPrice = {
+                id: createId("sp"),
+                productId: product.id,
+                supplierOrgId: draft.supplierOrgId,
+                purchasePrice: Number(draft.purchasePrice),
+                effectiveDate: draft.effectiveDate,
+                note: draft.note || "新增渠道价格",
+              };
+              await commit(
+                { ...data, supplierPrices: [newPrice, ...data.supplierPrices] },
+                { action: "新增渠道价格", targetType: "商品", targetName: product.name, operator: "当前用户", detail: `${money(newPrice.purchasePrice)}，生效日期：${newPrice.effectiveDate}` },
+              );
+              setPriceDrafts({ ...priceDrafts, [product.id]: { ...draft, purchasePrice: "", note: "" } });
+            }
+            return (
+              <article className="product-card expanded" key={product.id}>
+                <div>
+                  <span className="tag">{product.kind}</span>
+                  <h3>{product.name}</h3>
+                  <p>{product.code} · {product.category} · {product.capacity || "无规格"} · {product.energyLevel || "无能效"}</p>
+                </div>
+                <strong>{money(product.quotePrice)}</strong>
+                <div className="supplier-prices">
+                  <span>框架价 {product.frameworkPrice ? money(product.frameworkPrice) : "未录入"}</span>
+                  <span>过单价 {product.passThroughPrice ? money(product.passThroughPrice) : "未录入"}</span>
+                </div>
+                <div className="channel-price-panel">
+                  <div className="channel-price-form">
+                    <select value={draft.supplierOrgId} onChange={(event) => setPriceDrafts({ ...priceDrafts, [product.id]: { ...draft, supplierOrgId: event.target.value } })}>
+                      {suppliers.map((supplier) => <option value={supplier.id} key={supplier.id}>{supplier.name}</option>)}
+                    </select>
+                    <input value={draft.purchasePrice} onChange={(event) => setPriceDrafts({ ...priceDrafts, [product.id]: { ...draft, purchasePrice: event.target.value } })} placeholder="进货价" />
+                    <input type="date" value={draft.effectiveDate} onChange={(event) => setPriceDrafts({ ...priceDrafts, [product.id]: { ...draft, effectiveDate: event.target.value } })} />
+                    <input value={draft.note} onChange={(event) => setPriceDrafts({ ...priceDrafts, [product.id]: { ...draft, note: event.target.value } })} placeholder="备注/版本" />
+                    <button className="ghost" onClick={addChannelPrice}>新增渠道价</button>
+                  </div>
+                  <div className="price-history">
+                    {productPrices.length === 0 && <span>暂无渠道价格</span>}
+                    {productPrices.map((price) => {
+                      const supplier = data.organizations.find((org) => org.id === price.supplierOrgId);
+                      return <span key={price.id}>{supplier?.name} · {money(price.purchasePrice)} · {price.effectiveDate || "无日期"} · {price.note || "当前价"}</span>;
+                    })}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
-        {tab === "商品档案" ? (
-          <div className="product-list">
-            {data.products.map((product) => (
-                <article className="product-card" key={product.id}>
-                  <div>
-                    <span className="tag">{product.kind}</span>
-                    <h3>{product.name}</h3>
-                    <p>{product.code} · {product.category} · {product.capacity || "无规格"} · {product.energyLevel || "无能效"}</p>
-                  </div>
-                  <strong>{money(product.quotePrice)}</strong>
-                  <div className="supplier-prices">
-                    <span>框架价 {product.frameworkPrice ? money(product.frameworkPrice) : "未录入"}</span>
-                    <span>过单价 {product.passThroughPrice ? money(product.passThroughPrice) : "未录入"}</span>
-                  </div>
-                </article>
-              ))}
-          </div>
-        ) : (
-          <div className="table">
-            <div className="table-row price-table head"><span>商品</span><span>供应商/渠道</span><span>进货价</span><span>备注/版本</span></div>
-            {data.supplierPrices.map((price) => {
-              const product = data.products.find((item) => item.id === price.productId);
-              const supplier = data.organizations.find((org) => org.id === price.supplierOrgId);
-              return <div className="table-row price-table" key={price.id}><span>{product?.name}</span><span>{supplier?.name}</span><span>{money(price.purchasePrice)}</span><span>{price.note || "当前价"}</span></div>;
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

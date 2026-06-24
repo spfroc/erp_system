@@ -923,6 +923,48 @@ nav button:hover {
   align-items: center;
 }
 
+.product-card.expanded {
+  grid-template-columns: minmax(0, 1fr) 120px minmax(260px, 0.9fr);
+}
+
+.channel-price-panel {
+  grid-column: 1 / -1;
+  border-top: 1px solid #edf1f5;
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.channel-price-form {
+  display: grid;
+  grid-template-columns: 1.3fr 120px 150px 1fr auto;
+  gap: 8px;
+}
+
+.channel-price-form input,
+.channel-price-form select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.price-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.price-history span {
+  background: #f4f6f8;
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: #475569;
+}
+
 .supplier-prices {
   display: flex;
   flex-wrap: wrap;
@@ -1006,6 +1048,7 @@ nav button:hover {
   .form-grid,
   .form-grid.entity-form,
   .product-form,
+  .channel-price-form,
   .transaction-form,
   .platform-form,
   .inline-search,

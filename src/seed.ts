@@ -204,9 +204,10 @@ export const seedData: AppData = {
     },
   ],
   supplierPrices: [
-    { id: "sp-1", productId: "prd-1", supplierOrgId: "org-3", purchasePrice: 1730, note: "官方渠道" },
-    { id: "sp-2", productId: "prd-1", supplierOrgId: "org-4", purchasePrice: 1710, note: "备用渠道" },
-    { id: "sp-3", productId: "prd-2", supplierOrgId: "org-3", purchasePrice: 1750 },
+    { id: "sp-1", productId: "prd-1", supplierOrgId: "org-3", purchasePrice: 1730, effectiveDate: "2026-06-01", note: "官方渠道" },
+    { id: "sp-2", productId: "prd-1", supplierOrgId: "org-4", purchasePrice: 1710, effectiveDate: "2026-06-10", note: "备用渠道" },
+    { id: "sp-3", productId: "prd-2", supplierOrgId: "org-3", purchasePrice: 1750, effectiveDate: "2026-06-01" },
+    { id: "sp-4", productId: "prd-1", supplierOrgId: "org-3", purchasePrice: 1760, effectiveDate: "2026-06-20", note: "官方渠道价格波动" },
   ],
   projects: [
     {

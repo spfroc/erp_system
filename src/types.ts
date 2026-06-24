@@ -72,6 +72,7 @@ export interface SupplierPrice {
   productId: string;
   supplierOrgId: string;
   purchasePrice: number;
+  effectiveDate?: string;
   note?: string;
 }
 
