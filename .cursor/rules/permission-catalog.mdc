@@ -1,0 +1,36 @@
+---
+description: 新功能若需鉴权，必须同步加入权限列表供角色勾选
+alwaysApply: true
+---
+
+# 新功能必须同步权限点
+
+不要只在代码里 `can("xxx")` / 后端校验权限。只要新功能需要鉴权，就必须把权限点加入权限目录，让「用户权限 → 角色编辑 / 权限矩阵」能勾选。
+
+不要做「权限点增删改」管理界面。权限点由代码定义，角色只负责勾选已有权限。
+
+## 必须同时改
+
+1. `frontend/src/types.ts`：`PermissionKey` 联合类型
+2. `frontend/src/App.tsx`：`permissionLabels`、`permissionGroups`（矩阵和角色勾选都读这里）
+3. 导航、按钮、接口：用新权限点，而不是复用语义不符的旧权限（例如平台账号不要继续只挂 `onboarding.manage`）
+4. `frontend/src/seed.ts`、`backend/.../seed_database.py` 的 `ALL_PERMISSIONS`、`ensure_initial_admin.py`
+5. 后端 `COLLECTION_PERMISSIONS` / `_require_permission`（如有接口）
+6. 已有相关角色：一次性迁移授予新权限，避免每次加载又把用户取消的勾选加回去
+
+## 命名
+
+与现有风格一致：`模块.动作`，如 `platformAccount.view`、`platformAccount.manage`。
+
+查看类进「基础」，写操作进「业务」或对应分组。`manage` 应蕴含 `view`。
+
+## 反例
+
+```ts
+// ❌ 新菜单已上线，权限列表里没有对应项
+{ id: "platformAccounts", permission: "onboarding.manage" }
+
+// ✅ 独立权限点，并加入 permissionGroups
+"platformAccount.view": "查看平台账号",
+"platformAccount.manage": "管理平台账号",
+```

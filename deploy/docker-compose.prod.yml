@@ -1,0 +1,62 @@
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+    container_name: yzc-erp-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      ocr-service:
+        condition: service_started
+    networks:
+      - internal
+      - prod.host
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=prod.host
+      - traefik.http.routers.yzc-erp.rule=Host(`assist.qlyc.co`)
+      - traefik.http.routers.yzc-erp.entrypoints=websecure
+      - traefik.http.routers.yzc-erp.tls.certresolver=letsencrypt
+      - traefik.http.middlewares.yzc-erp-compress.compress=true
+      - traefik.http.routers.yzc-erp.middlewares=yzc-erp-compress
+      - traefik.http.services.yzc-erp.loadbalancer.server.port=80
+
+  backend:
+    build:
+      context: ../backend
+    container_name: yzc-erp-backend-prod
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile - --error-logfile -
+    env_file:
+      - path: ../.env.prod
+        format: raw
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - business-documents:/app/media
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8000),2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  ocr-service:
+    build:
+      context: ../ocr-service
+    container_name: yzc-erp-ocr-prod
+    restart: unless-stopped
+    networks:
+      - internal
+
+networks:
+  internal:
+    name: yzc-erp.internal
+  prod.host:
+    external: true
+
+volumes:
+  business-documents:
+    name: yzc-erp.business-documents
