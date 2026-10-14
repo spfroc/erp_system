@@ -45,6 +45,11 @@ services:
       MYSQL_PORT: "3306"
       REDIS_URL: redis://redis:6379/0
       OCR_SERVICE_URL: http://ocr-service:8100
+      # 宿主机 center：php artisan serve :8899（网关 172.18.0.1 = compose 默认 bridge）
+      CENTER_SMS_BASE_URL: http://172.18.0.1:8899/api/sms
+      CENTER_SMS_DRY_RUN: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     volumes:

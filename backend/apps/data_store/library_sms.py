@@ -207,7 +207,14 @@ def center_sms_config() -> dict[str, str]:
     return {"baseUrl": base, "token": token, "dryRun": "1" if dry or not base else "0"}
 
 
-def _center_request(method: str, path: str, payload: dict | None = None, params: dict | None = None) -> tuple[dict | list | None, str]:
+def _center_request(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    params: dict | None = None,
+    *,
+    form: bool = False,
+) -> tuple[dict | list | None, str]:
     cfg = center_sms_config()
     base = cfg["baseUrl"]
     if not base:
@@ -216,15 +223,21 @@ def _center_request(method: str, path: str, payload: dict | None = None, params:
     if params:
         url = f"{url}?{urllib.parse.urlencode({k: v for k, v in params.items() if v not in (None, '')})}"
     body = None
-    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    headers = {"Accept": "application/json"}
     if cfg["token"]:
         headers["Authorization"] = f"Bearer {cfg['token']}"
         headers["X-Token"] = cfg["token"]
     if payload is not None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        # 对齐 admin Guzzle form_params → application/x-www-form-urlencoded
+        if form:
+            body = urllib.parse.urlencode({k: v for k, v in payload.items() if v is not None}).encode("utf-8")
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        else:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=body, headers=headers, method=method.upper())
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read().decode("utf-8", errors="replace")
             if not raw:
                 return {}, ""
@@ -240,12 +253,19 @@ def _center_request(method: str, path: str, payload: dict | None = None, params:
 def send_sms_via_center(*, mobile: str, content: str, prefix: str = "") -> tuple[dict, str]:
     """发送短信。未配置 center 时走本地记录模式。"""
     cfg = center_sms_config()
-    full_content = f"【{prefix}】{content}" if prefix else content
+    sign = (prefix or "壹知产").strip() or "壹知产"
+    # center contentHandler 会剥掉已有【】再按 prefix 重包；此处与 admin 一致带签名前缀
+    body_content = content.strip()
+    if not body_content.startswith("【"):
+        body_content = f"【{sign}】{body_content}"
+    full_content = body_content
     payload = {
         "mobile": mobile,
-        "noteContent": content,
-        "content": content,
-        "prefix": prefix,
+        "content": body_content,
+        "source": "ERP系统",
+        "type": "营销",
+        "channel": "marketing",
+        "prefix": sign,
     }
     if cfg["dryRun"] == "1" or not cfg["baseUrl"]:
         return {
@@ -258,21 +278,29 @@ def send_sms_via_center(*, mobile: str, content: str, prefix: str = "") -> tuple
         }, ""
 
     # 对齐原 admin：营销短信走 /marketing，普通走 /send
-    data, error = _center_request("POST", "/marketing", payload)
+    data, error = _center_request("POST", "/marketing", payload, form=True)
     if error:
-        data, error = _center_request("POST", "/send", payload)
+        data, error = _center_request("POST", "/send", payload, form=True)
     if error:
         return {}, error
     if isinstance(data, dict):
         code = data.get("code")
-        if code not in (None, 0, "0", 200, "200"):
+        # center 成功码为 20000；兼容 0/200
+        if code not in (None, 0, "0", 200, "200", 20000, "20000"):
             return {}, str(data.get("msg") or data.get("message") or data.get("detail") or "发送失败")
         inner = data.get("data") if isinstance(data.get("data"), dict) else data
+        provider = inner.get("data") if isinstance(inner.get("data"), dict) else inner
         return {
             "mode": "center",
-            "taskId": str(inner.get("task_id") or inner.get("taskId") or ""),
-            "result": str(inner.get("result") or inner.get("status") or "ok"),
-            "balance": inner.get("balance", ""),
+            "taskId": str(
+                provider.get("taskId")
+                or provider.get("task_id")
+                or inner.get("taskId")
+                or inner.get("task_id")
+                or ""
+            ),
+            "result": str(provider.get("msg") or inner.get("result") or inner.get("status") or "ok"),
+            "balance": provider.get("balance", inner.get("balance", "")),
             "content": full_content,
             "raw": data,
         }, ""
@@ -290,7 +318,7 @@ def fetch_center_sms_records(params: dict) -> tuple[dict | None, str]:
     cfg = center_sms_config()
     if not cfg["baseUrl"] or cfg["dryRun"] == "1":
         return None, "center 未配置"
-    data, error = _center_request("GET", "/records", params=params)
+    data, error = _center_request("GET", "/page", params=params)
     if error:
         return None, error
     if isinstance(data, dict) and isinstance(data.get("data"), list):
@@ -299,6 +327,7 @@ def fetch_center_sms_records(params: dict) -> tuple[dict | None, str]:
         return {"items": data, "total": len(data)}, ""
     if isinstance(data, dict) and isinstance(data.get("data"), dict):
         inner = data["data"]
+        # Laravel paginate: { data: [...], total, ... }
         items = inner.get("data") or inner.get("items") or []
         return {"items": items, "total": int(inner.get("total") or len(items))}, ""
     return {"items": [], "total": 0}, ""
