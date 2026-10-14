@@ -1,0 +1,93 @@
+# one（182.168.1.120）开发栈。宿主机 3306 已被 center/admin 的 MariaDB 占用，MySQL 改映射到 13306。
+services:
+  frontend:
+    build:
+      context: ../frontend
+    working_dir: /app
+    command: sh -c "test -d node_modules && npm run dev -- --host 0.0.0.0 || (npm install && npm run dev -- --host 0.0.0.0)"
+    ports:
+      - "18082:5173"
+    volumes:
+      - ../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ../backend
+    working_dir: /app
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: dev-only-change-me
+      DJANGO_ALLOWED_HOSTS: "*"
+      CORS_ALLOW_ALL_ORIGINS: "1"
+      MYSQL_DATABASE: yicai_erp
+      MYSQL_USER: yicai
+      MYSQL_PASSWORD: yicai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+      OCR_SERVICE_URL: http://ocr-service:8100
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ocr-service:
+        condition: service_started
+
+  ocr-service:
+    build:
+      context: ../ocr-service
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
+    ports:
+      - "8100:8100"
+    volumes:
+      - ../ocr-service:/app
+
+  mysql:
+    image: mysql:8.0.21
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: yicai_erp
+      MYSQL_USER: yicai
+      MYSQL_PASSWORD: yicai
+      MYSQL_ROOT_PASSWORD: yicai-root
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: yicai
+      MINIO_ROOT_PASSWORD: yicai123456
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  frontend_node_modules:
+  mysql_data:
+  minio_data:

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import app_data, audit_sensitive_access, auth_login, auth_logout, auth_me, collection_item, collection_items, delete_document, download_document, finance_validation, finance_validation_ignore, generate_service_contract, generate_standalone_service_contract, official_site_inquiry, platform_account_sensitive_value, upload_document, website_leads
+from .views import app_data, audit_sensitive_access, auth_login, auth_logout, auth_me, collection_item, collection_items, delete_document, download_document, finance_validation, finance_validation_ignore, generate_service_contract, generate_standalone_service_contract, official_site_inquiry, platform_account_sensitive_value, run_notice_collection, upload_document, website_leads
 
 
 urlpatterns = [
@@ -23,4 +23,6 @@ urlpatterns = [
     path("website-leads", website_leads, name="website-leads-no-slash"),
     path("official-site-inquiry/", official_site_inquiry, name="official-site-inquiry"),
     path("official-site-inquiry", official_site_inquiry, name="official-site-inquiry-no-slash"),
+    path("notices/collection-runs/", run_notice_collection, name="run-notice-collection"),
+    path("notices/collection-runs", run_notice_collection, name="run-notice-collection-no-slash"),
 ]

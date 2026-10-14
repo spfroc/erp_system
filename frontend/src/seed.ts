@@ -121,6 +121,8 @@ export const seedData: AppData = {
         "platformAccount.manage",
         "trademarkCertificate.view",
         "trademarkCertificate.manage",
+        "notice.view",
+        "notice.manage",
         "lead.manage",
         "sensitive.view",
         "profit.view",
@@ -131,7 +133,7 @@ export const seedData: AppData = {
       id: "role-sales",
       name: "业务负责人",
       description: "维护客户、项目、报价、合同和收款跟进。",
-      permissions: ["dashboard.view", "project.view", "project.create", "project.edit", "entity.view", "entity.create", "product.view", "lead.manage", "trademarkCertificate.view", "trademarkCertificate.manage", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
+      permissions: ["dashboard.view", "project.view", "project.create", "project.edit", "entity.view", "entity.create", "product.view", "lead.manage", "notice.view", "notice.manage", "trademarkCertificate.view", "trademarkCertificate.manage", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
     },
     {
       id: "role-purchase",
@@ -592,4 +594,7 @@ export const seedData: AppData = {
     },
   ],
   trademarkCertificates: [],
+  notices: [],
+  noticeCollectionSources: [],
+  noticeCollectionRuns: [],
 };

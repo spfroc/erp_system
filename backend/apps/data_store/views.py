@@ -20,6 +20,9 @@ from .models import (
     AppState,
     InvoiceRecord,
     ManagedFile,
+    NoticeCollectionRunRecord,
+    NoticeCollectionSourceRecord,
+    NoticeRecord,
     OcrJobRecord,
     OnboardingRecord,
     OperationLogRecord,
@@ -41,6 +44,7 @@ from .models import (
     UserRecord,
     WebsiteLeadRecord,
 )
+from .notices import ensure_default_sample_source, normalize_notice_payload, notice_defaults, run_collection_source
 
 from .finance_statements import build_finance_statement_rows, orphaned_transaction_ids
 from .service_contract import (
@@ -80,6 +84,9 @@ COLLECTIONS = {
     "operationLogs": OperationLogRecord,
     "ocrJobs": OcrJobRecord,
     "trademarkCertificates": TrademarkCertificateRecord,
+    "notices": NoticeRecord,
+    "noticeCollectionSources": NoticeCollectionSourceRecord,
+    "noticeCollectionRuns": NoticeCollectionRunRecord,
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
@@ -108,6 +115,9 @@ COLLECTION_PERMISSIONS = {
     "operationLogs": {"read": "user.manage", "write": "user.manage"},
     "ocrJobs": {"read": "project.view", "write": "project.edit"},
     "trademarkCertificates": {"read": "trademarkCertificate.view", "write": "trademarkCertificate.manage"},
+    "notices": {"read": "notice.view", "write": "notice.manage"},
+    "noticeCollectionSources": {"read": "notice.view", "write": "notice.manage"},
+    "noticeCollectionRuns": {"read": "notice.view", "write": "notice.manage"},
 }
 
 
@@ -556,6 +566,7 @@ PERMISSION_ALIASES = {
     "platformAccount.view": ("platformAccount.view", "platformAccount.manage", "onboarding.manage"),
     "platformAccount.manage": ("platformAccount.manage", "onboarding.manage"),
     "trademarkCertificate.view": ("trademarkCertificate.view", "trademarkCertificate.manage"),
+    "notice.view": ("notice.view", "notice.manage"),
     "salesOrder.view": ("salesOrder.view", "salesOrder.manage", "project.view"),
     "salesOrder.manage": ("salesOrder.manage", "project.edit", "finance.manage"),
     "purchaseOrder.view": ("purchaseOrder.view", "purchaseOrder.manage", "project.view", "purchase.manage"),
@@ -810,6 +821,29 @@ def _record_defaults(model, payload: dict) -> dict:
             international_class=(payload.get("internationalClass", "") or "").strip(),
             registration_date=(payload.get("registrationDate", "") or "").strip(),
             valid_until=(payload.get("validUntil", "") or "").strip(),
+        )
+    elif model is NoticeRecord:
+        data = normalize_notice_payload(payload)
+        defaults = notice_defaults(data)
+    elif model is NoticeCollectionSourceRecord:
+        defaults.update(
+            name=(payload.get("name", "") or "").strip(),
+            kind=(payload.get("kind", "") or "").strip(),
+            enabled=bool(payload.get("enabled", True)),
+            last_run_at=(payload.get("lastRunAt", "") or "").strip(),
+            last_status=(payload.get("lastStatus", "") or "").strip(),
+        )
+    elif model is NoticeCollectionRunRecord:
+        defaults.update(
+            source_id=(payload.get("sourceId", "") or "").strip(),
+            source_name=(payload.get("sourceName", "") or "").strip(),
+            status=(payload.get("status", "") or "").strip(),
+            fetched_count=int(payload.get("fetchedCount") or 0),
+            created_count=int(payload.get("createdCount") or 0),
+            updated_count=int(payload.get("updatedCount") or 0),
+            lead_count=int(payload.get("leadCount") or 0),
+            started_at=(payload.get("startedAt", "") or "").strip(),
+            finished_at=(payload.get("finishedAt", "") or "").strip(),
         )
     return defaults
 
@@ -1566,6 +1600,52 @@ def _apply_collection_list_query(collection: str, queryset, request):
                 | Q(data__approvedGoods__icontains=search)
                 | Q(data__trademarkName__icontains=search)
                 | Q(data__note__icontains=search)
+            )
+    elif collection == "notices":
+        notice_kind = (get("noticeKind") or "").strip()
+        if notice_kind and notice_kind != "全部":
+            queryset = queryset.filter(notice_kind=notice_kind)
+        bid_status = (get("bidStatus") or "").strip()
+        if bid_status and bid_status != "全部":
+            queryset = queryset.filter(bid_status=bid_status)
+        is_public = (get("isPublic") or "").strip().lower()
+        if is_public in {"1", "true", "yes"}:
+            queryset = queryset.filter(is_public=True)
+        elif is_public in {"0", "false", "no"}:
+            queryset = queryset.filter(is_public=False)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search)
+                | Q(project_number__icontains=search)
+                | Q(supplier_name__icontains=search)
+                | Q(department__icontains=search)
+                | Q(category__icontains=search)
+                | Q(notice_kind__icontains=search)
+                | Q(bid_status__icontains=search)
+                | Q(data__content__icontains=search)
+                | Q(data__contactName__icontains=search)
+                | Q(data__contactPhone__icontains=search)
+            )
+    elif collection == "noticeCollectionSources":
+        enabled = (get("enabled") or "").strip().lower()
+        if enabled in {"1", "true", "yes"}:
+            queryset = queryset.filter(enabled=True)
+        elif enabled in {"0", "false", "no"}:
+            queryset = queryset.filter(enabled=False)
+        if search:
+            queryset = queryset.filter(Q(name__icontains=search) | Q(kind__icontains=search))
+    elif collection == "noticeCollectionRuns":
+        source_id = (get("sourceId") or "").strip()
+        if source_id:
+            queryset = queryset.filter(source_id=source_id)
+        status = (get("status") or "").strip()
+        if status and status != "全部":
+            queryset = queryset.filter(status=status)
+        if search:
+            queryset = queryset.filter(
+                Q(source_name__icontains=search)
+                | Q(status__icontains=search)
+                | Q(data__errorMessage__icontains=search)
             )
     elif collection in {"salesOrders", "purchaseOrders", "serviceOrders"}:
         status = (get("status") or "").strip()
@@ -2826,6 +2906,31 @@ def official_site_inquiry(request):
     data = dict(echo) if isinstance(echo, dict) else {}
     data.update(lead)
     return JsonResponse({"code": 20000, "message": "success", "data": data}, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def run_notice_collection(request):
+    _, permission_error = _require_permission(request, "notice.manage")
+    if permission_error:
+        return permission_error
+    payload, error = _read_body(request)
+    if error:
+        return error
+    source_id = str((payload or {}).get("sourceId") or "").strip()
+    ensure_sample = bool((payload or {}).get("ensureSample"))
+    if ensure_sample and not source_id:
+        source = ensure_default_sample_source()
+        source_id = source.id
+    if not source_id:
+        return JsonResponse({"detail": "sourceId is required."}, status=400)
+    source = NoticeCollectionSourceRecord.objects.filter(id=source_id, is_deleted=False).first()
+    if not source:
+        return JsonResponse({"detail": "采集源不存在。"}, status=404)
+    if not source.enabled and not (payload or {}).get("force"):
+        return JsonResponse({"detail": "采集源已停用。"}, status=400)
+    run = run_collection_source(source)
+    return JsonResponse({"data": run.data}, status=201)
 
 
 @csrf_exempt

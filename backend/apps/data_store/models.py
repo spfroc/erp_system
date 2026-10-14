@@ -256,6 +256,50 @@ class TrademarkCertificateRecord(BaseRecord):
         db_table = "trademark_certificates"
 
 
+class NoticeRecord(BaseRecord):
+    title = models.CharField(max_length=500, db_index=True)
+    project_number = models.CharField(max_length=100, blank=True, db_index=True)
+    supplier_name = models.CharField(max_length=255, blank=True, db_index=True)
+    department = models.CharField(max_length=255, blank=True, db_index=True)
+    category = models.CharField(max_length=100, blank=True, db_index=True)
+    notice_kind = models.CharField(max_length=50, default="竞价项目", db_index=True)
+    bid_status = models.CharField(max_length=50, blank=True, db_index=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    is_public = models.BooleanField(default=False, db_index=True)
+    source = models.CharField(max_length=30, default="manual", db_index=True)
+    external_id = models.CharField(max_length=100, blank=True, db_index=True)
+    published_at = models.CharField(max_length=40, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "notices"
+
+
+class NoticeCollectionSourceRecord(BaseRecord):
+    name = models.CharField(max_length=100, db_index=True)
+    kind = models.CharField(max_length=50, db_index=True)
+    enabled = models.BooleanField(default=True, db_index=True)
+    last_run_at = models.CharField(max_length=40, blank=True)
+    last_status = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        db_table = "notice_collection_sources"
+
+
+class NoticeCollectionRunRecord(BaseRecord):
+    source_id = models.CharField(max_length=64, db_index=True)
+    source_name = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, db_index=True)
+    fetched_count = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    updated_count = models.PositiveIntegerField(default=0)
+    lead_count = models.PositiveIntegerField(default=0)
+    started_at = models.CharField(max_length=40, blank=True, db_index=True)
+    finished_at = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        db_table = "notice_collection_runs"
+
+
 class ManagedFile(models.Model):
     id = models.CharField(max_length=64, primary_key=True)
     document_type = models.CharField(max_length=30, db_index=True)

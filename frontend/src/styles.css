@@ -1672,6 +1672,37 @@ nav button:hover {
   align-items: start;
 }
 
+.table-row.notice-table {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) minmax(120px, 0.8fr) 0.7fr 0.55fr minmax(120px, 0.8fr);
+  align-items: start;
+}
+
+.table-row.notice-source-table {
+  grid-template-columns: 1.1fr 0.7fr 1.2fr 1fr 0.7fr;
+  align-items: start;
+}
+
+.table-row.notice-run-table {
+  grid-template-columns: 1fr 1.4fr 1fr 1fr;
+  align-items: start;
+}
+
+.notice-main-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.notice-main-cell em,
+.notice-table em,
+.notice-source-table em {
+  display: block;
+  color: #697586;
+  font-style: normal;
+  font-size: 12px;
+}
+
 .trademark-main-cell {
   display: flex;
   flex-direction: column;
@@ -4080,6 +4111,9 @@ nav button:hover {
 }
 
 .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 34px;
   border: 1px solid #d8e0e8;
   background: #ffffff;

@@ -33,6 +33,7 @@ class Command(BaseCommand):
                         "finance.view", "finance.manage", "invoice.manage",
                         "onboarding.manage", "platformAccount.view", "platformAccount.manage",
                         "trademarkCertificate.view", "trademarkCertificate.manage",
+                        "notice.view", "notice.manage",
                         "lead.manage", "sensitive.view", "profit.view", "user.manage",
                     ],
                 },

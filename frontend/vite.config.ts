@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: process.env.GITHUB_ACTIONS ? "/erp_system/" : "/",
   server: {
-    allowedHosts: ["localhost", "127.0.0.1", "comp"],
+    allowedHosts: ["localhost", "127.0.0.1", "comp", "one", "spf-roc", "182.168.1.120"],
   },
   test: {
     environment: "jsdom",

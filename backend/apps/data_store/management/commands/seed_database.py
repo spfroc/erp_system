@@ -34,6 +34,9 @@ APP_COLLECTIONS = [
     "operationLogs",
     "ocrJobs",
     "trademarkCertificates",
+    "notices",
+    "noticeCollectionSources",
+    "noticeCollectionRuns",
 ]
 
 ALL_PERMISSIONS = [
@@ -60,6 +63,8 @@ ALL_PERMISSIONS = [
     "platformAccount.manage",
     "trademarkCertificate.view",
     "trademarkCertificate.manage",
+    "notice.view",
+    "notice.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",

@@ -1,0 +1,98 @@
+---
+description: 后台基础列表页统一样式、布局与功能（搜索/筛选/分页/快捷复制）
+alwaysApply: true
+---
+
+# 后台列表 UI 统一约定
+
+以后做**基础后台列表**（增删改查台账、管理页）时，样式、布局、功能默认与当前项目一致；有特殊需求用户会另行说明。
+
+## 参考实现
+
+优先对齐这些页面，不要另起一套 UI：
+
+- 商标注册证：`TrademarkCertificates`（`App.tsx`）
+- 商机管理：`WebsiteLeads`（`App.tsx`）
+- 平台账号：`PlatformAccounts`（`App.tsx`）
+- 公告管理：`Notices.tsx`
+
+共享组件一律从 `frontend/src/listUi.tsx` 引入：`SearchField`、`CopyableLine`、`QuickCopyButton`、`Pagination`、`PanelTitle`、`writeClipboardText`。不要在业务文件里再造一套复制/搜索/分页。
+
+## 标准骨架
+
+```tsx
+<div className="stack">
+  <div className="panel">
+    <div className="panel-title action-title">
+      <div>
+        <h2>模块标题</h2>
+        <p>一句话说明用途与关键规则。</p>
+      </div>
+      <div className="panel-title-buttons">
+        {/* 主操作：新增等；或 segmented 子页签 */}
+        {canManage && <button className="primary">新增…</button>}
+      </div>
+    </div>
+
+    <div className="platform-account-toolbar">
+      <SearchField value={search} onChange={setSearch} placeholder="搜索…" />
+    </div>
+
+    {/* 少量枚举筛选用 segmented；过多选项才用 select */}
+    <div className="segmented">
+      {filters.map((item) => (
+        <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>
+          {item}
+        </button>
+      ))}
+    </div>
+
+    <div className="table">
+      <div className="table-row xxx-table head">…</div>
+      {items.map((item) => (
+        <div className="table-row xxx-table" key={item.id}>…</div>
+      ))}
+      {items.length === 0 && <div className="table-empty">暂无数据</div>}
+    </div>
+
+    <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+  </div>
+</div>
+```
+
+## 必须具备的功能
+
+1. **服务端分页/搜索**：用 `queryCollection` 的 `page` / `page_size` / `search`（及业务 filters），禁止一次拉全量再在浏览器切片。详见 `admin-list-server-query` skill。
+2. **主名称快捷复制**：主名称列用 `CopyableLine`。详见 `admin-list-quick-copy` skill。
+3. **统一搜索框**：`SearchField` + `platform-account-toolbar`（或标题右侧放搜索，与商机页一致）。
+4. **筛选**：枚举用 `.segmented` 按钮；不要用自定义杂乱 toolbar label 堆砌。
+5. **分页**：共用 `Pagination`（首页/上一页/下一页/末页）。
+6. **空态/加载**：`table-empty`；错误用现有 `form-error` / `onNotice`。
+7. **操作列**：`option-actions` + `copy-link` 文字按钮；危险操作用 `danger-action`。
+8. **权限**：读 `*.view`、写 `*.manage`；新权限点同步权限目录（见 `permission-catalog` 规则）。
+
+## 样式
+
+- 表格列宽：为该列表定义 `.table-row.xxx-table { grid-template-columns: …; align-items: start; }`。
+- 多行主信息：`.xxx-main-cell`（参考 `.trademark-main-cell` / `.notice-main-cell`），副信息用 `<em>`。
+- 表头：同一行用 `table-row xxx-table head`，不要混用已废弃的 `table-head` 单独结构（除非页面本就如此）。
+- 弹窗：`modal-backdrop` / `modal` / `modal-head` / `form-grid` / `modal-actions`；关闭用 `icon-button` + `X` 图标。
+- 不要引入卡片墙、新设计系统色板、或与现有绿主色（`.segmented button.active` / `.primary`）冲突的样式。
+
+## 反例
+
+```tsx
+// ❌ 自研搜索/分页/复制
+<label className="search-field">…</label>
+<button onClick={() => navigator.clipboard.writeText(name)}>复制</button>
+<div className="my-pager">…
+
+// ✅ 复用 listUi
+<SearchField … />
+<CopyableLine text={name} label="名称"><strong>{name}</strong></CopyableLine>
+<Pagination … />
+```
+
+## 例外
+
+用户明确说「特殊布局 / 看板 / 统计图 / 向导」时，可偏离本约定；其余基础列表默认遵守。

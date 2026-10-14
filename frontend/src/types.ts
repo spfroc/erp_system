@@ -529,6 +529,79 @@ export interface TrademarkCertificate {
   updatedAt?: string;
 }
 
+export type NoticeKind =
+  | "采购公告"
+  | "意向公开"
+  | "结果公告"
+  | "更正公告"
+  | "终止公告"
+  | "合同公告"
+  | "验收公告"
+  | "单一来源公示"
+  | "竞价项目"
+  | "其他";
+
+export type NoticeBidStatus = "竞价中" | "已完成" | "终止" | "失败" | "结果待确认" | "";
+
+export interface Notice {
+  id: string;
+  title: string;
+  projectNumber?: string;
+  planNumber?: string;
+  supplierName?: string;
+  department?: string;
+  category?: string;
+  noticeKind: NoticeKind;
+  bidStatus?: NoticeBidStatus;
+  amount?: number;
+  contactName?: string;
+  contactPhone?: string;
+  detailUrl?: string;
+  content?: string;
+  publisher?: string;
+  startAt?: string;
+  endAt?: string;
+  publishedAt?: string;
+  isPublic: boolean;
+  source: "manual" | "import" | "collect";
+  externalId?: string;
+  sourceId?: string;
+  matchedKeywords?: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface NoticeCollectionSource {
+  id: string;
+  name: string;
+  kind: "sample" | "http_json" | string;
+  enabled: boolean;
+  keywords?: string[];
+  endpointUrl?: string;
+  defaultIsPublic?: boolean;
+  lastRunAt?: string;
+  lastStatus?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface NoticeCollectionRun {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  status: "进行中" | "成功" | "失败";
+  fetchedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  leadCount: number;
+  errorMessage?: string;
+  startedAt: string;
+  finishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface OptionItem {
   id: string;
   label: string;
@@ -574,6 +647,8 @@ export type PermissionKey =
   | "platformAccount.manage"
   | "trademarkCertificate.view"
   | "trademarkCertificate.manage"
+  | "notice.view"
+  | "notice.manage"
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
@@ -618,4 +693,7 @@ export interface AppData {
   operationLogs: OperationLog[];
   ocrJobs: OcrJob[];
   trademarkCertificates: TrademarkCertificate[];
+  notices: Notice[];
+  noticeCollectionSources: NoticeCollectionSource[];
+  noticeCollectionRuns: NoticeCollectionRun[];
 }
