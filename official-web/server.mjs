@@ -73,13 +73,14 @@ function resolveSiteKey(req, url) {
   for (const raw of candidates) {
     if (!raw) continue;
     const host = normalizeHost(String(raw).split(",")[0]);
-    if (!host || /^(localhost|127\.0\.0\.1)$/i.test(host)) continue;
+    // IP / localhost 预览时不要把 182.168.1.120 解析成 sites/182
+    if (!host || /^(localhost|127\.0\.0\.1)$/i.test(host) || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) continue;
     if (HOST_TO_SITE[host]) return HOST_TO_SITE[host];
     const bare = host.startsWith("www.") ? host.slice(4) : host;
     if (HOST_TO_SITE[bare]) return HOST_TO_SITE[bare];
     if (HOST_TO_SITE[`www.${bare}`]) return HOST_TO_SITE[`www.${bare}`];
     const key = bare.split(".")[0];
-    if (fs.existsSync(path.join(__dirname, "sites", key))) return key;
+    if (key && fs.existsSync(path.join(__dirname, "sites", key))) return key;
   }
   return DEFAULT_SITE_KEY;
 }
