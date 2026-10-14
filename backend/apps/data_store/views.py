@@ -46,12 +46,22 @@ from .models import (
     UserRecord,
     WebsiteLeadRecord,
 )
-from .notices import ensure_default_sample_source, normalize_notice_payload, notice_defaults, run_collection_source
+from .notices import (
+    ensure_default_sample_source,
+    get_public_notice,
+    list_public_notices,
+    normalize_notice_payload,
+    notice_defaults,
+    run_collection_source,
+)
 from .official_sites import (
+    apply_official_seo_defaults,
     ensure_default_official_sites,
+    find_official_site_by_host,
     normalize_page_payload,
     normalize_site_payload,
     page_defaults,
+    public_seo_payload,
     resolve_public_site,
     site_defaults,
 )
@@ -2955,6 +2965,53 @@ def public_official_site(request):
     if not resolved:
         return JsonResponse({"detail": "Site not found."}, status=404)
     return JsonResponse({"data": resolved})
+
+
+@require_http_methods(["GET"])
+def public_official_seo(request):
+    host = (request.GET.get("host") or request.META.get("HTTP_X_FORWARDED_HOST") or request.get_host() or "").strip()
+    site = find_official_site_by_host(host)
+    if not site:
+        return JsonResponse({"detail": "Site not found."}, status=404)
+    return JsonResponse({"data": public_seo_payload(site.data or {})})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def import_official_seo(request):
+    _, permission_error = _require_permission(request, "site.manage")
+    if permission_error:
+        return permission_error
+    overwrite = str(request.GET.get("overwrite") or "").strip().lower() in {"1", "true", "yes"}
+    if request.body:
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        if isinstance(body, dict) and body.get("overwrite") is not None:
+            overwrite = bool(body.get("overwrite"))
+    items = apply_official_seo_defaults(overwrite=overwrite)
+    return JsonResponse({"items": items, "total": len(items), "overwrite": overwrite})
+
+
+@require_http_methods(["GET"])
+def public_notices(request):
+    page, page_size = _parse_page_params(request)
+    payload = list_public_notices(
+        page=page,
+        page_size=page_size,
+        search=(request.GET.get("search") or "").strip(),
+        notice_kind=(request.GET.get("noticeKind") or request.GET.get("kind") or "").strip(),
+    )
+    return JsonResponse(payload)
+
+
+@require_http_methods(["GET"])
+def public_notice_detail(request, notice_id: str):
+    item = get_public_notice(notice_id)
+    if not item:
+        return JsonResponse({"detail": "Notice not found."}, status=404)
+    return JsonResponse({"data": item})
 
 
 @csrf_exempt

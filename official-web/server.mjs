@@ -2,11 +2,19 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  fetchAllPublicNoticeIds,
+  renderNoticeDetailPage,
+  renderNoticeListPage,
+  renderNoticesSitemapXml,
+} from "./lib/notices-ssr.mjs";
+import { fetchOfficialSeo, getSiteSeo, requestOrigin } from "./lib/seo.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5180);
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 const DEFAULT_SITE_KEY = process.env.DEFAULT_SITE_KEY || "qlyc";
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 15000);
 
 const HOST_TO_SITE = {
   "www.qlyc.co": "qlyc",
@@ -100,29 +108,81 @@ function sendFile(res, filePath) {
   fs.createReadStream(filePath).pipe(res);
 }
 
-function sendText(res, status, text, type = "text/plain; charset=utf-8") {
-  res.writeHead(status, { "Content-Type": type });
+function sendText(res, status, text, type = "text/plain; charset=utf-8", extraHeaders = {}) {
+  if (res.headersSent) return;
+  res.writeHead(status, { "Content-Type": type, ...extraHeaders });
   res.end(text);
 }
 
-async function proxyApi(req, res, url) {
-  const target = new URL(url.pathname + url.search, BACKEND_URL);
-  const headers = { ...req.headers, host: new URL(BACKEND_URL).host };
-  delete headers["content-length"];
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const body = Buffer.concat(chunks);
-  const upstream = await fetch(target, {
-    method: req.method,
-    headers,
-    body: ["GET", "HEAD"].includes(req.method || "GET") ? undefined : body,
+function sendJson(res, status, payload) {
+  sendText(res, status, JSON.stringify(payload), "application/json; charset=utf-8");
+}
+
+function sendHtml(res, status, html) {
+  sendText(res, status, html, "text/html; charset=utf-8", {
+    "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
   });
-  const buffer = Buffer.from(await upstream.arrayBuffer());
-  const outHeaders = {
-    "Content-Type": upstream.headers.get("content-type") || "application/json",
+}
+
+function redirect(res, location, status = 301) {
+  res.writeHead(status, { Location: location, "Cache-Control": "no-store" });
+  res.end();
+}
+
+function readSiteShell(root, name) {
+  const filePath = path.join(root, name);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath, "utf8");
+}
+
+function proxyApi(req, res, url) {
+  const target = new URL(url.pathname + url.search, BACKEND_URL);
+  const method = (req.method || "GET").toUpperCase();
+  const headers = {
+    accept: req.headers.accept || "application/json",
+    "user-agent": req.headers["user-agent"] || "official-web",
+    host: target.host,
   };
-  res.writeHead(upstream.status, outHeaders);
-  res.end(buffer);
+  if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
+  if (req.headers.cookie) headers.cookie = req.headers.cookie;
+  if (req.headers["content-length"] && method !== "GET" && method !== "HEAD") {
+    headers["content-length"] = req.headers["content-length"];
+  }
+
+  const upstreamReq = http.request(
+    target,
+    {
+      method,
+      headers,
+      timeout: PROXY_TIMEOUT_MS,
+    },
+    (upstreamRes) => {
+      const responseHeaders = {
+        "Content-Type": upstreamRes.headers["content-type"] || "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      };
+      res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
+      upstreamRes.pipe(res);
+    },
+  );
+
+  upstreamReq.on("timeout", () => {
+    upstreamReq.destroy(new Error("Upstream timeout"));
+  });
+  upstreamReq.on("error", (error) => {
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
+    sendJson(res, 502, { detail: error.message || "Bad gateway" });
+  });
+
+  if (method === "GET" || method === "HEAD") {
+    req.resume();
+    upstreamReq.end();
+    return;
+  }
+  req.pipe(upstreamReq);
 }
 
 function resolveStaticFile(root, pathname) {
@@ -132,7 +192,6 @@ function resolveStaticFile(root, pathname) {
     filePath = path.join(filePath, "index.html");
   }
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    // pretty path without .html
     const htmlPath = `${filePath}.html`;
     if (fs.existsSync(htmlPath) && fs.statSync(htmlPath).isFile()) return htmlPath;
     return null;
@@ -140,12 +199,91 @@ function resolveStaticFile(root, pathname) {
   return filePath;
 }
 
+function parseNoticeDetailId(pathname) {
+  const match = pathname.match(/^\/notices\/([^/]+)\/?$/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+async function handleRobotsTxt(req, res, siteKey, root) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  try {
+    const remote = await fetchOfficialSeo(host);
+    const seo = getSiteSeo(siteKey, remote);
+    if (seo.robotsTxt) {
+      sendText(res, 200, `${seo.robotsTxt}\n`, "text/plain; charset=utf-8", {
+        "Cache-Control": "public, max-age=300",
+      });
+      return true;
+    }
+  } catch {
+    // fall through to static file
+  }
+  const filePath = path.join(root, "robots.txt");
+  if (fs.existsSync(filePath)) {
+    sendFile(res, filePath);
+    return true;
+  }
+  sendText(res, 200, "User-agent: *\nAllow: /\n", "text/plain; charset=utf-8");
+  return true;
+}
+
+async function handleNoticeRoutes(req, res, url, siteKey, root) {
+  const pathname = url.pathname;
+
+  if (pathname === "/sitemap-notices.xml") {
+    try {
+      const origin = requestOrigin(req, siteKey);
+      const items = await fetchAllPublicNoticeIds(500);
+      const xml = renderNoticesSitemapXml({ origin, items });
+      sendText(res, 200, xml, "application/xml; charset=utf-8", {
+        "Cache-Control": "public, max-age=300",
+      });
+    } catch (error) {
+      sendText(res, 502, error instanceof Error ? error.message : "sitemap error");
+    }
+    return true;
+  }
+
+  if (pathname === "/notice-detail.html") {
+    const id = url.searchParams.get("id") || "";
+    if (id) {
+      redirect(res, `/notices/${encodeURIComponent(id)}${url.hash || ""}`, 301);
+      return true;
+    }
+  }
+
+  if (pathname === "/notices" || pathname === "/notices.html" || pathname === "/notices/") {
+    const shell = readSiteShell(root, "notices.html");
+    if (!shell) return false;
+    const query = Object.fromEntries(url.searchParams.entries());
+    const result = await renderNoticeListPage({ req, siteKey, shellHtml: shell, query });
+    sendHtml(res, result.status, result.html);
+    return true;
+  }
+
+  const detailId = parseNoticeDetailId(pathname);
+  if (detailId) {
+    const shell = readSiteShell(root, "notice-detail.html");
+    if (!shell) return false;
+    const result = await renderNoticeDetailPage({ req, siteKey, shellHtml: shell, id: detailId });
+    sendHtml(res, result.status, result.html);
+    return true;
+  }
+
+  return false;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-      await proxyApi(req, res, url);
+      proxyApi(req, res, url);
       return;
     }
 
@@ -156,6 +294,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/robots.txt") {
+      await handleRobotsTxt(req, res, siteKey, root);
+      return;
+    }
+
+    if (await handleNoticeRoutes(req, res, url, siteKey, root)) {
+      return;
+    }
+
     const filePath = resolveStaticFile(root, url.pathname);
     if (!filePath) {
       sendText(res, 404, "Not Found", "text/html; charset=utf-8");
@@ -163,8 +310,7 @@ const server = http.createServer(async (req, res) => {
     }
     sendFile(res, filePath);
   } catch (error) {
-    console.error(error);
-    sendText(res, 502, `official-web error: ${error.message}`);
+    sendText(res, 500, error instanceof Error ? error.message : "Internal Server Error");
   }
 });
 

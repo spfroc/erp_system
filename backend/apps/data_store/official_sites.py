@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
+from typing import Any
 
 from .models import OfficialPageRecord, OfficialSiteRecord
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_sitemap_urls(value) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = re.split(r"[\r\n,]+", value)
+    else:
+        items = []
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        url = str(raw or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        result.append(url)
+    return result
 
 
 def normalize_host(value: str | None) -> str:
@@ -77,6 +97,12 @@ def normalize_site_payload(payload: dict) -> dict:
         "seoTitle": (payload.get("seoTitle") or "").strip(),
         "seoDescription": (payload.get("seoDescription") or "").strip(),
         "seoKeywords": (payload.get("seoKeywords") or "").strip(),
+        "ogImageUrl": (payload.get("ogImageUrl") or "").strip(),
+        "robotsTxt": (payload.get("robotsTxt") or "").strip(),
+        "sitemapUrls": _normalize_sitemap_urls(payload.get("sitemapUrls")),
+        "jsonLd": (payload.get("jsonLd") or "").strip(),
+        "baiduSiteVerification": (payload.get("baiduSiteVerification") or "").strip(),
+        "googleSiteVerification": (payload.get("googleSiteVerification") or "").strip(),
         "status": (payload.get("status") or "启用").strip() or "启用",
         "createdAt": payload.get("createdAt") or now,
         "updatedAt": now,
@@ -209,6 +235,112 @@ def qlyc_home_blocks() -> list[dict]:
     ]
 
 
+_YICAI_SEO_TITLE = "壹采 - 政企采购电商服务平台 | 齐鲁云采入驻 | 泉E采代办 | 山东省政府采购网上商城 | 济南市政府采购"
+_YICAI_SEO_DESCRIPTION = (
+    "壹采是专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等山东省政府采购平台一站式入驻、"
+    "技术对接和运营服务。20年服务经验，助力2000+供应商成功入驻，提升采购效率100%。"
+)
+_YICAI_SEO_KEYWORDS = (
+    "壹采, 齐鲁云采, 泉E采, 山东省政府采购网上商城, 济南市政府采购, 政企采购平台, 电商服务平台, "
+    "政府采购入驻, 框架协议平台, 供应商服务, 山东壹知产数字科技有限公司, 齐鲁云采入驻条件, "
+    "泉E采代办流程, 框架协议平台入围, 政府采购供应商服务, 办公用品政府采购, IT设备供应商入驻, 济南市政府采购平台"
+)
+
+
+def _org_json_ld(*, name: str, alternate: str, url: str, description: str) -> str:
+    payload = {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": name,
+        "alternateName": alternate,
+        "url": url,
+        "logo": f"{url.rstrip('/')}/image/logo.png",
+        "description": description,
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "济南市市中区",
+            "streetAddress": "大观园街道纬二路49号汇宝大厦2106A",
+        },
+        "telephone": "0531-86099058",
+        "email": "Wangyunlei@yizhichan.co",
+        "areaServed": "山东省",
+        "serviceType": "政企采购电商服务",
+    }
+    import json
+
+    return json.dumps(payload, ensure_ascii=False)
+
+
+# 从 official-web/sites/*/index.html、robots.txt、sitemap.xml 采集的原官网 SEO 默认值。
+OFFICIAL_SEO_DEFAULTS: dict[str, dict[str, Any]] = {
+    "qlyc": {
+        "seoTitle": _YICAI_SEO_TITLE,
+        "seoDescription": _YICAI_SEO_DESCRIPTION,
+        "seoKeywords": _YICAI_SEO_KEYWORDS,
+        "ogImageUrl": "https://www.qlyc.co/image/logo.png",
+        "robotsTxt": "User-agent: *\nAllow: /\n\nSitemap: https://www.qlyc.co/sitemap.xml\nSitemap: https://www.qlyc.co/sitemap-notices.xml",
+        "sitemapUrls": ["https://www.qlyc.co/sitemap.xml", "https://www.qlyc.co/sitemap-notices.xml"],
+        "jsonLd": _org_json_ld(
+            name="山东壹知产数字科技有限公司",
+            alternate="壹采",
+            url="https://www.qlyc.co",
+            description="专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等政府采购平台一站式入驻与运营服务。",
+        ),
+    },
+    "yizhichan": {
+        "seoTitle": _YICAI_SEO_TITLE,
+        "seoDescription": _YICAI_SEO_DESCRIPTION,
+        "seoKeywords": _YICAI_SEO_KEYWORDS,
+        "ogImageUrl": "https://www.yizhichan.co/image/logo.png",
+        "robotsTxt": "User-agent: *\nAllow: /\n\nSitemap: https://www.yizhichan.co/sitemap.xml\nSitemap: https://www.yizhichan.co/sitemap-notices.xml",
+        "sitemapUrls": ["https://www.yizhichan.co/sitemap.xml", "https://www.yizhichan.co/sitemap-notices.xml"],
+        "jsonLd": _org_json_ld(
+            name="山东壹知产数字科技有限公司",
+            alternate="壹采",
+            url="https://www.yizhichan.co",
+            description="专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等政府采购平台一站式入驻与运营服务。",
+        ),
+    },
+    "jinanyunji": {
+        "seoTitle": _YICAI_SEO_TITLE,
+        "seoDescription": _YICAI_SEO_DESCRIPTION,
+        "seoKeywords": _YICAI_SEO_KEYWORDS,
+        "ogImageUrl": "https://www.jinanyunji.com/image/logo.png",
+        "robotsTxt": (
+            "User-agent: *\nAllow: /\n\n"
+            "Sitemap: https://www.jinanyunji.com/sitemap.xml\n"
+            "Sitemap: https://www.jinanyunji.com/sitemap-notices.xml"
+        ),
+        "sitemapUrls": ["https://www.jinanyunji.com/sitemap.xml", "https://www.jinanyunji.com/sitemap-notices.xml"],
+        "jsonLd": _org_json_ld(
+            name="山东壹知产数字科技有限公司",
+            alternate="壹采",
+            url="https://www.jinanyunji.com",
+            description="专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等政府采购平台一站式入驻与运营服务。",
+        ),
+    },
+    "qinghuicai": {
+        "seoTitle": "青慧采入驻代办 | 青慧采代运营 | 青岛政企阳光采购平台 | 项目商机服务",
+        "seoDescription": (
+            "青慧采是青岛市政府与京东共建的阳光采购平台。提供青慧采入驻代办、青慧采代运营、青慧采项目商机推送服务，"
+            "面向青岛行政事业单位及国企，一站式解决小额零星采购入驻及运营难题。"
+        ),
+        "seoKeywords": (
+            "青慧采,青慧采入驻代办,青慧采代运营,青慧采项目商机,青岛政企阳光采购平台,青岛政府采购,"
+            "青岛国企采购,京东政企采购,青岛办公用品采购,小额零星采购,青岛国易采购"
+        ),
+        "ogImageUrl": "https://www.qinghuicai.cn/image/logo.png",
+        "robotsTxt": "User-agent: *\nAllow: /\n\nSitemap: https://www.qinghuicai.cn/sitemap.xml",
+        "sitemapUrls": ["https://www.qinghuicai.cn/sitemap.xml"],
+        "jsonLd": (
+            '{"@context":"https://schema.org","@type":"Organization","name":"青慧采 - 青岛政企阳光采购平台",'
+            '"alternateName":["青慧采","青岛阳光采购平台"],"url":"https://www.qinghuicai.cn",'
+            '"description":"青慧采是青岛市政府与京东共建的阳光采购平台，提供入驻代办、代运营与项目商机服务。",'
+            '"telephone":"0531-86099058","email":"Wangyunlei@yizhichan.co","areaServed":"青岛市"}'
+        ),
+    },
+}
+
 SITE_SEEDS = [
     {
         "id": "site-qlyc",
@@ -222,9 +354,7 @@ SITE_SEEDS = [
         "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
         "logoUrl": "/image/logo.png",
         "primaryColor": "#0066cc",
-        "seoTitle": "壹采 - 政企采购电商服务平台 | 齐鲁云采入驻 | 泉E采代办 | 山东省政府采购网上商城",
-        "seoDescription": "壹采是专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等山东省政府采购平台一站式入驻、技术对接和运营服务。",
-        "seoKeywords": "壹采,齐鲁云采,泉E采,山东省政府采购网上商城,济南市政府采购",
+        **OFFICIAL_SEO_DEFAULTS["qlyc"],
         "status": "启用",
         "homePublished": True,
     },
@@ -239,8 +369,7 @@ SITE_SEEDS = [
         "email": "Wangyunlei@yizhichan.co",
         "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
         "primaryColor": "#0066cc",
-        "seoTitle": "壹知产 - 政企采购电商服务",
-        "seoDescription": "山东壹知产数字科技有限公司官方网站。",
+        **OFFICIAL_SEO_DEFAULTS["yizhichan"],
         "status": "启用",
         "homePublished": False,
     },
@@ -253,8 +382,7 @@ SITE_SEEDS = [
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
         "primaryColor": "#0066cc",
-        "seoTitle": "济南云集 - 政企采购服务",
-        "seoDescription": "济南云集官方网站。",
+        **OFFICIAL_SEO_DEFAULTS["jinanyunji"],
         "status": "启用",
         "homePublished": False,
     },
@@ -267,74 +395,172 @@ SITE_SEEDS = [
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
         "primaryColor": "#1f7a4d",
-        "seoTitle": "青慧采入驻代办",
-        "seoDescription": "青慧采入驻代办服务。",
+        **OFFICIAL_SEO_DEFAULTS["qinghuicai"],
         "status": "启用",
         "homePublished": False,
     },
 ]
 
 
+_SEO_FIELDS = (
+    "seoTitle",
+    "seoDescription",
+    "seoKeywords",
+    "ogImageUrl",
+    "robotsTxt",
+    "sitemapUrls",
+    "jsonLd",
+    "baiduSiteVerification",
+    "googleSiteVerification",
+)
+
+
+def public_seo_payload(site_data: dict[str, Any]) -> dict[str, Any]:
+    data = site_data or {}
+    return {
+        "id": data.get("id") or "",
+        "key": data.get("key") or "",
+        "name": data.get("name") or "",
+        "domain": data.get("domain") or "",
+        "brand": data.get("brand") or "",
+        "seoTitle": data.get("seoTitle") or "",
+        "seoDescription": data.get("seoDescription") or "",
+        "seoKeywords": data.get("seoKeywords") or "",
+        "ogImageUrl": data.get("ogImageUrl") or "",
+        "robotsTxt": data.get("robotsTxt") or "",
+        "sitemapUrls": _normalize_sitemap_urls(data.get("sitemapUrls")),
+        "jsonLd": data.get("jsonLd") or "",
+        "baiduSiteVerification": data.get("baiduSiteVerification") or "",
+        "googleSiteVerification": data.get("googleSiteVerification") or "",
+    }
+
+
+def apply_official_seo_defaults(*, overwrite: bool = False) -> list[dict[str, Any]]:
+    """将原官网静态 SEO 写入站点；默认只填空字段，overwrite=True 时覆盖。"""
+    ensure_default_official_sites()
+    updated: list[dict[str, Any]] = []
+    for site in OfficialSiteRecord.objects.filter(is_deleted=False):
+        key = (site.key or site.data.get("key") or "").strip()
+        defaults = OFFICIAL_SEO_DEFAULTS.get(key)
+        if not defaults:
+            continue
+        data = dict(site.data or {})
+        changed = False
+        for field in _SEO_FIELDS:
+            current = data.get(field)
+            empty = current in (None, "", [], {})
+            if overwrite or empty:
+                if data.get(field) != defaults.get(field):
+                    data[field] = defaults.get(field)
+                    changed = True
+        if not changed:
+            continue
+        payload = normalize_site_payload({**data, "id": site.id, "createdAt": data.get("createdAt")})
+        for attr, value in site_defaults(payload).items():
+            setattr(site, attr, value)
+        site.is_deleted = False
+        site.deleted_at = None
+        site.deleted_by = ""
+        site.save()
+        updated.append(public_seo_payload(site.data))
+    return updated
+
+
 def ensure_default_official_sites() -> list[OfficialSiteRecord]:
     created_sites: list[OfficialSiteRecord] = []
     for seed in SITE_SEEDS:
         payload = normalize_site_payload(deepcopy(seed))
-        site, created = OfficialSiteRecord.objects.update_or_create(
-            id=payload["id"],
-            defaults={**site_defaults(payload), "is_deleted": False, "deleted_at": None, "deleted_by": ""},
-        )
+        existing = OfficialSiteRecord.objects.filter(id=payload["id"]).first()
+        if existing and existing.is_deleted:
+            # 尊重后台删除，不再自动恢复种子站点。
+            continue
+        if existing:
+            # 已有站点：仅补齐空的 SEO 字段，避免每次 ensure 覆盖运营配置。
+            data = dict(existing.data or {})
+            changed = False
+            for field in _SEO_FIELDS:
+                if data.get(field) in (None, "", [], {}) and payload.get(field) not in (None, "", [], {}):
+                    data[field] = payload.get(field)
+                    changed = True
+            if changed:
+                merged = normalize_site_payload({**data, "id": existing.id, "createdAt": data.get("createdAt")})
+                for attr, value in site_defaults(merged).items():
+                    setattr(existing, attr, value)
+                existing.save(update_fields=["data", "key", "name", "domain", "brand", "company_name", "phone", "status", "updated_at"])
+            site = existing
+            created = False
+        else:
+            site = OfficialSiteRecord.objects.create(
+                id=payload["id"],
+                **site_defaults(payload),
+                is_deleted=False,
+                deleted_at=None,
+                deleted_by="",
+            )
+            created = True
         if created:
             created_sites.append(site)
 
         page_id = f"page-{payload['id']}-home"
-        page_payload = normalize_page_payload(
-            {
-                "id": page_id,
-                "siteId": payload["id"],
-                "slug": "home",
-                "title": "首页",
-                "template": "home",
-                "status": "published" if seed.get("homePublished") else "draft",
-                "seoTitle": payload.get("seoTitle") or "",
-                "seoDescription": payload.get("seoDescription") or "",
-                "blocks": qlyc_home_blocks() if payload["key"] == "qlyc" else [
-                    _block(
-                        "hero",
-                        {
-                            "title": payload.get("brand") or payload.get("name"),
-                            "subtitle": "站点内容迁移中，请稍后访问或联系客服。",
-                            "primaryCta": {"label": "联系我们", "href": f"tel:{payload.get('phone') or ''}"},
-                        },
-                    ),
-                    _block(
-                        "contact",
-                        {
-                            "title": "联系我们",
-                            "phone": payload.get("phone") or "",
-                            "email": payload.get("email") or "",
-                            "address": payload.get("address") or "",
-                        },
-                    ),
-                ],
-            }
-        )
-        OfficialPageRecord.objects.update_or_create(
-            id=page_id,
-            defaults={**page_defaults(page_payload), "is_deleted": False, "deleted_at": None, "deleted_by": ""},
-        )
+        page_existing = OfficialPageRecord.objects.filter(id=page_id).first()
+        if page_existing and page_existing.is_deleted:
+            continue
+        if not page_existing:
+            page_payload = normalize_page_payload(
+                {
+                    "id": page_id,
+                    "siteId": payload["id"],
+                    "slug": "home",
+                    "title": "首页",
+                    "template": "home",
+                    "status": "published" if seed.get("homePublished") else "draft",
+                    "seoTitle": payload.get("seoTitle") or "",
+                    "seoDescription": payload.get("seoDescription") or "",
+                    "blocks": qlyc_home_blocks() if payload["key"] == "qlyc" else [
+                        _block(
+                            "hero",
+                            {
+                                "title": payload.get("brand") or payload.get("name"),
+                                "subtitle": "站点内容迁移中，请稍后访问或联系客服。",
+                                "primaryCta": {"label": "联系我们", "href": f"tel:{payload.get('phone') or ''}"},
+                            },
+                        ),
+                        _block(
+                            "contact",
+                            {
+                                "title": "联系我们",
+                                "phone": payload.get("phone") or "",
+                                "email": payload.get("email") or "",
+                                "address": payload.get("address") or "",
+                            },
+                        ),
+                    ],
+                }
+            )
+            OfficialPageRecord.objects.create(
+                id=page_id,
+                **page_defaults(page_payload),
+                is_deleted=False,
+                deleted_at=None,
+                deleted_by="",
+            )
     return created_sites
 
 
-def resolve_public_site(host: str, slug: str = "home") -> dict | None:
+def find_official_site_by_host(host: str) -> OfficialSiteRecord | None:
     ensure_default_official_sites()
     normalized = normalize_host(host)
     bare = normalized[4:] if normalized.startswith("www.") else normalized
-    site = (
+    return (
         OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=normalized).first()
         or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=f"www.{bare}").first()
         or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=bare).first()
         or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", key=bare.split(".")[0]).first()
     )
+
+
+def resolve_public_site(host: str, slug: str = "home") -> dict | None:
+    site = find_official_site_by_host(host)
     if not site:
         return None
     page = (

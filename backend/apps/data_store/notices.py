@@ -100,6 +100,87 @@ def notice_defaults(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+PUBLIC_NOTICE_KINDS = [
+    "竞价项目",
+    "意向公开",
+    "采购公告",
+    "结果公告",
+    "更正公告",
+    "终止公告",
+    "合同公告",
+    "验收公告",
+    "单一来源公示",
+    "其他",
+]
+
+
+def public_notice_payload(record: NoticeRecord) -> dict[str, Any]:
+    data = dict(record.data or {})
+    return {
+        "id": record.id,
+        "title": record.title or data.get("title") or "",
+        "projectNumber": record.project_number or data.get("projectNumber") or "",
+        "department": record.department or data.get("department") or "",
+        "category": record.category or data.get("category") or "",
+        "noticeKind": record.notice_kind or data.get("noticeKind") or "其他",
+        "bidStatus": record.bid_status or data.get("bidStatus") or "",
+        "amount": float(record.amount or 0),
+        "contactName": data.get("contactName") or "",
+        "contactPhone": data.get("contactPhone") or "",
+        "detailUrl": data.get("detailUrl") or "",
+        "content": data.get("content") or "",
+        "publisher": data.get("publisher") or "",
+        "supplierName": record.supplier_name or data.get("supplierName") or "",
+        "startAt": data.get("startAt") or "",
+        "endAt": data.get("endAt") or "",
+        "publishedAt": record.published_at or data.get("publishedAt") or "",
+    }
+
+
+def list_public_notices(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    search: str = "",
+    notice_kind: str = "",
+) -> dict[str, Any]:
+    page = max(1, int(page or 1))
+    page_size = min(50, max(1, int(page_size or 20)))
+    queryset = NoticeRecord.objects.filter(is_deleted=False, is_public=True)
+    kind = (notice_kind or "").strip()
+    if kind and kind != "全部":
+        queryset = queryset.filter(notice_kind=kind)
+    keyword = (search or "").strip()
+    if keyword:
+        from django.db.models import Q
+
+        queryset = queryset.filter(
+            Q(title__icontains=keyword)
+            | Q(project_number__icontains=keyword)
+            | Q(department__icontains=keyword)
+            | Q(supplier_name__icontains=keyword)
+            | Q(category__icontains=keyword)
+            | Q(notice_kind__icontains=keyword)
+            | Q(data__content__icontains=keyword)
+        )
+    total = queryset.count()
+    rows = queryset.order_by("-published_at", "-updated_at", "-id")[(page - 1) * page_size : page * page_size]
+    return {
+        "items": [public_notice_payload(row) for row in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "kinds": PUBLIC_NOTICE_KINDS,
+    }
+
+
+def get_public_notice(notice_id: str) -> dict[str, Any] | None:
+    record = NoticeRecord.objects.filter(id=notice_id, is_deleted=False, is_public=True).first()
+    if not record:
+        return None
+    return public_notice_payload(record)
+
+
 def upsert_notice(payload: dict[str, Any]) -> tuple[NoticeRecord, bool]:
     data = normalize_notice_payload(payload)
     external_id = data.get("externalId") or ""

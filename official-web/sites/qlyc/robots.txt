@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://www.qlyc.co/sitemap.xml
+Sitemap: https://www.qlyc.co/sitemap-notices.xml

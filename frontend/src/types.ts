@@ -617,6 +617,12 @@ export interface OfficialSite {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  ogImageUrl?: string;
+  robotsTxt?: string;
+  sitemapUrls?: string[];
+  jsonLd?: string;
+  baiduSiteVerification?: string;
+  googleSiteVerification?: string;
   status: "启用" | "停用";
   createdAt: string;
   updatedAt?: string;

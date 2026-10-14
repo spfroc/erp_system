@@ -27,6 +27,7 @@ import {
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Search,
   ShieldCheck,
   ShoppingCart,
   Stamp,
@@ -44,6 +45,7 @@ import {
 import { createCollectionItem, createId, deleteCollectionItem, diffPartialAppData, downloadServiceContract, downloadStandaloneServiceContract, loadData, patchCollectionItem, queryCollection, resetData, saveData, AUTH_EXPIRED_EVENT, AuthExpiredError } from "./db";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
 import { NoticesPanel } from "./Notices";
+import { OfficialSeoPanel } from "./OfficialSeo";
 import { OfficialSitesPanel } from "./OfficialSites";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
@@ -167,7 +169,7 @@ import {
 } from "./serviceContract";
 import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
-type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "officialSites" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
+type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "officialSites" | "officialSeo" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
 const ORDER_PAGE_COPY: Record<OrderListTab, { title: string; subtitle: string; search: string }> = {
@@ -215,6 +217,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
   { id: "notices", label: "公告管理", icon: Bell, permission: "notice.view" },
   { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
+  { id: "officialSeo", label: "SEO配置", icon: Search, permission: "site.view" },
   { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
   { id: "invoices", label: "发票管理", icon: FileText, permission: "invoice.manage" },
   { id: "transactions", label: "交易流水", icon: WalletCards, permission: "finance.view" },
@@ -3435,6 +3438,7 @@ export default function App() {
   const [orderMenuOpen, setOrderMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [baseMenuOpen, setBaseMenuOpen] = useState(false);
+  const [officialMenuOpen, setOfficialMenuOpen] = useState(true);
   const [financeMenuOpen, setFinanceMenuOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -3655,9 +3659,10 @@ export default function App() {
   const orderNavItems = visibleNavItems.filter((item) => item.id === "serviceOrders" || item.id === "salesOrders" || item.id === "purchaseOrders");
   const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices");
   const baseNavItems = visibleNavItems.filter((item) => item.id === "entities" || item.id === "products");
+  const officialNavItems = visibleNavItems.filter((item) => item.id === "officialSites" || item.id === "officialSeo");
   const financeNavItems = visibleNavItems.filter((item) => item.id === "invoices" || item.id === "transactions" || item.id === "financeStatements" || item.id === "receiptStats" || item.id === "paymentStats");
   const systemNavItems = visibleNavItems.filter((item) => item.id === "collectionAccounts" || item.id === "optionSettings" || item.id === "access");
-  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "entities", "products", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
+  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
   const mainNavItems = visibleNavItems.filter((item) => !groupedViewIds.includes(item.id));
   const openProject = (id: string) => {
     const project = data.projects.find((item) => item.id === id);
@@ -3778,6 +3783,28 @@ export default function App() {
                 })}
             </div>
           )}
+          {officialNavItems.length > 0 && (
+            <div className="nav-group">
+              <button
+                className={`nav-group-toggle ${officialNavItems.some((item) => item.id === view) ? "active" : ""}`}
+                onClick={() => setOfficialMenuOpen((open) => !open)}
+                aria-expanded={officialMenuOpen}
+              >
+                <Globe size={18} />
+                <span>官网</span>
+                <ChevronDown size={15} className={officialMenuOpen ? "open" : ""} />
+              </button>
+              {officialMenuOpen && officialNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
+                    <Icon size={16} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {mainNavItems.slice(1).map((item) => {
             const Icon = item.icon;
             return (
@@ -3864,6 +3891,7 @@ export default function App() {
         {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
         {view === "notices" && <NoticesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
         {view === "officialSites" && <OfficialSitesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+        {view === "officialSeo" && <OfficialSeoPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
         {view === "reminders" && <Reminders data={data} commit={commit} currentUser={currentUser} />}
         {view === "invoices" && <Invoices data={data} commit={commit} can={can} />}
         {view === "transactions" && <Transactions data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} onOpenProject={openProject} />}

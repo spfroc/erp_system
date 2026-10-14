@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://www.yizhichan.co/sitemap.xml
+Sitemap: https://www.yizhichan.co/sitemap-notices.xml

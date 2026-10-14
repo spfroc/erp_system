@@ -18,3 +18,7 @@ Disallow:https://www.jinanyunji.com/quanyicai/changjianwenti.html
 Disallow:https://www.jinanyunji.com/quanyicai/jisuanqi.html
 User-agent: *
 Disallow:
+
+Sitemap: https://www.jinanyunji.com/sitemap.xml
+Sitemap: https://www.jinanyunji.com/sitemap-notices.xml
+

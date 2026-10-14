@@ -960,6 +960,13 @@ nav button:hover {
   margin: 0;
 }
 
+.modal-actions-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-right: auto;
+}
+
 .contract-format-picker {
   display: inline-flex;
   align-items: center;
@@ -1697,6 +1704,111 @@ nav button:hover {
 .table-row.site-table {
   grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1fr) minmax(160px, 1.1fr) 0.7fr 0.55fr minmax(140px, 0.9fr);
   align-items: start;
+}
+
+.table-row.seo-table {
+  grid-template-columns: minmax(140px, 0.9fr) minmax(220px, 1.4fr) 0.55fr minmax(140px, 0.9fr) 0.55fr;
+  align-items: start;
+}
+
+.modal.modal-wide,
+.modal.official-site-modal,
+.modal.official-seo-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.modal.official-seo-modal {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.official-form {
+  display: grid;
+  gap: 16px;
+}
+
+.official-form-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  border: 1px solid #e7edf3;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.official-form-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d232a;
+}
+
+.official-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.official-form-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #53606f;
+}
+
+.official-form-grid label > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.official-form-grid label > span em {
+  color: #c2410c;
+  font-style: normal;
+}
+
+.official-form-grid input,
+.official-form-grid select,
+.official-form-grid textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d232a;
+  font: inherit;
+}
+
+.official-form-grid textarea {
+  min-height: 84px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.official-form-grid .code-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.official-form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.official-form-hint {
+  margin: 0;
+  color: #697586;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .official-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .official-form-grid .span-2 {
+    grid-column: auto;
+  }
 }
 
 .site-main-cell {
