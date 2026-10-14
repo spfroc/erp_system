@@ -648,6 +648,77 @@ export interface OfficialPage {
   updatedAt?: string;
 }
 
+export type LibrarySigned = "有效" | "已签约" | "无效";
+export type LibraryContactType = "超市电商" | "定点供应商" | "代理商" | "经销商" | "超市厂商" | "其他";
+export type LibraryOrigin =
+  | "百度"
+  | "公共资源"
+  | "招投标"
+  | "齐鲁云采"
+  | "青岛政采"
+  | "烟台政采"
+  | "滨州政采"
+  | "菏泽政采"
+  | "其他";
+
+export interface LibraryCommunicationRecord {
+  id: string;
+  type: "电话" | "拜访" | "其他";
+  price?: string;
+  renewPrice?: string;
+  intention?: string;
+  term?: string;
+  remark?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface LibraryContact {
+  id: string;
+  name: string;
+  legalPerson?: string;
+  mobile: string;
+  email?: string;
+  licenseCode?: string;
+  address?: string;
+  province?: string;
+  city?: string;
+  origin: LibraryOrigin;
+  signed: LibrarySigned;
+  type: LibraryContactType;
+  tags?: string[];
+  sellUserId?: string;
+  sellUserName?: string;
+  communicationRecords?: LibraryCommunicationRecord[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SmsTemplate {
+  id: string;
+  name: string;
+  content: string;
+  prefix?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SmsRecord {
+  id: string;
+  taskId?: string;
+  mobile: string;
+  content: string;
+  prefix?: string;
+  type?: string;
+  source?: string;
+  result?: string;
+  balance?: number | string;
+  failedRecords?: Array<{ mobile?: string; result?: string }>;
+  createdAt: string;
+  createdBy?: string;
+  createdByUserId?: string;
+}
+
 export interface OptionItem {
   id: string;
   label: string;
@@ -697,6 +768,10 @@ export type PermissionKey =
   | "notice.manage"
   | "site.view"
   | "site.manage"
+  | "library.view"
+  | "library.manage"
+  | "sms.view"
+  | "sms.manage"
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
@@ -746,4 +821,7 @@ export interface AppData {
   noticeCollectionRuns: NoticeCollectionRun[];
   officialSites: OfficialSite[];
   officialPages: OfficialPage[];
+  libraryContacts: LibraryContact[];
+  smsTemplates: SmsTemplate[];
+  smsRecords: SmsRecord[];
 }

@@ -22,6 +22,9 @@ from .views import (
     public_official_seo,
     public_official_site,
     run_notice_collection,
+    sms_center_records,
+    sms_center_status,
+    sms_send,
     upload_document,
     website_leads,
 )
@@ -59,4 +62,10 @@ urlpatterns = [
     path("official-site-inquiry", official_site_inquiry, name="official-site-inquiry-no-slash"),
     path("notices/collection-runs/", run_notice_collection, name="run-notice-collection"),
     path("notices/collection-runs", run_notice_collection, name="run-notice-collection-no-slash"),
+    path("sms/status/", sms_center_status, name="sms-center-status"),
+    path("sms/status", sms_center_status, name="sms-center-status-no-slash"),
+    path("sms/send/", sms_send, name="sms-send"),
+    path("sms/send", sms_send, name="sms-send-no-slash"),
+    path("sms/center-records/", sms_center_records, name="sms-center-records"),
+    path("sms/center-records", sms_center_records, name="sms-center-records-no-slash"),
 ]

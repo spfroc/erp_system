@@ -325,6 +325,41 @@ class OfficialPageRecord(BaseRecord):
         db_table = "official_pages"
 
 
+class LibraryContactRecord(BaseRecord):
+    name = models.CharField(max_length=255, db_index=True)
+    mobile = models.CharField(max_length=50, blank=True, db_index=True)
+    license_code = models.CharField(max_length=64, blank=True, db_index=True)
+    signed = models.CharField(max_length=20, default="有效", db_index=True)
+    origin = models.CharField(max_length=50, blank=True, db_index=True)
+    customer_type = models.CharField(max_length=50, blank=True, db_index=True)
+    sell_user_id = models.CharField(max_length=64, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "library_contacts"
+
+
+class SmsTemplateRecord(BaseRecord):
+    name = models.CharField(max_length=100, db_index=True)
+    content = models.CharField(max_length=500, blank=True)
+    prefix = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        db_table = "sms_templates"
+
+
+class SmsRecordRecord(BaseRecord):
+    task_id = models.CharField(max_length=100, blank=True, db_index=True)
+    mobile = models.CharField(max_length=255, blank=True, db_index=True)
+    content = models.CharField(max_length=500, blank=True)
+    sms_type = models.CharField(max_length=50, blank=True, db_index=True)
+    source = models.CharField(max_length=50, blank=True, db_index=True)
+    result = models.CharField(max_length=100, blank=True)
+    balance = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "sms_records"
+
+
 class ManagedFile(models.Model):
     id = models.CharField(max_length=64, primary_key=True)
     document_type = models.CharField(max_length=30, db_index=True)

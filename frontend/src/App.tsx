@@ -7,6 +7,7 @@ import {
   Banknote,
   BarChart3,
   Bell,
+  BookUser,
   Boxes,
   Building2,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
   Home,
   Link2,
   LogOut,
+  MessageCircle,
   MessageSquare,
   Package,
   PackagePlus,
@@ -44,9 +46,11 @@ import {
 } from "lucide-react";
 import { createCollectionItem, createId, deleteCollectionItem, diffPartialAppData, downloadServiceContract, downloadStandaloneServiceContract, loadData, patchCollectionItem, queryCollection, resetData, saveData, AUTH_EXPIRED_EVENT, AuthExpiredError } from "./db";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
+import { LibraryContactsPanel } from "./LibraryContacts";
 import { NoticesPanel } from "./Notices";
 import { OfficialSeoPanel } from "./OfficialSeo";
 import { OfficialSitesPanel } from "./OfficialSites";
+import { SmsPanel } from "./SmsPanel";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
   PERIOD_PRESETS,
@@ -167,9 +171,9 @@ import {
   type ServiceContractFileFormat,
   type ServiceContractPlatform,
 } from "./serviceContract";
-import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
+import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
-type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "officialSites" | "officialSeo" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
+type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "libraryContacts" | "sms" | "officialSites" | "officialSeo" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
 const ORDER_PAGE_COPY: Record<OrderListTab, { title: string; subtitle: string; search: string }> = {
@@ -216,6 +220,8 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "platformAccounts", label: "平台账号", icon: FileScan, permission: "platformAccount.view" },
   { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
   { id: "notices", label: "公告管理", icon: Bell, permission: "notice.view" },
+  { id: "libraryContacts", label: "资料库", icon: BookUser, permission: "library.view" },
+  { id: "sms", label: "短信", icon: MessageCircle, permission: "sms.view" },
   { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
   { id: "officialSeo", label: "SEO配置", icon: Search, permission: "site.view" },
   { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
@@ -341,14 +347,18 @@ const permissionLabels: Record<PermissionKey, string> = {
   "notice.manage": "管理公告与采集",
   "site.view": "查看官网站点",
   "site.manage": "管理官网站点",
+  "library.view": "查看资料库",
+  "library.manage": "管理资料库",
+  "sms.view": "查看短信",
+  "sms.manage": "发送与管理短信",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "library.view", "sms.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "library.manage", "sms.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "user.manage"] },
 ];
@@ -369,6 +379,12 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "site.view") {
     return permissionSet.has("site.manage");
+  }
+  if (permission === "library.view") {
+    return permissionSet.has("library.manage");
+  }
+  if (permission === "sms.view") {
+    return permissionSet.has("sms.manage");
   }
   if (permission === "serviceOrder.view") {
     return permissionSet.has("serviceOrder.manage");
@@ -3444,6 +3460,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
+  const [smsDraftContacts, setSmsDraftContacts] = useState<LibraryContact[] | undefined>(undefined);
 
   useEffect(() => {
     if (!notice) return;
@@ -3546,7 +3563,7 @@ export default function App() {
     if (view === "serviceOrders" || view === "salesOrders" || view === "purchaseOrders") {
       setOrderMenuOpen(true);
     }
-    if (view === "websiteLeads" || view === "notices") {
+    if (view === "websiteLeads" || view === "notices" || view === "libraryContacts" || view === "sms") {
       setCustomerMenuOpen(true);
     }
     if (view === "entities" || view === "products") {
@@ -3657,12 +3674,12 @@ export default function App() {
   const selectedProject = data.projects.find((project) => project.id === selectedProjectId);
   const projectNavItems = visibleNavItems.filter((item) => item.id === "productProjects" || item.id === "serviceProjects" || item.id === "contracts");
   const orderNavItems = visibleNavItems.filter((item) => item.id === "serviceOrders" || item.id === "salesOrders" || item.id === "purchaseOrders");
-  const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices");
+  const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices" || item.id === "libraryContacts" || item.id === "sms");
   const baseNavItems = visibleNavItems.filter((item) => item.id === "entities" || item.id === "products");
   const officialNavItems = visibleNavItems.filter((item) => item.id === "officialSites" || item.id === "officialSeo");
   const financeNavItems = visibleNavItems.filter((item) => item.id === "invoices" || item.id === "transactions" || item.id === "financeStatements" || item.id === "receiptStats" || item.id === "paymentStats");
   const systemNavItems = visibleNavItems.filter((item) => item.id === "collectionAccounts" || item.id === "optionSettings" || item.id === "access");
-  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
+  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "libraryContacts", "sms", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
   const mainNavItems = visibleNavItems.filter((item) => !groupedViewIds.includes(item.id));
   const openProject = (id: string) => {
     const project = data.projects.find((item) => item.id === id);
@@ -3890,6 +3907,30 @@ export default function App() {
         {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
         {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
         {view === "notices" && <NoticesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+        {view === "libraryContacts" && (
+          <LibraryContactsPanel
+            data={data}
+            applyData={(next) => setData(next)}
+            onNotice={setNotice}
+            can={can}
+            currentUser={currentUser}
+            onSendSms={(contacts) => {
+              setSmsDraftContacts(contacts);
+              setView("sms");
+            }}
+          />
+        )}
+        {view === "sms" && (
+          <SmsPanel
+            data={data}
+            applyData={(next) => setData(next)}
+            onNotice={setNotice}
+            can={can}
+            currentUser={currentUser}
+            draftContacts={smsDraftContacts}
+            onDraftConsumed={() => setSmsDraftContacts(undefined)}
+          />
+        )}
         {view === "officialSites" && <OfficialSitesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
         {view === "officialSeo" && <OfficialSeoPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
         {view === "reminders" && <Reminders data={data} commit={commit} currentUser={currentUser} />}

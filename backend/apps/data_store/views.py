@@ -19,6 +19,7 @@ from django.views.decorators.http import require_http_methods
 from .models import (
     AppState,
     InvoiceRecord,
+    LibraryContactRecord,
     ManagedFile,
     NoticeCollectionRunRecord,
     NoticeCollectionSourceRecord,
@@ -40,11 +41,24 @@ from .models import (
     RoleRecord,
     SalesOrderRecord,
     ServiceOrderRecord,
+    SmsRecordRecord,
+    SmsTemplateRecord,
     SupplierPriceRecord,
     TrademarkCertificateRecord,
     TransactionRecord,
     UserRecord,
     WebsiteLeadRecord,
+)
+from .library_sms import (
+    center_sms_config,
+    fetch_center_sms_records,
+    library_contact_defaults,
+    normalize_library_contact,
+    normalize_sms_record,
+    normalize_sms_template,
+    send_sms_via_center,
+    sms_record_defaults,
+    sms_template_defaults,
 )
 from .notices import (
     ensure_default_sample_source,
@@ -109,6 +123,9 @@ COLLECTIONS = {
     "noticeCollectionRuns": NoticeCollectionRunRecord,
     "officialSites": OfficialSiteRecord,
     "officialPages": OfficialPageRecord,
+    "libraryContacts": LibraryContactRecord,
+    "smsTemplates": SmsTemplateRecord,
+    "smsRecords": SmsRecordRecord,
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
@@ -142,6 +159,9 @@ COLLECTION_PERMISSIONS = {
     "noticeCollectionRuns": {"read": "notice.view", "write": "notice.manage"},
     "officialSites": {"read": "site.view", "write": "site.manage"},
     "officialPages": {"read": "site.view", "write": "site.manage"},
+    "libraryContacts": {"read": "library.view", "write": "library.manage"},
+    "smsTemplates": {"read": "sms.view", "write": "sms.manage"},
+    "smsRecords": {"read": "sms.view", "write": "sms.manage"},
 }
 
 
@@ -592,6 +612,8 @@ PERMISSION_ALIASES = {
     "trademarkCertificate.view": ("trademarkCertificate.view", "trademarkCertificate.manage"),
     "notice.view": ("notice.view", "notice.manage"),
     "site.view": ("site.view", "site.manage"),
+    "library.view": ("library.view", "library.manage"),
+    "sms.view": ("sms.view", "sms.manage"),
     "salesOrder.view": ("salesOrder.view", "salesOrder.manage", "project.view"),
     "salesOrder.manage": ("salesOrder.manage", "project.edit", "finance.manage"),
     "purchaseOrder.view": ("purchaseOrder.view", "purchaseOrder.manage", "project.view", "purchase.manage"),
@@ -876,6 +898,15 @@ def _record_defaults(model, payload: dict) -> dict:
     elif model is OfficialPageRecord:
         data = normalize_page_payload(payload)
         defaults = page_defaults(data)
+    elif model is LibraryContactRecord:
+        data = normalize_library_contact(payload)
+        defaults = library_contact_defaults(data)
+    elif model is SmsTemplateRecord:
+        data = normalize_sms_template(payload)
+        defaults = sms_template_defaults(data)
+    elif model is SmsRecordRecord:
+        data = normalize_sms_record(payload)
+        defaults = sms_record_defaults(data)
     return defaults
 
 
@@ -1704,6 +1735,46 @@ def _apply_collection_list_query(collection: str, queryset, request):
                 | Q(slug__icontains=search)
                 | Q(template__icontains=search)
                 | Q(status__icontains=search)
+            )
+    elif collection == "libraryContacts":
+        signed = (get("signed") or "").strip()
+        if signed and signed != "全部":
+            queryset = queryset.filter(signed=signed)
+        origin = (get("origin") or "").strip()
+        if origin and origin != "全部":
+            queryset = queryset.filter(origin=origin)
+        customer_type = (get("type") or get("customerType") or "").strip()
+        if customer_type and customer_type != "全部":
+            queryset = queryset.filter(customer_type=customer_type)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search)
+                | Q(mobile__icontains=search)
+                | Q(license_code__icontains=search)
+                | Q(data__legalPerson__icontains=search)
+                | Q(data__email__icontains=search)
+                | Q(data__address__icontains=search)
+                | Q(data__sellUserName__icontains=search)
+                | Q(data__tags__icontains=search)
+            )
+    elif collection == "smsTemplates":
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search)
+                | Q(content__icontains=search)
+                | Q(prefix__icontains=search)
+            )
+    elif collection == "smsRecords":
+        sms_type = (get("type") or "").strip()
+        if sms_type and sms_type != "全部":
+            queryset = queryset.filter(sms_type=sms_type)
+        if search:
+            queryset = queryset.filter(
+                Q(mobile__icontains=search)
+                | Q(content__icontains=search)
+                | Q(task_id__icontains=search)
+                | Q(source__icontains=search)
+                | Q(result__icontains=search)
             )
     elif collection in {"salesOrders", "purchaseOrders", "serviceOrders"}:
         status = (get("status") or "").strip()
@@ -3128,3 +3199,115 @@ def _contract_download_response(platform: str, draft: dict, payload: dict | None
     response = HttpResponse(content, content_type=content_type)
     response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
     return response
+
+
+@require_http_methods(["GET"])
+def sms_center_status(request):
+    _, permission_error = _require_permission(request, "sms.view")
+    if permission_error:
+        return permission_error
+    cfg = center_sms_config()
+    return JsonResponse(
+        {
+            "data": {
+                "configured": bool(cfg["baseUrl"]),
+                "dryRun": cfg["dryRun"] == "1",
+                "baseUrl": cfg["baseUrl"] or "",
+            }
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def sms_send(request):
+    user_data, permission_error = _require_permission(request, "sms.manage")
+    if permission_error:
+        return permission_error
+    payload, error = _read_body(request)
+    if error:
+        return error
+    if not isinstance(payload, dict):
+        return JsonResponse({"detail": "请求数据无效。"}, status=400)
+    mobile = str(payload.get("mobile") or "").strip()
+    content = str(payload.get("content") or payload.get("noteContent") or "").strip()
+    prefix = str(payload.get("prefix") or "").strip()
+    if not mobile or not content:
+        return JsonResponse({"detail": "请填写接收手机号和短信内容。"}, status=400)
+    if len(content) > 200:
+        return JsonResponse({"detail": "短信内容过长。"}, status=400)
+
+    result, send_error = send_sms_via_center(mobile=mobile, content=content, prefix=prefix)
+    if send_error:
+        return JsonResponse({"detail": send_error}, status=502)
+
+    operator = str((user_data or {}).get("name") or "")
+    operator_id = str((user_data or {}).get("id") or "")
+    record_payload = normalize_sms_record(
+        {
+            "taskId": result.get("taskId") or "",
+            "mobile": mobile,
+            "content": result.get("content") or content,
+            "prefix": prefix,
+            "type": str(payload.get("type") or "营销"),
+            "source": str(payload.get("source") or "erp"),
+            "result": result.get("result") or "",
+            "balance": result.get("balance", ""),
+            "createdBy": operator,
+            "createdByUserId": operator_id,
+        }
+    )
+    record, _ = SmsRecordRecord.objects.update_or_create(
+        id=record_payload["id"],
+        defaults={**sms_record_defaults(record_payload), "is_deleted": False, "deleted_at": None, "deleted_by": ""},
+    )
+
+    # 可选：给资料库联系人打上「已短信」标签
+    contact_ids = payload.get("contactIds") or []
+    tagged = 0
+    if isinstance(contact_ids, list):
+        for contact_id in contact_ids:
+            contact = LibraryContactRecord.objects.filter(id=str(contact_id), is_deleted=False).first()
+            if not contact:
+                continue
+            data = normalize_library_contact(dict(contact.data or {}))
+            tags = list(data.get("tags") or [])
+            if "已短信" not in tags:
+                tags.append("已短信")
+                data["tags"] = tags
+                data["updatedAt"] = timezone.now().isoformat()
+                contact.data = data
+                contact.name = data.get("name") or contact.name
+                contact.mobile = data.get("mobile") or contact.mobile
+                contact.save(update_fields=["data", "name", "mobile", "updated_at"])
+                tagged += 1
+
+    return JsonResponse(
+        {
+            "data": {
+                "record": record.data,
+                "mode": result.get("mode"),
+                "taggedContacts": tagged,
+            }
+        },
+        status=201,
+    )
+
+
+@require_http_methods(["GET"])
+def sms_center_records(request):
+    _, permission_error = _require_permission(request, "sms.view")
+    if permission_error:
+        return permission_error
+    params = {
+        "mobile": (request.GET.get("mobile") or "").strip(),
+        "type": (request.GET.get("type") or "").strip(),
+        "page": request.GET.get("page") or 1,
+        "page_size": request.GET.get("page_size") or request.GET.get("pageSize") or 20,
+        "start_created_at": (request.GET.get("start_created_at") or "").strip(),
+        "end_created_at": (request.GET.get("end_created_at") or "").strip(),
+    }
+    data, error = fetch_center_sms_records(params)
+    if error:
+        return JsonResponse({"detail": error, "configured": False}, status=400)
+    return JsonResponse({"data": data, "configured": True})

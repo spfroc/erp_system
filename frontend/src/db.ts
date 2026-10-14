@@ -64,6 +64,9 @@ export function migrateData(current: Partial<AppData>): AppData {
     noticeCollectionRuns: current.noticeCollectionRuns ?? seedData.noticeCollectionRuns ?? [],
     officialSites: current.officialSites ?? seedData.officialSites ?? [],
     officialPages: current.officialPages ?? seedData.officialPages ?? [],
+    libraryContacts: current.libraryContacts ?? seedData.libraryContacts ?? [],
+    smsTemplates: current.smsTemplates ?? seedData.smsTemplates ?? [],
+    smsRecords: current.smsRecords ?? seedData.smsRecords ?? [],
   } as AppData;
   migrated.organizations = migrated.organizations.map((organization) => ({
     ...organization,

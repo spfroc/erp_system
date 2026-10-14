@@ -2088,6 +2088,49 @@ nav button:hover {
   color: #334155;
 }
 
+.table-row.library-table {
+  grid-template-columns: 0.35fr 1.3fr 0.75fr 0.8fr 0.55fr 0.65fr 0.85fr 0.7fr 0.85fr;
+  align-items: start;
+}
+
+.library-main-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.library-main-cell em,
+.table-row.library-table em,
+.table-row.sms-table em {
+  display: block;
+  color: #64748b;
+  font-style: normal;
+  font-size: 0.85em;
+}
+
+.table-row.sms-table {
+  grid-template-columns: 0.85fr 0.85fr 1.6fr 0.55fr 0.85fr 0.45fr 0.85fr;
+  align-items: start;
+}
+
+.table-row.sms-template-table {
+  grid-template-columns: 0.9fr 0.55fr 1.8fr 0.75fr 0.7fr;
+  align-items: start;
+}
+
+.sms-content-cell {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.form-hint {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 0.25rem 0;
+}
+
 .lead-memo-cell {
   white-space: pre-wrap;
   word-break: break-word;

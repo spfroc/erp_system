@@ -35,6 +35,8 @@ class Command(BaseCommand):
                         "trademarkCertificate.view", "trademarkCertificate.manage",
                         "notice.view", "notice.manage",
                         "site.view", "site.manage",
+                        "library.view", "library.manage",
+                        "sms.view", "sms.manage",
                         "lead.manage", "sensitive.view", "profit.view", "user.manage",
                     ],
                 },

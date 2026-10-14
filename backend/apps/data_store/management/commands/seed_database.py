@@ -37,6 +37,9 @@ APP_COLLECTIONS = [
     "notices",
     "noticeCollectionSources",
     "noticeCollectionRuns",
+    "libraryContacts",
+    "smsTemplates",
+    "smsRecords",
 ]
 
 ALL_PERMISSIONS = [
@@ -67,6 +70,10 @@ ALL_PERMISSIONS = [
     "notice.manage",
     "site.view",
     "site.manage",
+    "library.view",
+    "library.manage",
+    "sms.view",
+    "sms.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",
