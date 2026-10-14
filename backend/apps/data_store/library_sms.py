@@ -61,13 +61,19 @@ def normalize_library_contact(payload: dict) -> dict:
         contact_type = "其他"
     origin = _text(payload, "origin", "source", default="其他")
     if origin not in LIBRARY_ORIGINS:
-        # 原系统 origin 可能是数字
+        # 原 admin CustomerService.originMap
         origin_map = {
-            "0": "百度",
-            "1": "公共资源",
-            "2": "招投标",
-            "3": "齐鲁云采",
-            "4": "其他",
+            "1": "百度",
+            "2": "公共资源",
+            "3": "招投标",
+            "4": "齐鲁云采",
+            "5": "青岛政采",
+            "6": "烟台政采",
+            "7": "滨州政采",
+            "8": "菏泽政采",
+            "9": "其他",
+            "10": "其他",
+            "0": "其他",
         }
         origin = origin_map.get(origin, origin if origin else "其他")
         if origin not in LIBRARY_ORIGINS:

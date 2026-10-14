@@ -22,3 +22,5 @@ coverage/
 *.sqlite3
 *.tar.gz
 .playwright-cli/
+imports/
+backend/imports/

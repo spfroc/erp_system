@@ -327,7 +327,7 @@ class OfficialPageRecord(BaseRecord):
 
 class LibraryContactRecord(BaseRecord):
     name = models.CharField(max_length=255, db_index=True)
-    mobile = models.CharField(max_length=50, blank=True, db_index=True)
+    mobile = models.CharField(max_length=255, blank=True, db_index=True)
     license_code = models.CharField(max_length=64, blank=True, db_index=True)
     signed = models.CharField(max_length=20, default="有效", db_index=True)
     origin = models.CharField(max_length=50, blank=True, db_index=True)

@@ -221,9 +221,9 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
   { id: "notices", label: "公告管理", icon: Bell, permission: "notice.view" },
   { id: "libraryContacts", label: "资料库", icon: BookUser, permission: "library.view" },
-  { id: "sms", label: "短信", icon: MessageCircle, permission: "sms.view" },
   { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
   { id: "officialSeo", label: "SEO配置", icon: Search, permission: "site.view" },
+  { id: "sms", label: "短信日志", icon: MessageCircle, permission: "sms.view" },
   { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
   { id: "invoices", label: "发票管理", icon: FileText, permission: "invoice.manage" },
   { id: "transactions", label: "交易流水", icon: WalletCards, permission: "finance.view" },
@@ -349,7 +349,7 @@ const permissionLabels: Record<PermissionKey, string> = {
   "site.manage": "管理官网站点",
   "library.view": "查看资料库",
   "library.manage": "管理资料库",
-  "sms.view": "查看短信",
+  "sms.view": "查看短信日志",
   "sms.manage": "发送与管理短信",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
@@ -3563,7 +3563,7 @@ export default function App() {
     if (view === "serviceOrders" || view === "salesOrders" || view === "purchaseOrders") {
       setOrderMenuOpen(true);
     }
-    if (view === "websiteLeads" || view === "notices" || view === "libraryContacts" || view === "sms") {
+    if (view === "websiteLeads" || view === "notices" || view === "libraryContacts") {
       setCustomerMenuOpen(true);
     }
     if (view === "entities" || view === "products") {
@@ -3674,12 +3674,12 @@ export default function App() {
   const selectedProject = data.projects.find((project) => project.id === selectedProjectId);
   const projectNavItems = visibleNavItems.filter((item) => item.id === "productProjects" || item.id === "serviceProjects" || item.id === "contracts");
   const orderNavItems = visibleNavItems.filter((item) => item.id === "serviceOrders" || item.id === "salesOrders" || item.id === "purchaseOrders");
-  const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices" || item.id === "libraryContacts" || item.id === "sms");
+  const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices" || item.id === "libraryContacts");
   const baseNavItems = visibleNavItems.filter((item) => item.id === "entities" || item.id === "products");
   const officialNavItems = visibleNavItems.filter((item) => item.id === "officialSites" || item.id === "officialSeo");
   const financeNavItems = visibleNavItems.filter((item) => item.id === "invoices" || item.id === "transactions" || item.id === "financeStatements" || item.id === "receiptStats" || item.id === "paymentStats");
   const systemNavItems = visibleNavItems.filter((item) => item.id === "collectionAccounts" || item.id === "optionSettings" || item.id === "access");
-  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "libraryContacts", "sms", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
+  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "libraryContacts", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
   const mainNavItems = visibleNavItems.filter((item) => !groupedViewIds.includes(item.id));
   const openProject = (id: string) => {
     const project = data.projects.find((item) => item.id === id);
