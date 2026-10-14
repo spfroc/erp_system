@@ -65,6 +65,8 @@ ALL_PERMISSIONS = [
     "trademarkCertificate.manage",
     "notice.view",
     "notice.manage",
+    "site.view",
+    "site.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",

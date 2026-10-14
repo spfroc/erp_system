@@ -13,6 +13,21 @@ services:
     depends_on:
       - backend
 
+  official-web:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    command: node server.mjs
+    environment:
+      PORT: "5180"
+      BACKEND_URL: http://backend:8000
+      DEFAULT_SITE_KEY: qlyc
+    ports:
+      - "18083:5180"
+    volumes:
+      - ../official-web:/app
+    depends_on:
+      - backend
+
   backend:
     build:
       context: ../backend

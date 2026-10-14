@@ -1,0 +1,20 @@
+Disallow:https://www.jinanyunji.com/
+Disallow:https://www.jinanyunji.com/e-index.html
+Disallow:https://www.jinanyunji.com/qiluyuncai.html
+Disallow:https://www.jinanyunji.com/qiluyuncai/index.html
+Disallow:https://www.jinanyunji.com/qiluyuncai/ruzhuzhinan.html
+Disallow:https://www.jinanyunji.com/qiluyuncai/yunyingzhinan.html
+Disallow:https://www.jinanyunji.com/qiluyuncai/changjianwenti.html
+Disallow:https://www.jinanyunji.com/qiluyuncan/kuangjiaxieyi.html
+Disallow:https://www.jinanyunji.com/zhengcejiedu/index.html
+Disallow:https://www.jinanyunji.com/zhengcejiedu/kuangjiaxieyi-2025.html
+Disallow:https://www.jinanyunji.com/zhengcejiedu/jinan-caigou-mulu-2025.html
+Disallow:https://www.jinanyunji.com/zhengcejiedu/peizhi-2025.html
+Disallow:https://www.jinanyunji.com/zhengcejiedu/shandong-caigou-mulu-2025.html
+Disallow:https://www.jinanyunji.com/quanyicai/index.html
+Disallow:https://www.jinanyunji.com/quanyicai/ruzhuzhinan.html
+Disallow:https://www.jinanyunji.com/quanyicai/yunyingzhinan.html
+Disallow:https://www.jinanyunji.com/quanyicai/changjianwenti.html
+Disallow:https://www.jinanyunji.com/quanyicai/jisuanqi.html
+User-agent: *
+Disallow:

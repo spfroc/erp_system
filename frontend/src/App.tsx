@@ -17,6 +17,7 @@ import {
   History,
   FileScan,
   FileText,
+  Globe,
   Home,
   Link2,
   LogOut,
@@ -43,6 +44,7 @@ import {
 import { createCollectionItem, createId, deleteCollectionItem, diffPartialAppData, downloadServiceContract, downloadStandaloneServiceContract, loadData, patchCollectionItem, queryCollection, resetData, saveData, AUTH_EXPIRED_EVENT, AuthExpiredError } from "./db";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
 import { NoticesPanel } from "./Notices";
+import { OfficialSitesPanel } from "./OfficialSites";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
   PERIOD_PRESETS,
@@ -165,7 +167,7 @@ import {
 } from "./serviceContract";
 import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
-type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
+type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "officialSites" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
 const ORDER_PAGE_COPY: Record<OrderListTab, { title: string; subtitle: string; search: string }> = {
@@ -212,6 +214,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "platformAccounts", label: "平台账号", icon: FileScan, permission: "platformAccount.view" },
   { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
   { id: "notices", label: "公告管理", icon: Bell, permission: "notice.view" },
+  { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
   { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
   { id: "invoices", label: "发票管理", icon: FileText, permission: "invoice.manage" },
   { id: "transactions", label: "交易流水", icon: WalletCards, permission: "finance.view" },
@@ -333,14 +336,16 @@ const permissionLabels: Record<PermissionKey, string> = {
   "trademarkCertificate.manage": "管理商标注册证",
   "notice.view": "查看公告",
   "notice.manage": "管理公告与采集",
+  "site.view": "查看官网站点",
+  "site.manage": "管理官网站点",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "user.manage"] },
 ];
@@ -358,6 +363,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "notice.view") {
     return permissionSet.has("notice.manage");
+  }
+  if (permission === "site.view") {
+    return permissionSet.has("site.manage");
   }
   if (permission === "serviceOrder.view") {
     return permissionSet.has("serviceOrder.manage");
@@ -3855,6 +3863,7 @@ export default function App() {
         {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
         {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
         {view === "notices" && <NoticesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+        {view === "officialSites" && <OfficialSitesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
         {view === "reminders" && <Reminders data={data} commit={commit} currentUser={currentUser} />}
         {view === "invoices" && <Invoices data={data} commit={commit} can={can} />}
         {view === "transactions" && <Transactions data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} onOpenProject={openProject} />}

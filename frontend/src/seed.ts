@@ -123,6 +123,8 @@ export const seedData: AppData = {
         "trademarkCertificate.manage",
         "notice.view",
         "notice.manage",
+        "site.view",
+        "site.manage",
         "lead.manage",
         "sensitive.view",
         "profit.view",
@@ -597,4 +599,6 @@ export const seedData: AppData = {
   notices: [],
   noticeCollectionSources: [],
   noticeCollectionRuns: [],
+  officialSites: [],
+  officialPages: [],
 };

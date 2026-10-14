@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>泉e采平台交易费用交易价格计算器 | 济南泉e采阳光采购平台 | 济南市政府采购平台 | 济南办公用品采购</title>
+    <meta name="description" content="济南泉e采阳光采购平台企业费用计算器，帮助一般纳税人企业和小规模企业快速计算采购价格和结算价格。济南市政府采购平台专用工具，适用于济南办公用品采购价格及费用计算。">
+    <meta name="keywords" content="泉e采,济南泉e采,阳光采购平台,济南市政府采购,济南办公用品采购,企业交易费用计算器,采购价格计算,结算价格计算,一般纳税人,小规模企业">
+    <meta name="geo.region" content="CN-SD" />
+    <meta name="geo.placename" content="济南市" />
+    <meta name="geo.position" content="36.6512;117.12" />
+    <meta name="ICBM" content="36.6512, 117.12" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-blue: #1a5fb4;
+            --secondary-blue: #2d7bd4;
+            --light-blue: #e6f2ff;
+            --dark-blue: #0d4a9c;
+            --accent-color: #ff6b35;
+            --text-color: #333;
+            --light-gray: #f8f9fa;
+            --border-color: #ddd;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        body {
+            color: var(--text-color);
+            line-height: 1.6;
+            background-color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        /* 导航样式 */
+        nav {
+            background-color: var(--secondary-blue);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-left: 30px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+            padding: 5px 0;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--light-blue);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--light-blue);
+            transition: width 0.3s;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* 面包屑导航 */
+        .breadcrumb {
+            padding: 15px 0;
+            background-color: var(--light-gray);
+            font-size: 0.9rem;
+        }
+
+        .breadcrumb a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        /* 主要内容区样式 */
+        .main-content {
+            padding: 40px 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* 计算器样式 */
+        .calculator-container {
+            max-width: 900px;
+            width: 100%;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+        }
+
+        .calculator-title {
+            text-align: center;
+            color: var(--primary-blue);
+            margin-bottom: 30px;
+            font-size: 28px;
+            border-bottom: 2px solid var(--primary-blue);
+            padding-bottom: 15px;
+        }
+
+        .platform-info {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #555;
+            font-size: 16px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background-color: #f1f1f1;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            color: #555;
+            margin-right: 5px;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            background-color: #e0e0e0;
+        }
+
+        .tab.active {
+            background-color: var(--primary-blue);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 0 0 8px 8px;
+            background-color: #f9f9f9;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content h2 {
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--dark-blue);
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"]:focus, select:focus {
+            border-color: var(--primary-blue);
+            outline: none;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+
+        .result-section {
+            background-color: var(--light-blue);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid var(--primary-blue);
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .result-label {
+            font-weight: bold;
+            color: var(--dark-blue);
+        }
+
+        .result-value {
+            font-weight: bold;
+            color: var(--accent-color);
+            font-size: 18px;
+        }
+
+        .calculation-detail {
+            margin-top: 25px;
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .calculation-detail h3 {
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+        }
+
+        .calculation-detail p {
+            margin-bottom: 8px;
+        }
+
+        .enterprise-info {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #e8f4fc;
+            font-size: 14px;
+        }
+
+        .enterprise-info h3 {
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .enterprise-info ul {
+            padding-left: 20px;
+        }
+
+        .enterprise-info li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        /* 页脚样式 */
+        footer {
+            background-color: #1a1a2e;
+            color: white;
+            padding: 50px 0 20px;
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #aaa;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* 侧边联系栏 */
+        .side-contact-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            border-radius: 10px;
+            padding: 15px 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            z-index: 101;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .side-contact-bar.collapsed {
+            right: -70px;
+        }
+
+        .side-contact-toggle {
+            position: absolute;
+            left: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 5px 0 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .side-contact-toggle i {
+            transition: transform 0.3s;
+        }
+
+        .side-contact-bar.collapsed .side-contact-toggle i {
+            transform: rotate(180deg);
+        }
+
+        .contact-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            padding: 10px 5px;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .contact-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .contact-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .contact-icon {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            color: var(--accent-color);
+        }
+
+        .contact-text {
+            font-size: 0.8rem;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .contact-label {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-top: 3px;
+        }
+
+        .wechat-qr-side {
+            position: absolute;
+            left: -180px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            display: none;
+            z-index: 100;
+            width: 160px;
+            text-align: center;
+        }
+
+        .wechat-contact-side:hover .wechat-qr-side {
+            display: block;
+        }
+
+        .wechat-qr-side img {
+            width: 130px;
+            height: 130px;
+            display: block;
+            margin: 0 auto 10px;
+        }
+
+        .wechat-qr-side p {
+            color: var(--text-color);
+            font-size: 0.8rem;
+            margin: 0;
+        }
+
+        /* 加载进度条 */
+        #loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent-color);
+            width: 0%;
+            z-index: 9999;
+            transition: width 0.4s;
+        }
+
+        /* 返回顶部按钮 */
+        #back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--primary-blue);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 99;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        #back-to-top.visible {
+            opacity: 1;
+        }
+
+        #back-to-top:hover {
+            background: var(--dark-blue);
+            transform: translateY(-3px);
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab {
+                border-radius: 5px;
+                margin-bottom: 5px;
+                margin-right: 0;
+            }
+
+            .tab-content {
+                padding: 15px;
+            }
+
+            .result-item {
+                flex-direction: column;
+            }
+
+            .result-value {
+                margin-top: 5px;
+            }
+
+            .calculator-container {
+                padding: 20px;
+            }
+
+            .calculator-title {
+                font-size: 24px;
+            }
+        }
+
+		/* CTA按钮弹出层样式 */
+        .cta-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cta-modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .cta-modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+            transition: color 0.3s;
+        }
+
+        .cta-modal-close:hover {
+            color: var(--accent-color);
+        }
+
+        .cta-modal-title {
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+        }
+
+        .cta-options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 25px 0;
+        }
+
+        .cta-option {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: all 0.3s;
+        }
+
+        .cta-option:hover {
+            border-color: var(--primary-blue);
+            background: var(--light-blue);
+            transform: translateY(-2px);
+        }
+
+        .cta-option i {
+            font-size: 1.5rem;
+            margin-right: 15px;
+            color: var(--primary-blue);
+            width: 30px;
+        }
+
+        .cta-option-text {
+            text-align: left;
+        }
+
+        .cta-option-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .cta-option-desc {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .cta-form {
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .cta-form input, .cta-form textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .cta-form textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .cta-form button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+
+        .cta-form button:hover {
+            background: #e55a2b;
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+		.header-cta {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .header-cta:hover {
+            background-color: #e55a2b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边联系栏 -->
+    <div class="side-contact-bar">
+        <div class="side-contact-toggle">
+            <i class="fas fa-chevron-right"></i>
+        </div>
+
+        <a href="tel:0531-86099058" class="contact-item">
+            <i class="fas fa-phone contact-icon"></i>
+            <span class="contact-text">0531-86099058</span>
+            <span class="contact-label">咨询热线</span>
+        </a>
+
+        <a href="tel:13105315957" class="contact-item">
+            <i class="fas fa-mobile-alt contact-icon"></i>
+            <span class="contact-text">13105315957</span>
+            <span class="contact-label">手机</span>
+        </a>
+
+        <div class="contact-item wechat-contact-side">
+            <i class="fab fa-weixin contact-icon"></i>
+            <span class="contact-text">微信咨询</span>
+            <span class="contact-label">扫码添加</span>
+            <div class="wechat-qr-side">
+                <!-- 这里使用一个示例二维码，实际使用时请替换为真实的微信二维码 -->
+                <img src="../image/wx.png" alt="微信二维码">
+                <p>扫码添加微信<br>获取更多信息</p>
+            </div>
+        </div>
+
+        <a href="mailto:Wangyunlei@yizhichan.co" class="contact-item">
+            <i class="fas fa-envelope contact-icon"></i>
+            <span class="contact-text">邮箱</span>
+            <span class="contact-label">联系我们</span>
+        </a>
+    </div>
+
+    <!-- 加载进度条 -->
+    <div id="loading-bar"></div>
+
+    <!-- 返回顶部按钮 -->
+    <div id="back-to-top">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <!-- 头部 -->
+    <header>
+        <div class="container">
+            <h1 class="logo">壹·采</h1>
+            <p class="subtitle">济南泉e采阳光采购平台 | 泉易采 | 齐鲁云采 | 框架协议等政府采购平台一站式入驻与运营服务</p>
+            <a href="#" class="header-cta" id="ctaButton">立即咨询入驻服务</a>
+        </div>
+    </header>
+
+    <!-- 导航 -->
+    <nav>
+        <div class="container nav-container">
+            <div class="nav-logo">壹·采学堂</div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="../index.html" class="nav-link">首页</a></li>
+                <li class="nav-item"><a href="index.html" class="nav-link">泉e采入驻/运营指南</a></li>
+                <li class="nav-item"><a href="../qiluyuncai/index.html" class="nav-link">齐鲁云采入驻/运营指南</a></li>
+                <li class="nav-item"><a href="../zhengcejiedu/index.html" class="nav-link">政策解读</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 面包屑导航 -->
+    <div class="breadcrumb">
+        <div class="container">
+            <a href="../index.html">首页</a> &gt;
+            <a href="index.html">泉e采指南</a> &gt;
+            <span>交易价格及费用计算器</span>
+        </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container">
+        <div class="main-content">
+            <div class="calculator-container">
+                <h1 class="calculator-title">泉e采平台交易价格及费用双向计算器</h1>
+
+                <div class="platform-info">
+                    <p>声明：此工具由第三方根据平台规则提供（不代表官方），旨在帮助企业快速计算采购相关费用</p>
+                </div>
+
+                <!-- 选项卡标题 -->
+                <div class="tabs">
+                    <button class="tab active" data-tab="tab1">已知上架价格计算</button>
+                    <button class="tab" data-tab="tab2">已知采购价格计算</button>
+                </div>
+
+                <!-- 选项卡内容 -->
+                <!-- 已知上架价格计算部分 -->
+                <div class="tab-content active" id="tab1">
+                    <h2>已知上架价格计算</h2>
+
+                    <div class="form-group">
+                        <label for="enterpriseType1">选择企业类型：</label>
+                        <select id="enterpriseType1">
+                            <option value="general">一般纳税人企业（开13%专票）</option>
+                            <option value="small">小规模企业（开1%-3%普票）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="listingPrice">上架价格（元）：</label>
+                        <input type="number" id="listingPrice" placeholder="请输入上架价格" min="0" step="0.01">
+                    </div>
+
+                    <div class="result-section">
+                        <h3 style="color: var(--primary-blue);">计算结果</h3>
+                        <div class="result-item" style="margin-top: 20px;">
+                            <span class="result-label">上架价格：</span>
+                            <span class="result-value" id="listingPriceResult1">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">采购人价格：</span>
+                            <span class="result-value" id="purchasePrice1">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">京东服务费：</span>
+                            <span class="result-value" id="jdFee1">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">开票金额：</span>
+                            <span class="result-value" id="invoiceAccount1">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">结算价格：</span>
+                            <span class="result-value" id="settlementPrice1">0.00 元</span>
+                        </div>
+                    </div>
+
+                    <div class="calculation-detail">
+                        <h3>计算说明</h3>
+                        <p id="calculationDetail1">请选择企业类型并输入上架价格查看计算详情</p>
+                    </div>
+                </div>
+
+                <!-- 已知采购价格计算部分 -->
+                <div class="tab-content" id="tab2">
+                    <h2>已知采购价格计算</h2>
+
+                    <div class="form-group">
+                        <label for="enterpriseType2">选择企业类型：</label>
+                        <select id="enterpriseType2">
+                            <option value="general">一般纳税人企业（开13%专票）</option>
+                            <option value="small">小规模企业（开1%-3%普票）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="purchasePriceInput">采购价格（元）：</label>
+                        <input type="number" id="purchasePriceInput" placeholder="请输入采购价格" min="0" step="0.01">
+                    </div>
+
+                    <div class="result-section">
+                        <h3 style="color: var(--primary-blue);">计算结果</h3>
+                        <div class="result-item" style="margin-top: 20px;">
+                            <span class="result-label">上架价格：</span>
+                            <span class="result-value" id="listingPrice2">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">采购人价格：</span>
+                            <span class="result-value" id="purchasePriceResult2">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">京东服务费：</span>
+                            <span class="result-value" id="jdFee2">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">开票金额：</span>
+                            <span class="result-value" id="invoiceAccount2">0.00 元</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">结算价格：</span>
+                            <span class="result-value" id="settlementPrice2">0.00 元</span>
+                        </div>
+                    </div>
+
+                    <div class="calculation-detail">
+                        <h3>计算说明</h3>
+                        <p id="calculationDetail2">请选择企业类型并输入采购价格查看计算详情</p>
+                    </div>
+                </div>
+
+                <div class="enterprise-info">
+                    <h3>企业类型说明</h3>
+                    <ul>
+                        <li><strong>一般纳税人企业</strong>：开13%专票，采购价格为上架价格的103%，结算价格为上架价格的99%</li>
+                        <li><strong>小规模企业</strong>：开1%-3%普票，采购价格为上架价格的118%，结算价格为上架价格的99%</li>
+                        <li><strong>京东服务费</strong>：上架价格的1%，此费用为平台服务费用，独立计算</li>
+                    </ul>
+                    <p style="margin-top: 10px;"><strong>反向计算说明</strong>：已知采购价格时，上架价格 = 采购价格 ÷ 对应的百分比(103%或118%)</p>
+                </div>
+
+                <div class="enterprise-info">
+                    <h3>入驻服务 | 运营服务 | 资源合作</h3>
+                    <p style="margin-top: 10px;"><strong>联系方式：13105315957（微信同）王老师</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>关于壹采</h3>
+                    <p>壹采是专业的政企采购电商服务平台，为供应商企业提供齐鲁云采、框架协议、泉E采等政府采购平台的一站式入驻与运营服务。</p>
+                    <p>泉E采、泉易采、济南泉e采阳光采购平台、齐鲁云采、山东省政府采购网上商城、济南市政府采购网上商城、济南政府采购、济南办公用品采购</p>
+                </div>
+                <div class="footer-section">
+                    <h3>官方平台</h3>
+                    <ul class="footer-links">
+                        <li><a href="https://qyc.zhongcy.cn/login" target="blank">泉e采阳光采购平台/泉易采</a></li>
+                        <li><a href="http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001" target="blank">齐鲁云采</a></li>
+                        <li><a href="https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001" target="blank">框架协议</a></li>
+                        <li><a href="https://jnggzy.jinan.gov.cn/" target="blank">济南市公共资源交易中心</a></li>
+                        <li><a href="http://www.ccgp-shandong.gov.cn/#/home" target="blank">山东省政府采购信息公开平台</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>我们的服务</h3>
+                    <ul class="footer-links">
+                        <li><a href="#">平台入驻服务</a></li>
+                        <li><a href="#">技术对接服务</a></li>
+                        <li><a href="#">运营指导服务</a></li>
+                        <li><a href="#">资源整合服务</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>联系我们</h3>
+                    <ul class="footer-links">
+                        <li>电话: 0531-86099058</li>
+                        <li>售前: 13105315957 王老师</li>
+                        <li>邮箱: Wangyunlei@yizhichan.co</li>
+                        <li>地址: 山东省济南市市中区汇宝大厦2106A</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>© 2023-2025 山东壹知产数字科技有限公司 版权所有 | <a href="https://beian.miit.gov.cn/#/Integrated/index" target="blank">鲁ICP备2021004355号</a> | 电信增值业务许可证：鲁B2-20210548 | <a href="https://beian.mps.gov.cn/#/query/webSearch" target="blank">鲁公网安备 37010302001037</a></p>
+            </div>
+        </div>
+    </footer>
+	<!-- CTA按钮弹出层 -->
+    <div class="cta-modal" id="ctaModal">
+        <div class="cta-modal-content">
+            <span class="cta-modal-close" id="ctaModalClose">&times;</span>
+            <h3 class="cta-modal-title">立即咨询入驻服务</h3>
+            <p>选择您偏好的咨询方式，我们的专家将尽快与您联系</p>
+
+            <div class="cta-options">
+                <a href="tel:13105315957" class="cta-option">
+                    <i class="fas fa-phone"></i>
+                    <div class="cta-option-text">
+                        <div class="cta-option-title">电话咨询</div>
+                        <div class="cta-option-desc">直接与专家通话，解答您的疑问13105315957</div>
+                    </div>
+                </a>
+
+                <div class="cta-option" id="wechatOption">
+                    <i class="fab fa-weixin"></i>
+                    <div class="cta-option-text">
+                        <div class="cta-option-title">微信咨询</div>
+                        <div class="cta-option-desc">扫码添加客服微信</div>
+                    </div>
+                    <div class="wechat-qr-side" style="position: absolute; left: -180px; top: 50%; transform: translateY(-50%); display: none;">
+                        <img src="../image/wx.png" alt="微信二维码">
+                        <p>扫码添加微信<br>获取更多信息</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cta-form">
+                <h4>或留下您的联系方式</h4>
+                <form id="contactForm">
+                    <input name="enterprise_name" placeholder="公司名称" required>
+                    <input name="name" placeholder="联系人" required>
+                    <input name="phone" placeholder="联系电话">
+                    <input name="platform_name" type="hidden" value="齐鲁云采">
+                    <input name="requirement" type="hidden" value="入驻咨询">
+                    <button type="submit">提交咨询</button>
+                </form>
+                <div class="success-message" id="successMessage">
+                    感谢您的咨询！我们将在24小时内与您联系。
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="../js/sendMessage.js?v=20260916a"></script>
+    <script>
+        // 调用封装方法
+        handleFormSubmit(
+            '#contactForm',
+            '/api/official-site-inquiry',
+            function(data) { console.log('提交成功', data); },
+            function(err) { console.log('提交失败', err); }
+        );
+    </script>
+    <!-- JSON-LD 结构化数据 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "泉e采平台交易价格及费用计算器",
+      "description": "济南泉e采阳光采购平台企业费用计算器，帮助一般纳税人企业和小规模企业快速计算采购价格和结算价格。",
+      "url": "https://www.yizhichan.co/quanyicai/jisuanqi.html",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "壹·采",
+        "url": "https://www.yizhichan.co"
+      }
+    }
+    </script>
+
+    <script>
+        // CTA按钮交互功能
+        const ctaButton = document.getElementById('ctaButton');
+        const ctaModal = document.getElementById('ctaModal');
+        const ctaModalClose = document.getElementById('ctaModalClose');
+        const wechatOption = document.getElementById('wechatOption');
+        const contactForm = document.getElementById('contactForm');
+        const successMessage = document.getElementById('successMessage');
+
+        // 打开CTA模态框
+        ctaButton.addEventListener('click', function() {
+            ctaModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // 防止背景滚动
+        });
+
+        // 关闭CTA模态框
+        ctaModalClose.addEventListener('click', function() {
+            ctaModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        });
+
+        // 点击模态框外部关闭
+        ctaModal.addEventListener('click', function(e) {
+            if (e.target === ctaModal) {
+                ctaModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+
+        // 微信选项悬停效果
+        wechatOption.addEventListener('mouseenter', function() {
+            const qrCode = this.querySelector('.wechat-qr-side');
+            qrCode.style.display = 'block';
+        });
+
+        wechatOption.addEventListener('mouseleave', function() {
+            const qrCode = this.querySelector('.wechat-qr-side');
+            qrCode.style.display = 'none';
+        });
+
+        // 表单提交处理
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // 这里应该添加实际表单提交逻辑
+            // 例如发送到服务器或发送邮件
+
+            // 显示成功消息
+            successMessage.style.display = 'block';
+
+            // 3秒后重置表单并关闭模态框
+            setTimeout(function() {
+                contactForm.reset();
+                successMessage.style.display = 'none';
+                ctaModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }, 3000);
+        });
+
+		// 侧边联系栏切换
+        const sideContactBar = document.querySelector('.side-contact-bar');
+        const sideContactToggle = document.querySelector('.side-contact-toggle');
+
+        sideContactToggle.addEventListener('click', function() {
+            sideContactBar.classList.toggle('collapsed');
+        });
+
+        // 页面加载进度
+        window.addEventListener('load', function() {
+            const loadingBar = document.getElementById('loading-bar');
+            loadingBar.style.width = '100%';
+            setTimeout(() => {
+                loadingBar.style.opacity = '0';
+                setTimeout(() => {
+                    loadingBar.style.display = 'none';
+                }, 300);
+            }, 500);
+        });
+
+        // 返回顶部按钮
+        const backToTopButton = document.getElementById('back-to-top');
+
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('visible');
+            } else {
+                backToTopButton.classList.remove('visible');
+            }
+        });
+
+        backToTopButton.addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // 计算器功能
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取已知上架价格计算相关的元素
+            const enterpriseTypeSelect1 = document.getElementById('enterpriseType1');
+            const listingPriceInput = document.getElementById('listingPrice');
+            const listingPriceResult1 = document.getElementById('listingPriceResult1');
+            const invoiceAccount1 = document.getElementById('invoiceAccount1');
+            const purchasePriceElement1 = document.getElementById('purchasePrice1');
+            const settlementPriceElement1 = document.getElementById('settlementPrice1');
+            const jdFeeElement1 = document.getElementById('jdFee1');
+            const calculationDetailElement1 = document.getElementById('calculationDetail1');
+
+            // 获取已知采购价格计算相关的元素
+            const enterpriseTypeSelect2 = document.getElementById('enterpriseType2');
+            const purchasePriceInput = document.getElementById('purchasePriceInput');
+            const purchasePriceResult2 = document.getElementById('purchasePriceResult2');
+            const listingPriceElement2 = document.getElementById('listingPrice2');
+            const invoiceAccount2 = document.getElementById('invoiceAccount2');
+            const settlementPriceElement2 = document.getElementById('settlementPrice2');
+            const jdFeeElement2 = document.getElementById('jdFee2');
+            const calculationDetailElement2 = document.getElementById('calculationDetail2');
+
+            // 获取选项卡元素
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            // 选项卡切换功能
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // 移除所有选项卡的激活状态
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+
+                    // 激活当前选项卡
+                    tab.classList.add('active');
+                    document.getElementById(tab.dataset.tab).classList.add('active');
+                });
+            });
+
+            // 已知上架价格计算函数
+            function calculateFromListingPrice() {
+                const enterpriseType = enterpriseTypeSelect1.value;
+                const listingPrice = parseFloat(listingPriceInput.value) || 0;
+
+                // 更新上架价格显示
+                listingPriceResult1.textContent = listingPrice.toFixed(2) + ' 元';
+
+                let purchasePrice, settlementPrice, jdFee;
+                let calculationDetail = '';
+
+                if (enterpriseType === 'general') {
+                    // 一般纳税人企业
+                    purchasePrice = listingPrice * 1.03;
+                    settlementPrice = listingPrice * 0.99;
+                    jdFee = listingPrice * 0.01;
+                    calculationDetail = `一般纳税人企业：<br>
+                    采购价格 = 上架价格 × 103% = ${listingPrice.toFixed(2)} × 1.03 = ${purchasePrice.toFixed(2)} 元<br>
+                    结算价格 = 上架价格 × 99% = ${listingPrice.toFixed(2)} × 0.99 = ${settlementPrice.toFixed(2)} 元<br>
+                    开票金额 = 上架价格 = ${listingPrice} 元<br>
+                    京东服务费 = 上架价格 × 1% = ${listingPrice.toFixed(2)} × 0.01 = ${jdFee.toFixed(2)} 元`;
+                } else {
+                    // 小规模企业
+                    purchasePrice = listingPrice * 1.18;
+                    settlementPrice = listingPrice * 0.99;
+                    jdFee = listingPrice * 0.01;
+                    calculationDetail = `小规模企业：<br>
+                    采购价格 = 上架价格 × 118% = ${listingPrice.toFixed(2)} × 1.18 = ${purchasePrice.toFixed(2)} 元<br>
+                    结算价格 = 上架价格 × 99% = ${listingPrice.toFixed(2)} × 0.99 = ${settlementPrice.toFixed(2)} 元<br>
+                    开票金额 = 上架价格 = ${listingPrice.toFixed(2)} 元<br>
+                    京东服务费 = 上架价格 × 1% = ${listingPrice.toFixed(2)} × 0.01 = ${jdFee.toFixed(2)} 元`;
+                }
+
+                // 更新结果显示
+                purchasePriceElement1.textContent = purchasePrice.toFixed(2) + ' 元';
+                settlementPriceElement1.textContent = settlementPrice.toFixed(2) + ' 元';
+                jdFeeElement1.textContent = jdFee.toFixed(2) + ' 元';
+                invoiceAccount1.textContent = listingPrice.toFixed(2) + ' 元';
+                calculationDetailElement1.innerHTML = calculationDetail;
+            }
+
+            // 已知采购价格计算函数
+            function calculateFromPurchasePrice() {
+                const enterpriseType = enterpriseTypeSelect2.value;
+                const purchasePrice = parseFloat(purchasePriceInput.value) || 0;
+
+                // 更新采购价格显示
+                purchasePriceResult2.textContent = purchasePrice.toFixed(2) + ' 元';
+
+                let listingPrice, settlementPrice, jdFee;
+                let calculationDetail = '';
+
+                if (enterpriseType === 'general') {
+                    // 一般纳税人企业
+                    listingPrice = purchasePrice / 1.03;
+                    settlementPrice = listingPrice * 0.99;
+                    jdFee = listingPrice * 0.01;
+                    calculationDetail = `一般纳税人企业：<br>
+                    上架价格 = 采购价格 ÷ 103% = ${purchasePrice.toFixed(2)} ÷ 1.03 = ${listingPrice.toFixed(2)} 元<br>
+                    结算价格 = 上架价格 × 99% = ${listingPrice.toFixed(2)} × 0.99 = ${settlementPrice.toFixed(2)} 元<br>
+                    开票金额 = 上架价格 = ${listingPrice.toFixed(2)} 元<br>
+                    京东服务费 = 上架价格 × 1% = ${listingPrice.toFixed(2)} × 0.01 = ${jdFee.toFixed(2)} 元`;
+                } else {
+                    // 小规模企业
+                    listingPrice = purchasePrice / 1.18;
+                    settlementPrice = listingPrice * 0.99;
+                    jdFee = listingPrice * 0.01;
+                    calculationDetail = `小规模企业：<br>
+                    上架价格 = 采购价格 ÷ 118% = ${purchasePrice.toFixed(2)} ÷ 1.18 = ${listingPrice.toFixed(2)} 元<br>
+                    结算价格 = 上架价格 × 99% = ${listingPrice.toFixed(2)} × 0.99 = ${settlementPrice.toFixed(2)} 元<br>
+                    开票金额 = 上架价格 = ${listingPrice.toFixed(2)} 元<br>
+                    京东服务费 = 上架价格 × 1% = ${listingPrice.toFixed(2)} × 0.01 = ${jdFee.toFixed(2)} 元`;
+                }
+
+                // 更新结果显示
+                listingPriceElement2.textContent = listingPrice.toFixed(2) + ' 元';
+                settlementPriceElement2.textContent = settlementPrice.toFixed(2) + ' 元';
+                jdFeeElement2.textContent = jdFee.toFixed(2) + ' 元';
+                invoiceAccount2.textContent = listingPrice.toFixed(2) + ' 元';
+                calculationDetailElement2.innerHTML = calculationDetail;
+            }
+
+            // 添加事件监听器
+            enterpriseTypeSelect1.addEventListener('change', calculateFromListingPrice);
+            listingPriceInput.addEventListener('input', calculateFromListingPrice);
+
+            enterpriseTypeSelect2.addEventListener('change', calculateFromPurchasePrice);
+            purchasePriceInput.addEventListener('input', calculateFromPurchasePrice);
+
+            // 初始计算
+            calculateFromListingPrice();
+            calculateFromPurchasePrice();
+        });
+    </script>
+</body>
+</html>

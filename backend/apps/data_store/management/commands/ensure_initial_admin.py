@@ -34,6 +34,7 @@ class Command(BaseCommand):
                         "onboarding.manage", "platformAccount.view", "platformAccount.manage",
                         "trademarkCertificate.view", "trademarkCertificate.manage",
                         "notice.view", "notice.manage",
+                        "site.view", "site.manage",
                         "lead.manage", "sensitive.view", "profit.view", "user.manage",
                     ],
                 },

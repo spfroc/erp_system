@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>政府采购框架协议采购方式管理暂行办法政策解读 - 壹·采学堂</title>
+    <meta name="description" content="壹·采学堂深度解读《政府采购框架协议采购方式管理暂行办法》（财政部令第110号），详解框架协议采购的适用情形、采购流程、厂商与供应商注意事项，助力企业把握政府采购新机遇。">
+    <meta name="keywords" content="框架协议采购,财政部110号令,政府采购框架协议,封闭式框架协议,开放式框架协议,政采政策解读,山东政府采购,壹·采学堂">
+    <meta name="geo.region" content="CN-SD" />
+    <meta name="geo.placename" content="山东省" />
+    <meta name="geo.position" content="36.6685;116.997" />
+    <meta name="ICBM" content="36.6685, 116.997" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-blue: #1a5fb4;
+            --secondary-blue: #2d7bd4;
+            --light-blue: #e6f2ff;
+            --dark-blue: #0d4a9c;
+            --accent-color: #ff6b35;
+            --text-color: #333;
+            --light-gray: #f8f9fa;
+            --border-color: #ddd;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        body {
+            color: var(--text-color);
+            line-height: 1.6;
+            background-color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        /* 导航样式 */
+        nav {
+            background-color: var(--secondary-blue);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-left: 30px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+            padding: 5px 0;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--light-blue);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--light-blue);
+            transition: width 0.3s;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* 面包屑导航 */
+        .breadcrumb {
+            padding: 15px 0;
+            background-color: var(--light-gray);
+            font-size: 0.9rem;
+        }
+
+        .breadcrumb a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        /* 主要内容区样式 */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 40px;
+            padding: 40px 0;
+        }
+
+        /* 侧边栏样式 */
+        .sidebar {
+            background-color: var(--light-gray);
+            border-radius: 10px;
+            padding: 25px;
+            height: fit-content;
+            position: sticky;
+            top: 100px;
+        }
+
+        .sidebar-title {
+            font-size: 1.3rem;
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--primary-blue);
+        }
+
+        .sidebar-list {
+            list-style: none;
+        }
+
+        .sidebar-item {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-item:last-child {
+            border-bottom: none;
+        }
+
+        .sidebar-link {
+            color: var(--text-color);
+            text-decoration: none;
+            transition: color 0.3s;
+            display: flex;
+            align-items: center;
+        }
+
+        .sidebar-link:hover {
+            color: var(--primary-blue);
+        }
+
+        .sidebar-link i {
+            margin-right: 10px;
+            color: var(--primary-blue);
+        }
+
+        /* 详情页样式 */
+        .article-header {
+            background: var(--light-gray);
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .article-title {
+            font-size: 2rem;
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+        }
+
+        .article-meta {
+            display: flex;
+            gap: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .article-content {
+            line-height: 1.8;
+        }
+
+        .article-content h2 {
+            font-size: 1.6rem;
+            color: var(--primary-blue);
+            margin: 30px 0 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--light-blue);
+        }
+
+        .article-content h3 {
+            font-size: 1.3rem;
+            color: var(--dark-blue);
+            margin: 25px 0 10px;
+        }
+
+        .article-content p {
+            margin-bottom: 15px;
+        }
+
+        .article-content ul, .article-content ol {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+
+        .article-content li {
+            margin-bottom: 8px;
+        }
+
+        .highlight-box {
+            background: var(--light-blue);
+            border-left: 4px solid var(--primary-blue);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+
+        .critical-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            color: var(--primary-blue);
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 30px;
+        }
+
+        .back-link i {
+            margin-right: 8px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        /* 下载区域样式 */
+        .download-section {
+            background: var(--light-gray);
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .download-title {
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            background: var(--accent-color);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .download-btn:hover {
+            background: #e55a2b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        .download-btn i {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+
+        /* 页脚样式 */
+        footer {
+            background-color: #1a1a2e;
+            color: white;
+            padding: 50px 0 20px;
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #aaa;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        thead tr {
+            background-color: var(--primary-blue);
+            color: white;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: var(--light-gray);
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 992px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .article-title {
+                font-size: 1.6rem;
+            }
+
+            .article-meta {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+
+        /* CTA按钮弹出层样式 */
+        .cta-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cta-modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .cta-modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+            transition: color 0.3s;
+        }
+
+        .cta-modal-close:hover {
+            color: var(--accent-color);
+        }
+
+        .cta-modal-title {
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+        }
+
+        .cta-options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 25px 0;
+        }
+
+        .cta-option {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: all 0.3s;
+        }
+
+        .cta-option:hover {
+            border-color: var(--primary-blue);
+            background: var(--light-blue);
+            transform: translateY(-2px);
+        }
+
+        .cta-option i {
+            font-size: 1.5rem;
+            margin-right: 15px;
+            color: var(--primary-blue);
+            width: 30px;
+        }
+
+        .cta-option-text {
+            text-align: left;
+        }
+
+        .cta-option-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .cta-option-desc {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .cta-form {
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .cta-form input, .cta-form textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .cta-form textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .cta-form button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+
+        .cta-form button:hover {
+            background: #e55a2b;
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        .header-cta {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .header-cta:hover {
+            background-color: #e55a2b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        /* 重要提示样式 */
+        .important-tag {
+            display: inline-block;
+            background-color: #dc3545;
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: super;
+        }
+
+        /* 行动按钮组 */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin: 25px 0;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            background: var(--primary-blue);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(26, 95, 180, 0.3);
+        }
+
+        .action-btn:hover {
+            background: var(--dark-blue);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(26, 95, 180, 0.4);
+            color: white;
+        }
+
+        .action-btn i {
+            margin-right: 10px;
+        }
+
+        .action-btn.secondary {
+            background: var(--accent-color);
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .action-btn.secondary:hover {
+            background: #e55a2b;
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        /* 侧边栏CTA按钮 */
+        .sidebar-cta {
+            background: var(--accent-color);
+            color: white;
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .sidebar-cta h4 {
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .sidebar-cta-btn {
+            display: block;
+            background: white;
+            color: var(--accent-color);
+            padding: 10px 15px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+
+        .sidebar-cta-btn:hover {
+            background: var(--light-blue);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <!-- 头部 -->
+    <header>
+        <div class="container">
+            <h1 class="logo">壹·采</h1>
+            <p class="subtitle">济南泉e采阳光采购平台 | 泉易采 | 齐鲁云采 | 框架协议等政府采购平台一站式入驻与运营服务</p>
+            <a href="#" class="header-cta" id="ctaButton">立即咨询入驻服务</a>
+        </div>
+    </header>
+
+    <!-- 导航 -->
+    <nav>
+        <div class="container nav-container">
+            <div class="nav-logo">壹·采学堂</div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="../index.html" class="nav-link">首页</a></li>
+                <li class="nav-item"><a href="../quanyicai/index.html" class="nav-link">泉e采入驻/运营指南</a></li>
+                <li class="nav-item"><a href="../qiluyuncai/index.html" class="nav-link">齐鲁云采入驻/运营指南</a></li>
+                <li class="nav-item"><a href="index.html" class="nav-link">政策解读</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 面包屑导航 -->
+    <div class="breadcrumb container">
+        <a href="../index.html">首页</a> &gt;
+        <a href="index.html">政策解读</a> &gt;
+        <span>政府采购框架协议采购方式管理暂行办法政策解读</span>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container">
+        <div class="main-content">
+            <!-- 信息列表/详情内容 -->
+            <div class="content-area">
+                <!-- 详情页内容 -->
+                <div id="detail-page">
+                    <div class="article-header">
+                        <h1 class="article-title">政府采购框架协议采购方式管理暂行办法政策解读</h1>
+                        <div class="article-meta">
+                            <span><i class="far fa-calendar-alt"></i> 发布日期：2025-10-19</span>
+                            <span><i class="far fa-file-alt"></i> 来源：中华人民共和国财政部</span>
+                        </div>
+
+                        <!-- 新增的行动按钮 -->
+                        <div class="action-buttons">
+                            <a href="#" class="action-btn secondary" id="agentAuthBtn">
+                                <i class="fas fa-user-check"></i> 代理商获取授权
+                            </a>
+                            <a href="#" class="action-btn" id="frameworkJoinBtn">
+                                <i class="fas fa-sign-in-alt"></i> 立即入驻框架协议
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="article-content">
+                        <p>2022年1月14日，财政部发布了《政府采购框架协议采购方式管理暂行办法》（财政部令第110号），该办法自2022年3月1日起正式施行。这是我国政府采购领域首次针对框架协议采购方式制定的专门管理办法，为规范多频次、小额度采购活动提供了明确的法律依据。</p>
+
+                        <h2>一、框架协议采购方式概述</h2>
+                        <p>框架协议采购是指集中采购机构或者主管预算单位对技术、服务等标准明确、统一，需要多次重复采购的货物和服务，通过公开征集程序，确定第一阶段入围供应商并订立框架协议，采购人或者服务对象按照框架协议约定规则，在入围供应商范围内确定第二阶段成交供应商并订立采购合同的采购方式。</p>
+
+                        <div class="highlight-box">
+                            <p><strong>政策要点：</strong>框架协议采购主要适用于多频次、小额度采购，分为封闭式和开放式两种形式，其中封闭式框架协议采购是主要形式。</p>
+                        </div>
+
+                        <h2>二、框架协议采购的适用情形</h2>
+                        <p>根据办法规定，符合下列情形之一的，可以采用框架协议采购方式：</p>
+
+                        <h3>1. 集中采购目录内的小额零星采购</h3>
+                        <p>集中采购目录以内品目，以及与之配套的必要耗材、配件等，属于小额零星采购的。</p>
+
+                        <h3>2. 部门专用服务的零星采购</h3>
+                        <p>集中采购目录以外，采购限额标准以上，本部门、本系统行政管理所需的法律、评估、会计、审计等鉴证咨询服务，属于小额零星采购的。</p>
+
+                        <h3>3. 政府购买服务的多供应商选择</h3>
+                        <p>集中采购目录以外，采购限额标准以上，为本部门、本系统以外的服务对象提供服务的政府购买服务项目，需要确定2家以上供应商由服务对象自主选择的。</p>
+
+                        <h3>4. 其他规定情形</h3>
+                        <p>国务院财政部门规定的其他情形。</p>
+
+                        <div class="highlight-box">
+                            <p><strong>适用提示：</strong>主管预算单位能够归集需求形成单一项目进行采购，通过签订时间、地点、数量不确定的采购合同满足需求的，不得采用框架协议采购方式。</p>
+                        </div>
+
+                        <h2>三、框架协议采购的两种形式</h2>
+
+                        <h3>1. 封闭式框架协议采购</h3>
+                        <p>封闭式框架协议采购是框架协议采购的主要形式，通过公开竞争订立框架协议后，除经过框架协议约定的补充征集程序外，不得增加协议供应商。</p>
+
+                        <p><strong>主要特点：</strong></p>
+                        <ul>
+                            <li>公开征集程序按照政府采购公开招标的规定执行</li>
+                            <li>确定入围供应商时采用价格优先法或质量优先法</li>
+                            <li>有明确的淘汰比例要求（一般不低于20%）</li>
+                            <li>框架协议有效期内供应商数量基本固定</li>
+                        </ul>
+
+                        <h3>2. 开放式框架协议采购</h3>
+                        <p>开放式框架协议采购是指明确采购需求和付费标准等框架协议条件，愿意接受协议条件的供应商可以随时申请加入的框架协议采购。</p>
+
+                        <p><strong>适用情形：</strong></p>
+                        <ul>
+                            <li>因执行政府采购政策不宜淘汰供应商的</li>
+                            <li>受基础设施、行政许可、知识产权等限制，供应商数量在3家以下且不宜淘汰供应商的</li>
+                            <li>能够确定统一付费标准，因地域等服务便利性要求，需要接纳所有愿意接受协议条件的供应商</li>
+                        </ul>
+
+                        <h2>四、框架协议采购流程详解</h2>
+
+                        <h3>第一阶段：框架协议订立</h3>
+                        <ol>
+                            <li><strong>确定采购需求：</strong>征集人应当确定框架协议采购需求，并在有效期内不得变动</li>
+                            <li><strong>发布征集公告：</strong>通过省级以上财政部门指定媒体发布征集公告</li>
+                            <li><strong>供应商响应：</strong>供应商按照征集文件要求编制和提交响应文件</li>
+                            <li><strong>评审确定入围：</strong>采用价格优先法或质量优先法确定入围供应商</li>
+                            <li><strong>签订框架协议：</strong>征集人与入围供应商签订框架协议</li>
+                        </ol>
+
+                        <h3>第二阶段：合同授予</h3>
+                        <p>采购人或者服务对象按照框架协议约定的规则，在入围供应商范围内确定成交供应商：</p>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>确定方式</th>
+                                    <th>适用情形</th>
+                                    <th>特点</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>直接选定</td>
+                                    <td>主要方式，适用于大多数项目</td>
+                                    <td>依据入围产品价格、质量以及服务便利性、用户评价等因素直接选定</td>
+                                </tr>
+                                <tr>
+                                    <td>二次竞价</td>
+                                    <td>价格优先法的采购项目</td>
+                                    <td>以协议价格为最高限价，选择符合需求的供应商参与二次竞价</td>
+                                </tr>
+                                <tr>
+                                    <td>顺序轮候</td>
+                                    <td>服务项目</td>
+                                    <td>根据轮候顺序规则，依次授予采购合同</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h2>五、厂商注意事项</h2>
+                        <p>对于生产厂商而言，参与框架协议采购需注意以下要点：</p>
+
+                        <ol>
+                            <li><strong>入围供应商资格：</strong>货物项目框架协议的入围供应商应当为入围产品生产厂家或者生产厂家唯一授权供应商</li>
+                            <li><strong>代理商管理<span class="important-tag">重要</span>：</strong>入围供应商可以委托一家或者多家代理商，按照框架协议约定接受采购人合同授予</li>
+                            <li><strong>产品要求：</strong>响应的货物原则上应当是市场上已有销售的规格型号，不得是专供政府采购的产品</li>
+                            <li><strong>耗材配套：</strong>对耗材使用量大的仪器设备，应当同时对3年以上约定期限内的专用耗材进行报价</li>
+                            <li><strong>产品升级：</strong>在质量不降低、价格不提高的前提下，可以对入围产品进行升级换代</li>
+                        </ol>
+
+                        <div class="critical-box">
+                            <p><strong>厂商授权关键点<span class="important-tag">关键</span>：</strong>厂商对代理商的授权在一年内只有一次机会，请务必慎重选择代理商并确保授权文件的完整性和准确性。</p>
+                        </div>
+
+                        <h2>六、代理商注意事项<span class="important-tag">获取授权是关键</span></h2>
+                        <p>对于代理商而言，参与框架协议采购需特别注意以下要点：</p>
+
+                        <ol>
+                            <li><strong>获取厂商授权<span class="important-tag">关键</span>：</strong>必须获得入围产品生产厂家的唯一授权，且厂商一年内只能进行一次授权</li>
+                            <li><strong>授权文件准备：</strong>确保授权文件符合征集文件要求，包括授权书、厂商资质证明等</li>
+                            <li><strong>授权时效性：</strong>注意授权有效期，确保在框架协议有效期内授权持续有效</li>
+                            <li><strong>代理关系维护：</strong>与厂商保持良好的合作关系，确保货源稳定和价格优势</li>
+                            <li><strong>区域限制注意：</strong>注意厂商授权是否有区域限制，避免跨区域经营风险</li>
+                        </ol>
+
+                        <div class="warning-box">
+                            <p><strong>代理商关键提醒<span class="important-tag">重要</span>：</strong>由于厂商一年内只能进行一次授权，代理商应尽早与意向厂商沟通，争取获得授权机会，错过将需要等待下一年度。</p>
+                        </div>
+
+                        <h2>七、入围注意事项<span class="important-tag">入围是关键第一步</span></h2>
+                        <p>供应商参与框架协议采购应重点关注以下事项：</p>
+
+                        <ol>
+                            <li><strong>响应文件编制：</strong>严格按照征集文件要求编制响应文件，对响应文件的真实性和合法性承担法律责任</li>
+                            <li><strong>报价策略：</strong>响应报价不得超过最高限制单价，有量价关系折扣的应当明确</li>
+                            <li><strong>资格审查：</strong>确保符合供应商资格条件，提供真实有效的资格材料</li>
+                            <li><strong>履约责任：</strong>入围后应当认真履行框架协议义务，避免被清退的风险</li>
+                            <li><strong>退出机制：</strong>封闭式框架协议入围供应商无正当理由不得主动退出；开放式框架协议供应商可以随时申请退出</li>
+                        </ol>
+
+                        <div class="highlight-box">
+                            <p><strong>风险提示：</strong>供应商如有恶意串通、提供虚假材料、无正当理由拒不接受合同授予等情形，将被取消入围资格，且不得参加同一封闭式框架协议补充征集。</p>
+                        </div>
+
+                        <h2>八、框架协议期限与补充征集</h2>
+
+                        <h3>框架协议期限</h3>
+                        <ul>
+                            <li>货物项目框架协议有效期一般不超过1年</li>
+                            <li>服务项目框架协议有效期一般不超过2年</li>
+                        </ul>
+
+                        <h3>补充征集规则</h3>
+                        <p>除剩余入围供应商不足入围供应商总数70%且影响框架协议执行的情形外，框架协议有效期内不得补充征集供应商。补充征集的条件、程序、评审方法和淘汰比例应当与初次征集相同。</p>
+
+                        <h2>九、对供应商的影响与建议</h2>
+                        <p>框架协议采购方式的正式确立，对供应商参与政府采购活动将产生深远影响：</p>
+
+                        <ol>
+                            <li><strong>把握入围机会：</strong>框架协议采购已成为小额零星采购的主要方式，供应商应积极把握第一阶段入围机会</li>
+                            <li><strong>关注电子化采购：</strong>框架协议采购应当实行电子化采购，供应商需熟悉电子采购系统操作</li>
+                            <li><strong>重视用户评价：</strong>用户反馈和评价情况将作为第二阶段直接选定成交供应商的参考</li>
+                            <li><strong>了解不同形式：</strong>区分封闭式和开放式框架协议的特点，制定相应参与策略</li>
+                            <li><strong>注重长期合作：</strong>框架协议采购注重长期合作关系，供应商应重视履约质量和售后服务</li>
+                        </ol>
+
+                        <div class="highlight-box">
+                            <p><strong>供应商行动建议：</strong>建议供应商认真研究《政府采购框架协议采购方式管理暂行办法》，了解框架协议采购的规则和流程，提前准备相关资质和材料，积极参与框架协议采购项目，拓展政府采购市场份额。</p>
+                        </div>
+
+                        <p>总之，《政府采购框架协议采购方式管理暂行办法》的出台，为规范多频次、小额度采购活动提供了明确的法律依据，对提高政府采购效率和效益具有重要意义。供应商应深入研究政策内容，把握采购趋势，优化参与策略，以适应政府采购制度改革的新要求。</p>
+
+                        <!-- 新增的行动按钮 -->
+                        <div class="action-buttons">
+                            <a href="#" class="action-btn secondary" id="bottomAgentAuthBtn">
+                                <i class="fas fa-user-check"></i> 代理商获取授权
+                            </a>
+                            <a href="#" class="action-btn" id="bottomFrameworkJoinBtn">
+                                <i class="fas fa-sign-in-alt"></i> 立即入驻框架协议
+                            </a>
+                        </div>
+
+                        <a href="index.html" class="back-link">
+                            <i class="fas fa-arrow-left"></i>
+                            返回政策解读列表
+                        </a>
+                    </div>
+
+                    <!-- 下载区域 -->
+                    <div class="download-section">
+                        <h3 class="download-title">下载原始政策文件</h3>
+                        <p>如需查看《政府采购框架协议采购方式管理暂行办法》（财政部令第110号）原始文件，请点击下方按钮下载：</p>
+                        <a href="../download/政府采购框架协议采购方式管理暂行办法.pdf" class="download-btn" download>
+                            <i class="fas fa-download"></i>
+                            下载原始政策文件 (PDF)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 侧边栏 -->
+            <div class="sidebar">
+                <!-- 新增的侧边栏CTA区域 -->
+                <div class="sidebar-cta">
+                    <h4>框架协议入驻服务</h4>
+                    <p>专业团队助您快速完成框架协议入驻</p>
+                    <a href="#" class="sidebar-cta-btn" id="sidebarAgentBtn">代理商获取授权</a>
+                    <a href="#" class="sidebar-cta-btn" id="sidebarFrameworkBtn">立即入驻框架协议</a>
+                </div>
+
+                <h3 class="sidebar-title">泉e采</h3>
+                <ul class="sidebar-list">
+                    <li class="sidebar-item">
+                        <a href="../quanyicai/ruzhuzhinan.html" class="sidebar-link">
+                            <i class="fas fa-file-alt"></i>
+                            <span>入驻全流程指南（2025）</span>
+                        </a>
+                    </li>
+					<li class="sidebar-item">
+                        <a href="../quanyicai/yunyingzhinan.html" class="sidebar-link">
+                            <i class="fas fa-user-plus"></i>
+                            <span>运营指南</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item">
+                        <a href="../quanyicai/changjianwenti.html" class="sidebar-link">
+                            <i class="fas fa-book"></i>
+                            <span>常见问题Q&A</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item">
+                        <a href="../quanyicai/jisuanqi.html" class="sidebar-link">
+                            <i class="fas fa-shopping-cart"></i>
+                            <span>交易费用计算器</span>
+                        </a>
+                    </li>
+                </ul>
+
+                <h3 class="sidebar-title" style="margin-top: 30px;">齐鲁云采</h3>
+                <ul class="sidebar-list">
+                    <li class="sidebar-item">
+                        <a href="../qiluyuncai/ruzhuzhinan.html" class="sidebar-link">
+                            <i class="fas fa-file-alt"></i>
+                            <span>入驻全流程指南（2025）</span>
+                        </a>
+                    </li>
+					<li class="sidebar-item">
+                        <a href="../qiluyuncai/yunyingzhinan.html" class="sidebar-link">
+                            <i class="fas fa-user-plus"></i>
+                            <span>运营指南</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item">
+                        <a href="../qiluyuncai/changjianwenti.html" class="sidebar-link">
+                            <i class="fas fa-book"></i>
+                            <span>常见问题Q&A</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>关于壹采</h3>
+                    <p>壹采是专业的政企采购电商服务平台，为供应商企业提供齐鲁云采、框架协议、泉E采等政府采购平台的一站式入驻与运营服务。</p>
+					<p>泉E采、泉易采、济南泉e采阳光采购平台、齐鲁云采、山东省政府采购网上商城、济南市政府采购网上商城、济南政府采购、济南办公用品采购</p>
+                </div>
+                <div class="footer-section">
+                    <h3>官方平台</h3>
+                    <ul class="footer-links">
+                        <li><a href="https://qyc.zhongcy.cn/login" target="blank">泉e采阳光采购平台/泉易采</a></li>
+                        <li><a href="http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001" target="blank">齐鲁云采</a></li>
+                        <li><a href="https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001" target="blank">框架协议</a></li>
+                        <li><a href="https://jnggzy.jinan.gov.cn/" target="blank">济南市公共资源交易中心</a></li>
+                        <li><a href="http://www.ccgp-shandong.gov.cn/#/home" target="blank">山东省政府采购信息公开平台</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>我们的服务</h3>
+                    <ul>
+                        <li><a href="#">平台入驻服务</a></li>
+                        <li><a href="#">技术对接服务</a></li>
+                        <li><a href="#">运营指导服务</a></li>
+                        <li><a href="#">资源整合服务</a></li>
+                    </ul>
+
+                </div>
+                <div class="footer-section">
+                    <h3>联系我们</h3>
+                    <ul>
+                        <li>电话: 0531-86099058</li>
+						<li>售前: 13105315957 王老师</li>
+                        <li>邮箱: Wangyunlei@yizhichan.co</li>
+                        <li>地址: 山东省济南市市中区汇宝大厦2106A</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="copyright">
+	<p>© 2023-2025 山东壹知产数字科技有限公司 版权所有 | <a href="https://beian.miit.gov.cn/#/Integrated/index" target="blank">鲁ICP备2021004355号</a> | 电信增值业务许可证：鲁B2-20210548 | <a href="https://beian.mps.gov.cn/#/query/webSearch" target="blank">鲁公网安备 37010302001037</a></p>
+            </div>
+        </div>
+    </footer>
+	<!-- CTA按钮弹出层 -->
+    <div class="cta-modal" id="ctaModal">
+        <div class="cta-modal-content">
+            <span class="cta-modal-close" id="ctaModalClose">&times;</span>
+            <h3 class="cta-modal-title">立即咨询入驻服务</h3>
+            <p>选择您偏好的咨询方式，我们的专家将尽快与您联系</p>
+
+            <div class="cta-options">
+                <a href="tel:13105315957" class="cta-option">
+                    <i class="fas fa-phone"></i>
+                    <div class="cta-option-text">
+                        <div class="cta-option-title">电话咨询</div>
+                        <div class="cta-option-desc">直接与专家通话，解答您的疑问13105315957</div>
+                    </div>
+                </a>
+
+                <div class="cta-option" id="wechatOption">
+                    <i class="fab fa-weixin"></i>
+                    <div class="cta-option-text">
+                        <div class="cta-option-title">微信咨询</div>
+                        <div class="cta-option-desc">扫码添加客服微信</div>
+                    </div>
+                    <div class="wechat-qr-side" style="position: absolute; left: -180px; top: 50%; transform: translateY(-50%); display: none;">
+                        <img src="../image/wx.png" alt="微信二维码">
+                        <p>扫码添加微信<br>获取更多信息</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cta-form">
+                <h4>或留下您的联系方式</h4>
+                <form id="contactForm">
+                    <input name="enterprise_name" placeholder="公司名称" required>
+                    <input name="name" placeholder="联系人" required>
+                    <input name="phone" placeholder="联系电话">
+                    <input name="platform_name" type="hidden" value="齐鲁云采">
+                    <input name="requirement" type="hidden" value="入驻咨询">
+                    <button type="submit">提交咨询</button>
+                </form>
+                <div class="success-message" id="successMessage">
+                    感谢您的咨询！我们将在24小时内与您联系。
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="../js/sendMessage.js?v=20260916a"></script>
+    <script>
+        // 调用封装方法
+        handleFormSubmit(
+            '#contactForm',
+            '/api/official-site-inquiry',
+            function(data) { console.log('提交成功', data); },
+            function(err) { console.log('提交失败', err); }
+        );
+    </script>
+    <!-- JSON-LD 结构化数据 -->
+   <script type="application/ld+json">
+	{
+	  "@context": "https://schema.org",
+	  "@type": "Article",
+	  "headline": "政府采购框架协议采购方式管理暂行办法政策解读",
+	  "description": "壹·采学堂深度解读《政府采购框架协议采购方式管理暂行办法》（财政部令第110号），详解框架协议采购的适用情形、采购流程、厂商与供应商注意事项。",
+	  "author": {
+		"@type": "Organization",
+		"name": "壹·采学堂"
+	  },
+	  "publisher": {
+		"@type": "Organization",
+		"name": "壹·采",
+		"logo": {
+		  "@type": "ImageObject",
+		  "url": "https://www.jinanyunji.com/image/logo.png"
+		}
+	  },
+	  "datePublished": "2022-01-14",
+	  "dateModified": "2024-12-03",
+	  "mainEntityOfPage": {
+		"@type": "WebPage",
+		"@id": "https://www.jinanyunji.com/zhengcejiedu/kuangjiaxieyi-2025.html"
+	  }
+	}
+   </script>
+   <script>
+	// CTA按钮交互功能
+        const ctaButton = document.getElementById('ctaButton');
+        const ctaModal = document.getElementById('ctaModal');
+        const ctaModalClose = document.getElementById('ctaModalClose');
+        const wechatOption = document.getElementById('wechatOption');
+        const contactForm = document.getElementById('contactForm');
+        const successMessage = document.getElementById('successMessage');
+
+        // 获取所有代理商授权和框架协议入驻按钮
+        const agentAuthBtn = document.getElementById('agentAuthBtn');
+        const frameworkJoinBtn = document.getElementById('frameworkJoinBtn');
+        const bottomAgentAuthBtn = document.getElementById('bottomAgentAuthBtn');
+        const bottomFrameworkJoinBtn = document.getElementById('bottomFrameworkJoinBtn');
+        const sidebarAgentBtn = document.getElementById('sidebarAgentBtn');
+        const sidebarFrameworkBtn = document.getElementById('sidebarFrameworkBtn');
+
+        // 打开CTA模态框
+        ctaButton.addEventListener('click', function() {
+            ctaModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // 防止背景滚动
+        });
+
+        // 代理商授权按钮点击事件
+        function handleAgentAuthClick() {
+            // 这里可以添加特定的代理商授权逻辑
+            // 暂时使用通用CTA
+            ctaModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // 框架协议入驻按钮点击事件
+        function handleFrameworkJoinClick() {
+            // 这里可以添加特定的框架协议入驻逻辑
+            // 暂时使用通用CTA
+            ctaModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // 为所有相关按钮添加事件监听
+        agentAuthBtn.addEventListener('click', handleAgentAuthClick);
+        frameworkJoinBtn.addEventListener('click', handleFrameworkJoinClick);
+        bottomAgentAuthBtn.addEventListener('click', handleAgentAuthClick);
+        bottomFrameworkJoinBtn.addEventListener('click', handleFrameworkJoinClick);
+        sidebarAgentBtn.addEventListener('click', handleAgentAuthClick);
+        sidebarFrameworkBtn.addEventListener('click', handleFrameworkJoinClick);
+
+        // 关闭CTA模态框
+        ctaModalClose.addEventListener('click', function() {
+            ctaModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        });
+
+        // 点击模态框外部关闭
+        ctaModal.addEventListener('click', function(e) {
+            if (e.target === ctaModal) {
+                ctaModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+
+        // 微信选项悬停效果
+        wechatOption.addEventListener('mouseenter', function() {
+            const qrCode = this.querySelector('.wechat-qr-side');
+            qrCode.style.display = 'block';
+        });
+
+        wechatOption.addEventListener('mouseleave', function() {
+            const qrCode = this.querySelector('.wechat-qr-side');
+            qrCode.style.display = 'none';
+        });
+
+        // 表单提交处理
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // 这里应该添加实际表单提交逻辑
+            // 例如发送到服务器或发送邮件
+
+            // 显示成功消息
+            successMessage.style.display = 'block';
+
+            // 3秒后重置表单并关闭模态框
+            setTimeout(function() {
+                contactForm.reset();
+                successMessage.style.display = 'none';
+                ctaModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }, 3000);
+        });
+   </script>
+</body>
+</html>

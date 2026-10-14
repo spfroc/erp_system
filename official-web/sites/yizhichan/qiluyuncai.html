@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>齐鲁云采 | 山东省政府采购网上商城 | 全省政府采购平台 | 山东政府采购服务</title>
+    <meta name="description" content="齐鲁云采是山东省政府采购网上商城，为全省16地市提供通用货物、工程、服务全流程网上交易服务">
+    <meta name="keywords" content="齐鲁云采,山东省政府采购网上商城,山东政府采购,政府采购平台,政府电子采购,政府采购服务">
+    <meta name="geo.region" content="CN-SD" />
+    <meta name="geo.placename" content="山东省" />
+    <meta name="geo.position" content="36.6685;116.997" />
+    <meta name="ICBM" content="36.6685, 116.997" />
+
+    <!-- JSON-LD 结构化数据 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "齐鲁云采 - 山东省政府采购网上商城",
+      "alternateName": ["齐鲁云采", "山东省政府采购平台"],
+      "url": "https://www.yizhichan.co",
+      "logo": "https://www.yizhichan.co/image/logo.png",
+      "description": "齐鲁云采是山东省政府采购网上商城，适用于通用货物、工程、服务全流程网上交易的服务平台",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "纬二路49号汇宝大厦2106A",
+        "addressLocality": "济南市",
+        "addressRegion": "山东省",
+        "postalCode": "250000",
+        "addressCountry": "CN"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": 36.6685,
+        "longitude": 116.997
+      },
+      "telephone": "0531-86099058",
+      "email": "Wangyunlei@yizhichan.co",
+      "areaServed": "山东省",
+      "serviceArea": {
+        "@type": "GeoCircle",
+        "geoMidpoint": {
+          "@type": "GeoCoordinates",
+          "latitude": 36.6685,
+          "longitude": 116.997
+        },
+        "geoRadius": "200000"
+      },
+      "foundingDate": "2023",
+      "founder": {
+        "@type": "Organization",
+        "name": "山东壹知产数字科技有限公司"
+      },
+      "numberOfEmployees": "10-50",
+      "keywords": "齐鲁云采,山东省政府采购网上商城,山东政府采购,政府采购平台,政府电子采购",
+      "knowsAbout": ["政府采购平台", "全省采购服务", "企业入驻服务", "政府电子采购"],
+      "makesOffer": {
+        "@type": "Offer",
+        "itemOffered": {
+          "@type": "Service",
+          "name": "齐鲁云采平台入驻服务",
+          "description": "提供齐鲁云采平台全流程入驻服务，包括资料准备、平台注册、商品上架等"
+        }
+      }
+    }
+    </script>
+
+    <!-- 其他SEO优化建议 -->
+    <!--
+    1. 在页面内容中自然地包含关键词：齐鲁云采、山东政府采购、全省采购平台等
+    2. 确保所有图片都有alt属性，描述图片内容
+    3. 使用语义化HTML标签（header, section, article, footer等）
+    4. 确保页面加载速度快，压缩图片和代码
+    5. 建立内部链接结构，链接到相关页面
+    6. 创建sitemap.xml和robots.txt文件
+    7. 在社交媒体上分享网站内容
+    8. 获取高质量的外部链接
+    9. 确保网站在移动设备上友好
+    10. 使用HTTPS安全协议
+    11. 定期更新网站内容
+    12. 监控网站分析数据，了解用户行为
+    -->
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary-blue: #1a5fb4;
+            --secondary-blue: #2d7bd4;
+            --light-blue: #e6f2ff;
+            --dark-blue: #0d4a9c;
+            --accent-color: #ff6b35;
+            --text-color: #333;
+            --light-gray: #f8f9fa;
+            --border-color: #ddd;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        body {
+            color: var(--text-color);
+            line-height: 1.6;
+            background-color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* 侧边联系栏 */
+        .side-contact-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            border-radius: 10px;
+            padding: 15px 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            z-index: 101;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .side-contact-bar.collapsed {
+            right: -70px;
+        }
+
+        .side-contact-toggle {
+            position: absolute;
+            left: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 5px 0 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .side-contact-toggle i {
+            transition: transform 0.3s;
+        }
+
+        .side-contact-bar.collapsed .side-contact-toggle i {
+            transform: rotate(180deg);
+        }
+
+        .contact-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            padding: 10px 5px;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .contact-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .contact-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .contact-icon {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            color: var(--accent-color);
+        }
+
+        .contact-text {
+            font-size: 0.8rem;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .contact-label {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-top: 3px;
+        }
+
+        .wechat-qr-side {
+            position: absolute;
+            left: -180px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            display: none;
+            z-index: 100;
+            width: 160px;
+            text-align: center;
+        }
+
+        .wechat-contact-side:hover .wechat-qr-side {
+            display: block;
+        }
+
+        .wechat-qr-side img {
+            width: 130px;
+            height: 130px;
+            display: block;
+            margin: 0 auto 10px;
+        }
+
+        .wechat-qr-side p {
+            color: var(--text-color);
+            font-size: 0.8rem;
+            margin: 0;
+        }
+
+        /* 加载进度条 */
+        #loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent-color);
+            width: 0%;
+            z-index: 9999;
+            transition: width 0.4s;
+        }
+
+        /* 返回顶部按钮 */
+        #back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--primary-blue);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 99;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        #back-to-top.visible {
+            opacity: 1;
+        }
+
+        #back-to-top:hover {
+            background: var(--dark-blue);
+            transform: translateY(-3px);
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB4PSIwIiB5PSIwIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSg0NSkiPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNwYXR0ZXJuKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==');
+        }
+
+        .logo-area {
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .header-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .header-cta {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .header-cta:hover {
+            background-color: #e55a2b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        /* 导航样式 */
+        nav {
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-blue);
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-left: 30px;
+        }
+
+        .nav-link {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+            padding: 5px 0;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-blue);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--primary-blue);
+            transition: width 0.3s;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* 主要内容区样式 */
+        section {
+            padding: 80px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title {
+            font-size: 2.2rem;
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+            position: relative;
+            display: inline-block;
+        }
+
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 80px;
+            height: 4px;
+            background-color: var(--accent-color);
+            margin: 15px auto;
+            border-radius: 2px;
+        }
+
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin-bottom: 30px;
+            transition: transform 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-icon {
+            width: 70px;
+            height: 70px;
+            background-color: var(--light-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--primary-blue);
+            font-size: 1.8rem;
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: var(--primary-blue);
+        }
+
+        /* 平台介绍部分 */
+        .platform-intro {
+            background-color: var(--light-gray);
+        }
+
+        .intro-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        /* 平台优势部分 - 优化版 */
+        .advantages-section {
+            background-color: var(--light-gray);
+        }
+
+        .advantages-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+
+        .advantage-card {
+            display: flex;
+            align-items: flex-start;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s;
+        }
+
+        .advantage-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .advantage-icon {
+            flex: 0 0 80px;
+            width: 80px;
+            height: 80px;
+            background-color: var(--light-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 25px;
+            color: var(--primary-blue);
+            font-size: 2rem;
+        }
+
+        .advantage-content {
+            flex: 1;
+        }
+
+        .advantage-title {
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+        }
+
+        /* 入驻条件部分 */
+        .conditions-list {
+            list-style: none;
+        }
+
+        .conditions-list li {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .conditions-list li:last-child {
+            border-bottom: none;
+        }
+
+        .condition-icon {
+            color: var(--accent-color);
+            margin-right: 15px;
+            font-size: 1.2rem;
+            margin-top: 3px;
+        }
+
+        /* 客户见证部分 */
+        .testimonials-section {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+        }
+
+        .testimonials-section .section-title {
+            color: white;
+        }
+
+        .testimonials-section .section-title::after {
+            background-color: var(--accent-color);
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .testimonial-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .testimonial-text {
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .author-info h4 {
+            margin-bottom: 5px;
+        }
+
+        .author-info p {
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        /* 入驻流程部分 */
+        .process-section {
+            background-color: var(--light-gray);
+        }
+
+        .process-steps {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+        }
+
+        .process-step {
+            flex: 0 0 calc(33.333% - 30px);
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 70px;
+            height: 70px;
+            background-color: white;
+            color: var(--primary-blue);
+            border: 4px solid var(--primary-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-weight: bold;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 15px rgba(26, 95, 180, 0.2);
+            position: relative;
+            z-index: 2;
+        }
+
+        .step-content {
+            background: white;
+            padding: 25px 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+            font-size: 1.2rem;
+        }
+
+        /* 服务部分 */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .service-features {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .service-features li {
+            padding: 8px 0;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .feature-icon {
+            color: var(--accent-color);
+            margin-right: 10px;
+            margin-top: 3px;
+        }
+
+        /* 品类信息部分 */
+        .categories-section {
+            background-color: var(--light-gray);
+        }
+
+        .categories-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .category-tab {
+            background: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+        }
+
+        .category-tab.active {
+            background-color: var(--primary-blue);
+            color: white;
+        }
+
+        .category-tab:hover:not(.active) {
+            background-color: var(--light-blue);
+        }
+
+        .category-content {
+            display: none;
+        }
+
+        .category-content.active {
+            display: block;
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .category-item {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .category-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        /* 采购方式部分 */
+        .methods-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+        }
+
+        .method-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .method-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .method-icon {
+            font-size: 2.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+        }
+
+        .method-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+            font-size: 1.2rem;
+        }
+
+        /* FAQ部分 */
+        .faq-section {
+            background-color: var(--light-gray);
+        }
+
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background: white;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .faq-question {
+            padding: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--primary-blue);
+        }
+
+        .faq-answer {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .faq-item.active .faq-answer {
+            padding: 0 20px 20px;
+            max-height: 500px;
+        }
+
+        .faq-toggle {
+            transition: transform 0.3s;
+        }
+
+        .faq-item.active .faq-toggle {
+            transform: rotate(180deg);
+        }
+
+        /* 联系我们部分 */
+        .contact-section {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+        }
+
+        .contact-section .section-title {
+            color: white;
+        }
+
+        .contact-section .section-title::after {
+            background-color: var(--accent-color);
+        }
+
+        .contact-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        .contact-info {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .contact-info h3 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+        }
+
+        .contact-item-main {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .contact-icon-main {
+            margin-right: 15px;
+            font-size: 1.2rem;
+            margin-top: 3px;
+            color: var(--accent-color);
+            min-width: 20px;
+        }
+
+        .contact-details {
+            flex: 1;
+        }
+
+        .contact-details h4 {
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .contact-details p,
+        .contact-details a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .contact-form {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            color: var(--text-color);
+        }
+
+        .contact-form h3 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary-blue);
+            outline: none;
+        }
+
+        .submit-btn {
+            background-color: var(--primary-blue);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--dark-blue);
+        }
+
+        /* 地图部分 */
+        .map-container {
+            height: 400px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 40px;
+            box-shadow: var(--shadow);
+        }
+
+        #location-map {
+            height: 100%;
+            width: 100%;
+        }
+
+        /* 页脚样式 */
+        footer {
+            background-color: #1a1a2e;
+            color: white;
+            padding: 60px 0 30px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #aaa;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 1200px) {
+            .side-contact-bar {
+                right: 10px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .advantages-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .process-steps {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .process-step {
+                flex: 0 0 30%;
+                margin-bottom: 40px;
+            }
+
+            .process-line {
+                display: none;
+            }
+
+            .step-connector {
+                display: none;
+            }
+
+            .header-stats {
+                gap: 20px;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .contact-container {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            /* 在平板设备上隐藏侧边联系栏 */
+            .side-contact-bar {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .process-step {
+                flex: 0 0 45%;
+            }
+
+            .section-title {
+                font-size: 1.8rem;
+            }
+
+            .advantage-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .advantage-icon {
+                margin-right: 0;
+                margin-bottom: 20px;
+            }
+
+            .header-stats {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .process-step {
+                flex: 0 0 100%;
+            }
+
+            .logo {
+                font-size: 2.2rem;
+            }
+
+            .section-title {
+                font-size: 1.6rem;
+            }
+
+            .step-number {
+                width: 60px;
+                height: 60px;
+            }
+
+            .contact-info,
+            .contact-form {
+                padding: 20px;
+            }
+
+            .contact-item-main {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .contact-icon-main {
+                margin-bottom: 10px;
+            }
+        }
+		 /* 新增样式 */
+        .highlight-box {
+            background-color: var(--highlight-color);
+            border-left: 5px solid var(--accent-color);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .stats-highlight {
+            background-color: var(--light-blue);
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 30px 20px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .stat-card .stat-number {
+            font-size: 2.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 10px;
+        }
+
+        .stat-card .stat-label {
+            font-size: 1.1rem;
+            color: var(--text-color);
+        }
+
+        .quick-contact {
+            background-color: var(--light-blue);
+            padding: 30px;
+            border-radius: 12px;
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .quick-contact h3 {
+            margin-bottom: 20px;
+            color: var(--primary-blue);
+        }
+
+        .quick-contact .contact-btn {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 15px;
+            transition: all 0.3s;
+        }
+
+        .quick-contact .contact-btn:hover {
+            background-color: #e55a2b;
+            transform: translateY(-3px);
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边联系栏 -->
+    <div class="side-contact-bar">
+        <div class="side-contact-toggle">
+            <i class="fas fa-chevron-right"></i>
+        </div>
+
+        <a href="tel:0531-86099058" class="contact-item">
+            <i class="fas fa-phone contact-icon"></i>
+            <span class="contact-text">0531-86099058</span>
+            <span class="contact-label">咨询热线</span>
+        </a>
+
+        <a href="tel:13105315957" class="contact-item">
+            <i class="fas fa-mobile-alt contact-icon"></i>
+            <span class="contact-text">13105315957</span>
+            <span class="contact-label">手机</span>
+        </a>
+
+        <div class="contact-item wechat-contact-side">
+            <i class="fab fa-weixin contact-icon"></i>
+            <span class="contact-text">微信咨询</span>
+            <span class="contact-label">扫码添加</span>
+            <div class="wechat-qr-side">
+                <!-- 这里使用一个示例二维码，实际使用时请替换为真实的微信二维码 -->
+                <img src="image/wx.png" alt="微信二维码">
+                <p>扫码添加微信<br>获取更多信息</p>
+            </div>
+        </div>
+
+        <a href="mailto:Wangyunlei@yizhichan.co" class="contact-item">
+            <i class="fas fa-envelope contact-icon"></i>
+            <span class="contact-text">邮箱</span>
+            <span class="contact-label">联系我们</span>
+        </a>
+    </div>
+
+    <!-- 加载进度条 -->
+    <div id="loading-bar"></div>
+
+    <!-- 返回顶部按钮 -->
+    <div id="back-to-top">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <!-- 头部 -->
+    <header>
+        <div class="container">
+            <div class="logo-area">
+                <h1 class="logo">齐鲁云采</h1>
+                <p class="subtitle">山东省政府采购网上商城 | 全省政府采购平台</p>
+                <p>面向山东省16地市的政府采购全流程服务平台</p>
+
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <div class="stat-number">3.8万+</div>
+                        <div class="stat-label">采购单位</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">10万+</div>
+                        <div class="stat-label">入驻供应商</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">山东全省</div>
+                        <div class="stat-label">覆盖区域</div>
+                    </div>
+                </div>
+
+                <a href="#contact" class="header-cta">立即申请入驻</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 导航 -->
+    <nav>
+        <div class="container nav-container">
+            <div class="nav-logo">齐鲁云采服务</div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="index.html" class="nav-link">首页</a></li>
+				<li class="nav-item"><a href="#services" class="nav-link"><strong>入驻服务</strong></a></li>
+                <li class="nav-item"><a href="#advantages" class="nav-link">平台优势</a></li>
+                <li class="nav-item"><a href="#conditions" class="nav-link">入驻条件</a></li>
+                <li class="nav-item"><a href="#process" class="nav-link">入驻流程</a></li>
+                <li class="nav-item"><a href="#methods" class="nav-link">采购方式</a></li>
+                <li class="nav-item"><a href="#faq" class="nav-link">常见问题</a></li>
+                <li class="nav-item"><a href="#contact" class="nav-link">联系我们</a></li>
+				<li class="nav-item"><a href="qiluyuncai/index.html" class="nav-link"><strong>入驻指南</strong></a></li>
+            </ul>
+        </div>
+    </nav>
+    <!-- 主要内容 -->
+    <main>
+        <!-- 平台介绍 -->
+        <section id="intro" class="platform-intro">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">平台介绍</h2>
+                    <p class="section-subtitle">了解齐鲁云采平台的基本信息、采购人构成及平台特点</p>
+                </div>
+
+                <div class="intro-grid">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-info-circle"></i>
+                        </div>
+                        <h3 class="card-title">什么是齐鲁云采？</h3>
+                        <p>齐鲁云采是山东省政府采购网上商城</p>
+                        <p>综合运用电子商务、互联网、大数据等新技术、新业态，精心打造的一个适用于通用货物、工程、服务全流程<strong>网上交易的服务平台</strong></p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <h3 class="card-title">采购单位</h3>
+                        <p>平台汇集了山东省16地市财政支持单位</p>
+                        <p>政府机关、教育机构、医疗机构、公检法系统等各类财政拨付单位，总计<strong>38000+家采购单位</strong></p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-map-marked-alt"></i>
+                        </div>
+                        <h3 class="card-title">覆盖地区</h3>
+                        <p>全面覆盖山东省16地市：济南、青岛、淄博、枣庄、东营、烟台、潍坊、济宁、泰安、威海、日照、临沂、德州、聊城、滨州、菏泽。</p>
+                    </div>
+                </div>
+
+                <!-- 供应商数据统计 -->
+                <div class="stats-highlight">
+                    <h3 class="section-subtitle">平台供应商构成</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">1,500+</div>
+                            <div class="stat-label">厂商</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">45000+</div>
+                            <div class="stat-label">定制品目供应商</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">32000+</div>
+                            <div class="stat-label">经销商</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">20000+</div>
+                            <div class="stat-label">代理商</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 平台优势 -->
+        <section id="advantages" class="advantages-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">平台优势</h2>
+                    <p class="section-subtitle">入驻齐鲁云采平台，享受多重优势，开拓全省政府采购市场</p>
+                </div>
+
+                <div class="advantages-grid">
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-briefcase"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">海量采购机会</h3>
+                            <p>平台集山东省16地市所有财政单位于一体，38,000多家采购单位提供海量采购机会，覆盖全省范围。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">抢占全省市场</h3>
+                            <p>一次入驻，即可面向全省16地市开展业务，无需分别对接各地市采购单位，大大降低市场拓展成本。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-award"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">提升企业声誉</h3>
+                            <p>参与省级政府采购平台，是企业实力的体现，有助于提升品牌形象和信誉度，为企业发展带来更多机会。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-lock"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">资金安全保障</h3>
+                            <p>资金不经过平台，由采购单位直接支付给供应商对公账户，确保资金安全。</p>
+                        </div>
+                    </div>
+                </div>
+				<!-- 快速联系区域 -->
+                <div class="quick-contact">
+                    <h3>想了解更多平台优势？</h3>
+                    <p>我们的专业顾问将为您详细解答平台优势，并为您量身定制入驻方案</p>
+                    <a href="#contact" class="contact-btn">立即咨询</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 入驻条件 -->
+        <section id="conditions" class="platform-intro">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">入驻条件</h2>
+                    <p class="section-subtitle">了解入驻齐鲁云采平台需要满足的条件和资质要求</p>
+                </div>
+
+                <div class="card">
+                    <ul class="conditions-list">
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>全国范围内正常经营中的<strong>企业或者个体户</strong>均可入驻</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>需要准备营业执照、开户许可证、开户银行、联系人、联系电话、邮箱等基础资料</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>特殊行业需要相应资质（如医疗、印刷、建筑装修等）</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>平台本身不收取入驻费用，我们提供的是第三方专业服务，收取相应的服务费用</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>入驻周期仅需2-3个工作日</div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 入驻流程 -->
+        <section id="process" class="process-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">入驻流程</h2>
+                    <p class="section-subtitle">简单6步，快速完成入驻，开启全省政府采购业务</p>
+                </div>
+
+                <div class="process-container">
+                    <div class="process-line"></div>
+                    <div class="process-steps">
+                        <div class="process-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h4 class="step-title">咨询洽谈</h4>
+                                <p>了解平台要求，确定入驻方案</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h4 class="step-title">准备资料</h4>
+                                <p>营业执照、开户许可证等基础资料</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h4 class="step-title">注册账号</h4>
+                                <p>注册信息公开平台和齐鲁云采平台账号</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <h4 class="step-title">申请权限</h4>
+                                <p>提交入驻申请，等待平台审核</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <h4 class="step-title">上架产品</h4>
+                                <p>通过审核后，上架对应产品和服务</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">6</div>
+                            <div class="step-content">
+                                <h4 class="step-title">开展业务</h4>
+                                <p>正式开展全省政府采购业务</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 品类信息 -->
+        <section id="categories" class="categories-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">常见品类</h2>
+                    <p class="section-subtitle">齐鲁云采平台覆盖广泛的商品和服务类别</p>
+                </div>
+
+                <div class="categories-tabs">
+                    <button class="category-tab active" data-tab="products">产品类</button>
+                    <button class="category-tab" data-tab="services">服务类</button>
+                    <button class="category-tab" data-tab="engineering">工程类</button>
+                </div>
+
+                <div class="category-content active" id="products-content">
+                    <div class="category-grid">
+                        <div class="category-item">信息化设备</div>
+                        <div class="category-item">音视频设备</div>
+                        <div class="category-item">系统集成</div>
+                        <div class="category-item">办公用品</div>
+                        <div class="category-item">办公设备</div>
+                        <div class="category-item">家具</div>
+                        <div class="category-item">家电</div>
+                        <div class="category-item">生活用品</div>
+                        <div class="category-item">劳保用品</div>
+                        <div class="category-item">消防设备</div>
+                        <div class="category-item">救援设备</div>
+                        <div class="category-item">医疗用品</div>
+                        <div class="category-item">文体用品</div>
+                        <div class="category-item">消耗品</div>
+                        <div class="category-item">建筑建材</div>
+                        <div class="category-item">信息数据产品</div>
+                    </div>
+                </div>
+
+                <div class="category-content" id="services-content">
+                    <div class="category-grid">
+                        <div class="category-item">物业</div>
+                        <div class="category-item">园林</div>
+                        <div class="category-item">印刷</div>
+                        <div class="category-item">广告文化</div>
+                        <div class="category-item">水电</div>
+                        <div class="category-item">维修</div>
+                        <div class="category-item">法律</div>
+                        <div class="category-item">会计</div>
+                    </div>
+                </div>
+
+                <div class="category-content" id="engineering-content">
+                    <div class="category-grid">
+                        <div class="category-item">视频监控工程</div>
+                        <div class="category-item">装修工程</div>
+                        <div class="category-item">建筑工程</div>
+                        <div class="category-item">网络工程</div>
+                        <div class="category-item">消防工程</div>
+                        <div class="category-item">防水防腐工程</div>
+                        <div class="category-item">中央空调</div>
+                        <div class="category-item">园林绿化工程</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 采购方式 -->
+        <section id="methods" class="platform-intro">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">采购方式</h2>
+                    <p class="section-subtitle">齐鲁云采平台提供多种灵活的采购方式，满足不同采购需求</p>
+                </div>
+
+                <div class="methods-grid">
+                    <div class="method-card">
+                        <div class="method-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <h3 class="method-title">网上超市直购</h3>
+                        <p>含货物、服务、工程的直接采购，简单快捷。</p>
+                    </div>
+
+                    <div class="method-card">
+                        <div class="method-icon">
+                            <i class="fas fa-gavel"></i>
+                        </div>
+                        <h3 class="method-title">竞价/反拍</h3>
+                        <p>竞价：供应商在线报价，价格最优者中标</p>
+                        <p>反拍：采购人发布需求，供应商竞价，每次报价降低</p>
+                    </div>
+
+                    <div class="method-card">
+                        <div class="method-icon">
+                            <i class="fas fa-file-contract"></i>
+                        </div>
+                        <h3 class="method-title">框架协议</h3>
+                        <p>与供应商签订长期合作协议，简化采购流程。</p>
+                    </div>
+
+                    <div class="method-card">
+                        <div class="method-icon">
+                            <i class="fas fa-boxes"></i>
+                        </div>
+                        <h3 class="method-title">批量集采</h3>
+                        <p>针对大宗商品或服务的集中采购，降低成本。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 我们的服务 -->
+        <section id="services">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">服务内容</h2>
+                    <p class="section-subtitle">专业团队提供全方位服务，助您轻松入驻平台</p>
+                </div>
+
+                <div class="services-grid">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-list-alt"></i>
+                        </div>
+                        <h3 class="card-title">全流程入驻服务</h3>
+                        <p>从资料准备到平台注册、权限申请、审核通过，全程专业指导。</p>
+                        <ul class="service-features">
+                            <li><i class="fas fa-check feature-icon"></i>一对一入驻指导</li>
+                            <li><i class="fas fa-check feature-icon"></i>资料审核与优化</li>
+                            <li><i class="fas fa-check feature-icon"></i>快速通道审核</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-box-open"></i>
+                        </div>
+                        <h3 class="card-title">产品管理服务</h3>
+                        <p>协助商品上下架，解决商品上架难题。</p>
+                        <ul class="service-features">
+                            <li><i class="fas fa-check feature-icon"></i>商品上架指导</li>
+                            <li><i class="fas fa-check feature-icon"></i>价格策略优化</li>
+                            <li><i class="fas fa-check feature-icon"></i>品类规划建议</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h3 class="card-title">运营指导服务</h3>
+                        <p>提供运营指导，解决交易过程中的各类问题。</p>
+                        <ul class="service-features">
+                            <li><i class="fas fa-check feature-icon"></i>平台规则解读</li>
+                            <li><i class="fas fa-check feature-icon"></i>运营策略制定</li>
+                            <li><i class="fas fa-check feature-icon"></i>问题快速响应</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box" style="margin-top: 30px;">
+                    <h3 class="card-title">特别说明</h3>
+                    <p>我们通过云采助手SaaS平台提供技术服务（通过API接口对接实现商品信息自动同步），确保您的产品快速上架并符合平台大数据监测要求。</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ部分 -->
+        <section id="faq" class="faq-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">常见问题</h2>
+                    <p class="section-subtitle">关于齐鲁云采平台的常见问题解答</p>
+                </div>
+
+                <div class="faq-container">
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>平台是否会收取费用？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>齐鲁云采平台本身不收取任何入驻费用或交易佣金。政府采购平台履行合规合法手续，平台不收取费用。我们提供的是第三方专业服务，收取相应的服务费用。如有更多疑问，欢迎咨询我们的专业顾问。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>交易资金如何结算？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>资金不经过平台，按照传统线下流程，由采购单位直接支付给供应商对公账户，确保资金安全。我们的专业团队可以提供结算流程指导。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>我能做全省的业务吗？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>可以。这是面向全省采购人的平台，入驻后即可面向山东省16地市开展业务。您也可以根据自身情况设置只做特定地区的业务。我们的顾问可以帮助您制定最优市场策略。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>为什么产品上架会遇到困难？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>平台对所有上架商品进行大数据监测，价格、参数等需要符合平台要求。我们可以提供专业解决方案，帮助您顺利完成商品上架。欢迎联系我们的技术支持团队。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>入驻需要多长时间？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>正常情况下，从提交资料到完成入驻约需3-5个工作日。我们会协助您加快审核流程，确保快速入驻。我们的专业顾问会全程跟进，确保流程顺利。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>商品没有京东链接怎么办？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>我们可以帮助解决链接问题，提供专业的技术支持。我们的团队有丰富的经验处理各类商品上架问题，确保您的商品顺利上架。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>应该用哪种采购方式？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>采购方式与产品类别、价格、地市都息息相关，不能一概而论。我们的专业顾问可以根据您的具体情况提供最适合的采购方案建议。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 联系我们 -->
+        <section id="contact" class="contact-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">联系我们</h2>
+                    <p class="section-subtitle">立即联系我们，开启全省政府采购新机遇</p>
+                </div>
+
+                <div class="contact-container">
+                    <div class="contact-info">
+                        <h3>联系方式</h3>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-building contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>公司名称</h4>
+                                <p>山东壹知产数字科技有限公司</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-user contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>联系人</h4>
+                                <p>王老师</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-phone contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>联系电话</h4>
+                                <p><a href="tel:13105315957">13105315957</a> / <a href="tel:0531-86099058">0531-86099058</a></p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-envelope contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>电子邮箱</h4>
+                                <p><a href="mailto:Wangyunlei@yizhichan.co">Wangyunlei@yizhichan.co</a></p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-map-marker-alt contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>公司地址</h4>
+                                <p>山东省济南市市中区大观园街道纬二路49号汇宝大厦2106A</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="contact-form">
+                        <h3>提交入驻申请</h3>
+                        <form id="contact-form">
+                            <div class="form-group">
+                                <label for="company-name">公司名称</label>
+                                <input type="text" id="company-name" name="enterprise_name" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="contact-person">联系人</label>
+                                <input type="text" id="contact-person" name="name" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="phone">联系电话</label>
+                                <input type="tel" id="phone" name="phone" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="business-type">主营业务</label>
+                                <select id="business-type" name="business_type">
+                                    <option value="">请选择您的主营业务</option>
+                                    <option value="office_supplies">办公用品/设备</option>
+                                    <option value="furniture">家具</option>
+                                    <option value="electronics">电子产品</option>
+                                    <option value="services">服务类</option>
+                                    <option value="engineering">工程类</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+
+                            <input type="hidden" name="platform_name" value="齐鲁云采">
+                            <input type="hidden" name="requirement" value="入驻齐鲁云采平台">
+
+                            <button type="submit" class="submit-btn">提交申请</button>
+
+                            <div class="form-group" style="text-align: center; margin-top: 15px;">
+                                <label style="font-size: 0.9rem; color: #666;">此服务由"山东壹知产数字科技有限公司"提供</label>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 地图 -->
+                <div class="map-container">
+                    <div id="location-map"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>官方平台</h3>
+                    <ul class="footer-links">
+                        <li><a href="http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001" target="_blank">齐鲁云采</a></li>
+                        <li><a href="https://qyc.zhongcy.cn/login" target="_blank">济南泉e采</a></li>
+                        <li><a href="https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001" target="_blank">框架协议</a></li>
+                        <li><a href="http://www.ccgp-shandong.gov.cn/#/home" target="_blank">山东省政府采购网</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>快速链接</h3>
+                    <ul class="footer-links">
+                        <li><a href="#intro">平台介绍</a></li>
+                        <li><a href="#advantages">平台优势</a></li>
+                        <li><a href="#conditions">入驻条件</a></li>
+                        <li><a href="#process">入驻流程</a></li>
+                        <li><a href="#categories">品类信息</a></li>
+                        <li><a href="#methods">采购方式</a></li>
+                        <li><a href="#services">服务内容</a></li>
+                        <li><a href="#faq">常见问题</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>联系我们</h3>
+                    <ul class="footer-links">
+                        <li><i class="fas fa-phone"></i> <a href="tel:13105315957">13105315957</a></li>
+                        <li><i class="fas fa-phone"></i> <a href="tel:0531-86099058">0531-86099058</a></li>
+                        <li><i class="fas fa-envelope"></i> <a href="mailto:Wangyunlei@yizhichan.co">Wangyunlei@yizhichan.co</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>平台关键词</h3>
+                    <p>齐鲁云采,山东省政府采购网上商城,山东政府采购,政府采购平台,政府电子采购,政府采购服务</p>
+                </div>
+            </div>
+
+            <div class="copyright">
+                <p>© 2023-2025 山东壹知产数字科技有限公司 版权所有 | <a href="https://beian.miit.gov.cn/#/Integrated/index" target="_blank">鲁ICP备2021004355号</a> | 电信增值业务许可证：鲁B2-20210548 | <a href="https://beian.mps.gov.cn/#/query/webSearch" target="_blank">鲁公网安备 37010302001037</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/sendMessage.js?v=20260916a"></script>
+<script>
+        // 页面加载进度
+        window.addEventListener('load', function() {
+            const loadingBar = document.getElementById('loading-bar');
+            loadingBar.style.width = '100%';
+            setTimeout(() => {
+                loadingBar.style.opacity = '0';
+                setTimeout(() => {
+                    loadingBar.style.display = 'none';
+                }, 300);
+            }, 500);
+        });
+
+        // 返回顶部按钮
+        const backToTopButton = document.getElementById('back-to-top');
+
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('visible');
+            } else {
+                backToTopButton.classList.remove('visible');
+            }
+        });
+
+        backToTopButton.addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // 表单提交处理
+        document.getElementById('contact-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const values = Object.fromEntries(new FormData(e.target));
+            submitConsultation(values, { onSuccess: function() { e.target.reset(); } });
+        });
+
+
+        // 平滑滚动
+		document.querySelectorAll('nav a, .header-cta').forEach(anchor => {
+			anchor.addEventListener('click', function(e) {
+				const targetId = this.getAttribute('href');
+				if (targetId.startsWith('#')) {
+					e.preventDefault();
+					document.querySelector(targetId).scrollIntoView({
+						behavior: 'smooth'
+					});
+				}
+				// 否则，让链接正常跳转
+			});
+		});
+
+        // FAQ展开/收起
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', function() {
+                const item = this.parentElement;
+                item.classList.toggle('active');
+            });
+        });
+
+        // 侧边联系栏切换
+        const sideContactBar = document.querySelector('.side-contact-bar');
+        const sideContactToggle = document.querySelector('.side-contact-toggle');
+
+        sideContactToggle.addEventListener('click', function() {
+            sideContactBar.classList.toggle('collapsed');
+        });
+
+        // 品类信息标签切换
+        document.querySelectorAll('.category-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // 移除所有标签的active类
+                document.querySelectorAll('.category-tab').forEach(t => {
+                    t.classList.remove('active');
+                });
+
+                // 添加当前标签的active类
+                this.classList.add('active');
+
+                // 隐藏所有内容
+                document.querySelectorAll('.category-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+
+                // 显示对应内容
+                const tabId = this.getAttribute('data-tab');
+                document.getElementById(tabId + '-content').classList.add('active');
+            });
+        });
+
+        // 初始化地图
+        function initMap() {
+            // 济南市坐标
+            const jinanCoords = [36.6685, 116.997];
+
+            // 创建地图
+            const map = L.map('location-map').setView(jinanCoords, 12);
+
+            // 添加地图图层
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // 添加标记
+            L.marker(jinanCoords).addTo(map)
+                .bindPopup('山东壹知产数字科技有限公司<br>济南市市中区大观园街道纬二路49号汇宝大厦2106A')
+                .openPopup();
+        }
+
+        // 页面加载完成后初始化地图
+        window.addEventListener('load', initMap);
+    </script>
+</body>
+</html>

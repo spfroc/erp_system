@@ -1694,6 +1694,25 @@ nav button:hover {
   min-width: 0;
 }
 
+.table-row.site-table {
+  grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1fr) minmax(160px, 1.1fr) 0.7fr 0.55fr minmax(140px, 0.9fr);
+  align-items: start;
+}
+
+.site-main-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.site-main-cell em {
+  display: block;
+  color: #697586;
+  font-style: normal;
+  font-size: 12px;
+}
+
 .notice-main-cell em,
 .notice-table em,
 .notice-source-table em {

@@ -62,6 +62,8 @@ export function migrateData(current: Partial<AppData>): AppData {
     notices: current.notices ?? seedData.notices ?? [],
     noticeCollectionSources: current.noticeCollectionSources ?? seedData.noticeCollectionSources ?? [],
     noticeCollectionRuns: current.noticeCollectionRuns ?? seedData.noticeCollectionRuns ?? [],
+    officialSites: current.officialSites ?? seedData.officialSites ?? [],
+    officialPages: current.officialPages ?? seedData.officialPages ?? [],
   } as AppData;
   migrated.organizations = migrated.organizations.map((organization) => ({
     ...organization,
@@ -599,6 +601,8 @@ function dataRecordCount(data: AppData): number {
     data.notices,
     data.noticeCollectionSources,
     data.noticeCollectionRuns,
+    data.officialSites,
+    data.officialPages,
   ].reduce((total, collection) => total + collection.length, 0);
 }
 

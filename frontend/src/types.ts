@@ -602,6 +602,46 @@ export interface NoticeCollectionRun {
   updatedAt?: string;
 }
 
+export interface OfficialSite {
+  id: string;
+  key: string;
+  name: string;
+  domain: string;
+  brand: string;
+  companyName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+  status: "启用" | "停用";
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface OfficialPageBlock {
+  type: string;
+  data: Record<string, unknown>;
+}
+
+export interface OfficialPage {
+  id: string;
+  siteId: string;
+  slug: string;
+  title: string;
+  template: string;
+  status: "draft" | "published";
+  seoTitle?: string;
+  seoDescription?: string;
+  blocks: OfficialPageBlock[];
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface OptionItem {
   id: string;
   label: string;
@@ -649,6 +689,8 @@ export type PermissionKey =
   | "trademarkCertificate.manage"
   | "notice.view"
   | "notice.manage"
+  | "site.view"
+  | "site.manage"
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
@@ -696,4 +738,6 @@ export interface AppData {
   notices: Notice[];
   noticeCollectionSources: NoticeCollectionSource[];
   noticeCollectionRuns: NoticeCollectionRun[];
+  officialSites: OfficialSite[];
+  officialPages: OfficialPage[];
 }

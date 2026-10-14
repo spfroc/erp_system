@@ -23,6 +23,8 @@ from .models import (
     NoticeCollectionRunRecord,
     NoticeCollectionSourceRecord,
     NoticeRecord,
+    OfficialPageRecord,
+    OfficialSiteRecord,
     OcrJobRecord,
     OnboardingRecord,
     OperationLogRecord,
@@ -45,6 +47,14 @@ from .models import (
     WebsiteLeadRecord,
 )
 from .notices import ensure_default_sample_source, normalize_notice_payload, notice_defaults, run_collection_source
+from .official_sites import (
+    ensure_default_official_sites,
+    normalize_page_payload,
+    normalize_site_payload,
+    page_defaults,
+    resolve_public_site,
+    site_defaults,
+)
 
 from .finance_statements import build_finance_statement_rows, orphaned_transaction_ids
 from .service_contract import (
@@ -87,6 +97,8 @@ COLLECTIONS = {
     "notices": NoticeRecord,
     "noticeCollectionSources": NoticeCollectionSourceRecord,
     "noticeCollectionRuns": NoticeCollectionRunRecord,
+    "officialSites": OfficialSiteRecord,
+    "officialPages": OfficialPageRecord,
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
@@ -118,6 +130,8 @@ COLLECTION_PERMISSIONS = {
     "notices": {"read": "notice.view", "write": "notice.manage"},
     "noticeCollectionSources": {"read": "notice.view", "write": "notice.manage"},
     "noticeCollectionRuns": {"read": "notice.view", "write": "notice.manage"},
+    "officialSites": {"read": "site.view", "write": "site.manage"},
+    "officialPages": {"read": "site.view", "write": "site.manage"},
 }
 
 
@@ -567,6 +581,7 @@ PERMISSION_ALIASES = {
     "platformAccount.manage": ("platformAccount.manage", "onboarding.manage"),
     "trademarkCertificate.view": ("trademarkCertificate.view", "trademarkCertificate.manage"),
     "notice.view": ("notice.view", "notice.manage"),
+    "site.view": ("site.view", "site.manage"),
     "salesOrder.view": ("salesOrder.view", "salesOrder.manage", "project.view"),
     "salesOrder.manage": ("salesOrder.manage", "project.edit", "finance.manage"),
     "purchaseOrder.view": ("purchaseOrder.view", "purchaseOrder.manage", "project.view", "purchase.manage"),
@@ -845,6 +860,12 @@ def _record_defaults(model, payload: dict) -> dict:
             started_at=(payload.get("startedAt", "") or "").strip(),
             finished_at=(payload.get("finishedAt", "") or "").strip(),
         )
+    elif model is OfficialSiteRecord:
+        data = normalize_site_payload(payload)
+        defaults = site_defaults(data)
+    elif model is OfficialPageRecord:
+        data = normalize_page_payload(payload)
+        defaults = page_defaults(data)
     return defaults
 
 
@@ -1647,6 +1668,33 @@ def _apply_collection_list_query(collection: str, queryset, request):
                 | Q(status__icontains=search)
                 | Q(data__errorMessage__icontains=search)
             )
+    elif collection == "officialSites":
+        status = (get("status") or "").strip()
+        if status and status != "全部":
+            queryset = queryset.filter(status=status)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search)
+                | Q(key__icontains=search)
+                | Q(domain__icontains=search)
+                | Q(brand__icontains=search)
+                | Q(company_name__icontains=search)
+                | Q(phone__icontains=search)
+            )
+    elif collection == "officialPages":
+        site_id = (get("siteId") or "").strip()
+        if site_id:
+            queryset = queryset.filter(site_id=site_id)
+        status = (get("status") or "").strip()
+        if status and status != "全部":
+            queryset = queryset.filter(status=status)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search)
+                | Q(slug__icontains=search)
+                | Q(template__icontains=search)
+                | Q(status__icontains=search)
+            )
     elif collection in {"salesOrders", "purchaseOrders", "serviceOrders"}:
         status = (get("status") or "").strip()
         if status and status != "全部":
@@ -1991,6 +2039,8 @@ def collection_items(request, collection):
         user_data, permission_error = _require_permission(request, _collection_permission(collection, "read"))
         if permission_error:
             return permission_error
+        if collection in {"officialSites", "officialPages"}:
+            ensure_default_official_sites()
         include_deleted = request.GET.get("includeDeleted") == "1"
         can_view_sensitive = _can_view_sensitive(user_data)
         queryset = _collection_queryset(model, include_deleted)
@@ -2895,6 +2945,16 @@ def website_leads(request):
     if error:
         return error
     return JsonResponse({"code": 20000, "message": "success", "data": lead}, status=201)
+
+
+@require_http_methods(["GET"])
+def public_official_site(request):
+    host = (request.GET.get("host") or request.META.get("HTTP_X_FORWARDED_HOST") or request.get_host() or "").strip()
+    slug = (request.GET.get("slug") or "home").strip() or "home"
+    resolved = resolve_public_site(host, slug=slug)
+    if not resolved:
+        return JsonResponse({"detail": "Site not found."}, status=404)
+    return JsonResponse({"data": resolved})
 
 
 @csrf_exempt

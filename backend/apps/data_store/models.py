@@ -300,6 +300,31 @@ class NoticeCollectionRunRecord(BaseRecord):
         db_table = "notice_collection_runs"
 
 
+class OfficialSiteRecord(BaseRecord):
+    key = models.CharField(max_length=50, db_index=True)
+    name = models.CharField(max_length=100, db_index=True)
+    domain = models.CharField(max_length=255, db_index=True)
+    brand = models.CharField(max_length=100, blank=True)
+    company_name = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    status = models.CharField(max_length=20, default="启用", db_index=True)
+
+    class Meta:
+        db_table = "official_sites"
+
+
+class OfficialPageRecord(BaseRecord):
+    site_id = models.CharField(max_length=64, db_index=True)
+    slug = models.CharField(max_length=100, db_index=True)
+    title = models.CharField(max_length=255, db_index=True)
+    template = models.CharField(max_length=50, default="home", db_index=True)
+    status = models.CharField(max_length=20, default="draft", db_index=True)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = "official_pages"
+
+
 class ManagedFile(models.Model):
     id = models.CharField(max_length=64, primary_key=True)
     document_type = models.CharField(max_length=30, db_index=True)

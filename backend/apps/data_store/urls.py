@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import app_data, audit_sensitive_access, auth_login, auth_logout, auth_me, collection_item, collection_items, delete_document, download_document, finance_validation, finance_validation_ignore, generate_service_contract, generate_standalone_service_contract, official_site_inquiry, platform_account_sensitive_value, run_notice_collection, upload_document, website_leads
+from .views import app_data, audit_sensitive_access, auth_login, auth_logout, auth_me, collection_item, collection_items, delete_document, download_document, finance_validation, finance_validation_ignore, generate_service_contract, generate_standalone_service_contract, official_site_inquiry, platform_account_sensitive_value, public_official_site, run_notice_collection, upload_document, website_leads
 
 
 urlpatterns = [
@@ -21,6 +21,8 @@ urlpatterns = [
     path("collections/<str:collection>/<str:record_id>/", collection_item, name="collection-item"),
     path("website-leads/", website_leads, name="website-leads"),
     path("website-leads", website_leads, name="website-leads-no-slash"),
+    path("public/official-site/", public_official_site, name="public-official-site"),
+    path("public/official-site", public_official_site, name="public-official-site-no-slash"),
     path("official-site-inquiry/", official_site_inquiry, name="official-site-inquiry"),
     path("official-site-inquiry", official_site_inquiry, name="official-site-inquiry-no-slash"),
     path("notices/collection-runs/", run_notice_collection, name="run-notice-collection"),

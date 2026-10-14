@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>泉E采 | 济南泉e采阳光采购平台 | 济南市政府采购平台 | 济南办公用品采购</title>
+    <meta name="description" content="泉E采是济南市政府与京东合作新启用的济南市政府采购平台，为济南供应商提供办公用品、办公耗材、生活类用品等分散类产品的采购服务。">
+    <meta name="keywords" content="泉E采,泉易采,济南泉e采阳光采购平台,齐鲁云采,山东省政府采购网上商城,济南市政府采购网上商城,济南政府采购,济南办公用品采购,济南办公耗材">
+    <meta name="geo.region" content="CN-SD" />
+    <meta name="geo.placename" content="济南市" />
+    <meta name="geo.position" content="36.6512;117.12" />
+    <meta name="ICBM" content="36.6512, 117.12" />
+	<!-- JSON-LD 结构化数据 -->
+	<script type="application/ld+json">
+	{
+	  "@context": "https://schema.org",
+	  "@type": "Organization",
+	  "name": "泉E采 - 济南泉e采阳光采购平台",
+	  "alternateName": ["泉易采", "济南市政府采购平台"],
+	  "url": "https://www.qlyc.co",
+	  "logo": "https://www.qlyc.co/image/logo.png",
+	  "description": "泉E采是济南市政府与京东合作新启用的济南市政府采购平台，为济南供应商提供办公用品、办公耗材、生活类用品等分散类产品的采购服务",
+	  "address": {
+		"@type": "PostalAddress",
+		"streetAddress": "纬二路49号汇宝大厦2106A",
+		"addressLocality": "济南市",
+		"addressRegion": "山东省",
+		"postalCode": "250000",
+		"addressCountry": "CN"
+	  },
+	  "geo": {
+		"@type": "GeoCoordinates",
+		"latitude": 36.6512,
+		"longitude": 117.12
+	  },
+	  "telephone": "0531-86099058",
+	  "email": "Wangyunlei@yizhichan.co",
+	  "sameAs": [
+		"https://weibo.com/quanecai",
+		"https://www.linkedin.com/company/quanecai"
+	  ],
+	  "areaServed": "济南市",
+	  "serviceArea": {
+		"@type": "GeoCircle",
+		"geoMidpoint": {
+		  "@type": "GeoCoordinates",
+		  "latitude": 36.6512,
+		  "longitude": 117.12
+		},
+		"geoRadius": "50000"
+	  },
+	  "foundingDate": "2023",
+	  "founder": {
+		"@type": "Organization",
+		"name": "山东壹知产数字科技有限公司"
+	  },
+	  "numberOfEmployees": "10-50",
+	  "keywords": "泉E采,泉易采,济南泉e采阳光采购平台,齐鲁云采,山东省政府采购网上商城,济南市政府采购网上商城,济南政府采购,济南办公用品采购",
+	  "knowsAbout": ["政府采购平台", "办公用品采购", "企业入驻服务", "京东POP店铺"],
+	  "makesOffer": {
+		"@type": "Offer",
+		"itemOffered": {
+		  "@type": "Service",
+		  "name": "泉E采平台入驻服务",
+		  "description": "提供泉E采平台全流程入驻服务，包括获取京东邀请码、店铺注册、商品上架等"
+		}
+	  }
+	}
+	</script>
+
+	<!-- 其他SEO优化建议 -->
+	<!--
+	1. 在页面内容中自然地包含关键词：泉E采、济南政府采购、办公用品采购等
+	2. 确保所有图片都有alt属性，描述图片内容
+	3. 使用语义化HTML标签（header, section, article, footer等）
+	4. 确保页面加载速度快，压缩图片和代码
+	5. 建立内部链接结构，链接到相关页面
+	6. 创建sitemap.xml和robots.txt文件
+	7. 在社交媒体上分享网站内容
+	8. 获取高质量的外部链接
+	9. 确保网站在移动设备上友好
+	10. 使用HTTPS安全协议
+	11. 定期更新网站内容
+	12. 监控网站分析数据，了解用户行为
+	-->
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary-blue: #1a5fb4;
+            --secondary-blue: #2d7bd4;
+            --light-blue: #e6f2ff;
+            --dark-blue: #0d4a9c;
+            --accent-color: #ff6b35;
+            --text-color: #333;
+            --light-gray: #f8f9fa;
+            --border-color: #ddd;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        body {
+            color: var(--text-color);
+            line-height: 1.6;
+            background-color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* 侧边联系栏 */
+        .side-contact-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            border-radius: 10px;
+            padding: 15px 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            z-index: 101;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .side-contact-bar.collapsed {
+            right: -70px;
+        }
+
+        .side-contact-toggle {
+            position: absolute;
+            left: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-blue);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 5px 0 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .side-contact-toggle i {
+            transition: transform 0.3s;
+        }
+
+        .side-contact-bar.collapsed .side-contact-toggle i {
+            transform: rotate(180deg);
+        }
+
+        .contact-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            padding: 10px 5px;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .contact-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .contact-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .contact-icon {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            color: var(--accent-color);
+        }
+
+        .contact-text {
+            font-size: 0.8rem;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .contact-label {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-top: 3px;
+        }
+
+        .wechat-qr-side {
+            position: absolute;
+            left: -180px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            display: none;
+            z-index: 100;
+            width: 160px;
+            text-align: center;
+        }
+
+        .wechat-contact-side:hover .wechat-qr-side {
+            display: block;
+        }
+
+        .wechat-qr-side img {
+            width: 130px;
+            height: 130px;
+            display: block;
+            margin: 0 auto 10px;
+        }
+
+        .wechat-qr-side p {
+            color: var(--text-color);
+            font-size: 0.8rem;
+            margin: 0;
+        }
+
+        /* 加载进度条 */
+        #loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent-color);
+            width: 0%;
+            z-index: 9999;
+            transition: width 0.4s;
+        }
+
+        /* 返回顶部按钮 */
+        #back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--primary-blue);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 99;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        #back-to-top.visible {
+            opacity: 1;
+        }
+
+        #back-to-top:hover {
+            background: var(--dark-blue);
+            transform: translateY(-3px);
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB4PSIwIiB5PSIwIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSg0NSkiPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNwYXR0ZXJuKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==');
+        }
+
+        .logo-area {
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .header-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .header-cta {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(255, 107, 53, 0.3);
+        }
+
+        .header-cta:hover {
+            background-color: #e55a2b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        /* 导航样式 */
+        nav {
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-blue);
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-left: 30px;
+        }
+
+        .nav-link {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+            padding: 5px 0;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-blue);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--primary-blue);
+            transition: width 0.3s;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* 主要内容区样式 */
+        section {
+            padding: 80px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title {
+            font-size: 2.2rem;
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+            position: relative;
+            display: inline-block;
+        }
+
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 80px;
+            height: 4px;
+            background-color: var(--accent-color);
+            margin: 15px auto;
+            border-radius: 2px;
+        }
+
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin-bottom: 30px;
+            transition: transform 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-icon {
+            width: 70px;
+            height: 70px;
+            background-color: var(--light-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--primary-blue);
+            font-size: 1.8rem;
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: var(--primary-blue);
+        }
+
+        /* 平台介绍部分 */
+        .platform-intro {
+            background-color: var(--light-gray);
+        }
+
+        .intro-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .comparison-table {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            margin-top: 40px;
+        }
+
+        .table-header {
+            background-color: var(--primary-blue);
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+
+        .table-row {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        .table-cell {
+            flex: 1;
+            padding: 15px 20px;
+        }
+
+        .table-cell:first-child {
+            font-weight: bold;
+            background-color: var(--light-blue);
+        }
+
+        /* 平台优势部分 - 优化版 */
+        .advantages-section {
+            background-color: var(--light-gray);
+        }
+
+        .advantages-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+
+        .advantage-card {
+            display: flex;
+            align-items: flex-start;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s;
+        }
+
+        .advantage-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .advantage-icon {
+            flex: 0 0 80px;
+            width: 80px;
+            height: 80px;
+            background-color: var(--light-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 25px;
+            color: var(--primary-blue);
+            font-size: 2rem;
+        }
+
+        .advantage-content {
+            flex: 1;
+        }
+
+        .advantage-title {
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+        }
+
+        /* 入驻条件部分 */
+        .conditions-list {
+            list-style: none;
+        }
+
+        .conditions-list li {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .conditions-list li:last-child {
+            border-bottom: none;
+        }
+
+        .condition-icon {
+            color: var(--accent-color);
+            margin-right: 15px;
+            font-size: 1.2rem;
+            margin-top: 3px;
+        }
+
+        /* 客户见证部分 */
+        .testimonials-section {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+        }
+
+        .testimonials-section .section-title {
+            color: white;
+        }
+
+        .testimonials-section .section-title::after {
+            background-color: var(--accent-color);
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .testimonial-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .testimonial-text {
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .author-info h4 {
+            margin-bottom: 5px;
+        }
+
+        .author-info p {
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        /* 入驻流程部分 - 优化版 */
+        .process-section {
+            background-color: var(--light-gray);
+        }
+
+        .process-container {
+            position: relative;
+            padding: 40px 0;
+        }
+
+        .process-line {
+            position: absolute;
+            top: 50%;
+            left: 5%;
+            right: 5%;
+            height: 4px;
+            background: var(--primary-blue);
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+
+        .process-steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+        }
+
+        .process-step {
+            flex: 0 0 18%;
+            text-align: center;
+            position: relative;
+        }
+
+        .step-connector {
+            position: absolute;
+            top: 40px;
+            left: -50%;
+            width: 100%;
+            height: 4px;
+            background: var(--primary-blue);
+            z-index: -1;
+        }
+
+        .step-number {
+            width: 80px;
+            height: 80px;
+            background-color: white;
+            color: var(--primary-blue);
+            border: 4px solid var(--primary-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-weight: bold;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 10px rgba(26, 95, 180, 0.2);
+            position: relative;
+            z-index: 2;
+        }
+
+        .step-content {
+            background: white;
+            padding: 20px 15px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary-blue);
+            font-size: 1.1rem;
+        }
+
+        /* 服务部分 */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .service-features {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .service-features li {
+            padding: 8px 0;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .feature-icon {
+            color: var(--accent-color);
+            margin-right: 10px;
+            margin-top: 3px;
+        }
+
+        /* FAQ部分 */
+        .faq-section {
+            background-color: var(--light-gray);
+        }
+
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background: white;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .faq-question {
+            padding: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--primary-blue);
+        }
+
+        .faq-answer {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .faq-item.active .faq-answer {
+            padding: 0 20px 20px;
+            max-height: 500px;
+        }
+
+        .faq-toggle {
+            transition: transform 0.3s;
+        }
+
+        .faq-item.active .faq-toggle {
+            transform: rotate(180deg);
+        }
+
+        /* 联系我们部分 */
+        .contact-section {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            color: white;
+        }
+
+        .contact-section .section-title {
+            color: white;
+        }
+
+        .contact-section .section-title::after {
+            background-color: var(--accent-color);
+        }
+
+        .contact-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        .contact-info {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .contact-info h3 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+        }
+
+        .contact-item-main {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .contact-icon-main {
+            margin-right: 15px;
+            font-size: 1.2rem;
+            margin-top: 3px;
+            color: var(--accent-color);
+            min-width: 20px;
+        }
+
+        .contact-details {
+            flex: 1;
+        }
+
+        .contact-details h4 {
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .contact-details p,
+        .contact-details a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .contact-form {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            color: var(--text-color);
+        }
+
+        .contact-form h3 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary-blue);
+            outline: none;
+        }
+
+        .submit-btn {
+            background-color: var(--primary-blue);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--dark-blue);
+        }
+
+        /* 地图部分 */
+        .map-container {
+            height: 400px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 40px;
+            box-shadow: var(--shadow);
+        }
+
+        #location-map {
+            height: 100%;
+            width: 100%;
+        }
+
+        /* 页脚样式 */
+        footer {
+            background-color: #1a1a2e;
+            color: white;
+            padding: 60px 0 30px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #aaa;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 1200px) {
+            .side-contact-bar {
+                right: 10px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .advantages-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .process-steps {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .process-step {
+                flex: 0 0 30%;
+                margin-bottom: 40px;
+            }
+
+            .process-line {
+                display: none;
+            }
+
+            .step-connector {
+                display: none;
+            }
+
+            .header-stats {
+                gap: 20px;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .contact-container {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            /* 在平板设备上隐藏侧边联系栏 */
+            .side-contact-bar {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .process-step {
+                flex: 0 0 45%;
+            }
+
+            .section-title {
+                font-size: 1.8rem;
+            }
+
+            .advantage-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .advantage-icon {
+                margin-right: 0;
+                margin-bottom: 20px;
+            }
+
+            .header-stats {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .process-step {
+                flex: 0 0 100%;
+            }
+
+            .logo {
+                font-size: 2.2rem;
+            }
+
+            .section-title {
+                font-size: 1.6rem;
+            }
+
+            .step-number {
+                width: 60px;
+                height: 60px;
+            }
+
+            .contact-info,
+            .contact-form {
+                padding: 20px;
+            }
+
+            .contact-item-main {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .contact-icon-main {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边联系栏 -->
+    <div class="side-contact-bar">
+        <div class="side-contact-toggle">
+            <i class="fas fa-chevron-right"></i>
+        </div>
+
+        <a href="tel:0531-86099058" class="contact-item">
+            <i class="fas fa-phone contact-icon"></i>
+            <span class="contact-text">0531-86099058</span>
+            <span class="contact-label">咨询热线</span>
+        </a>
+
+        <a href="tel:13105315957" class="contact-item">
+            <i class="fas fa-mobile-alt contact-icon"></i>
+            <span class="contact-text">13105315957</span>
+            <span class="contact-label">手机</span>
+        </a>
+
+        <div class="contact-item wechat-contact-side">
+            <i class="fab fa-weixin contact-icon"></i>
+            <span class="contact-text">微信咨询</span>
+            <span class="contact-label">扫码添加</span>
+            <div class="wechat-qr-side">
+                <!-- 这里使用一个示例二维码，实际使用时请替换为真实的微信二维码 -->
+                <img src="./image/wx.png" alt="微信二维码">
+                <p>扫码添加微信<br>获取更多信息</p>
+            </div>
+        </div>
+
+        <a href="mailto:Wangyunlei@yizhichan.co" class="contact-item">
+            <i class="fas fa-envelope contact-icon"></i>
+            <span class="contact-text">邮箱</span>
+            <span class="contact-label">联系我们</span>
+        </a>
+    </div>
+
+    <!-- 加载进度条 -->
+    <div id="loading-bar"></div>
+
+    <!-- 返回顶部按钮 -->
+    <div id="back-to-top">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <!-- 头部 -->
+    <header>
+        <div class="container">
+            <div class="logo-area">
+                <h1 class="logo">泉E采</h1>
+                <p class="subtitle">济南泉e采阳光采购平台 | 泉易采</p>
+                <p>济南市政府与京东合作政府采购平台</p>
+
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <div class="stat-number">500+</div>
+                        <div class="stat-label">入驻供应商</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">4000+</div>
+                        <div class="stat-label">采购单位</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">60天</div>
+                        <div class="stat-label">账期保障</div>
+                    </div>
+                </div>
+
+                <a href="#contact" class="header-cta">立即申请入驻</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 导航 -->
+    <nav>
+        <div class="container nav-container">
+            <div class="nav-logo">泉E采服务</div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="./index.html" class="nav-link">首页</a></li>
+                <li class="nav-item"><a href="#services" class="nav-link">入驻服务</a></li>
+				<li class="nav-item"><a href="#intro" class="nav-link">平台介绍</a></li>
+                <li class="nav-item"><a href="#advantages" class="nav-link">平台优势</a></li>
+                <li class="nav-item"><a href="#conditions" class="nav-link">入驻条件</a></li>
+                <li class="nav-item"><a href="#process" class="nav-link">入驻流程</a></li>
+                <li class="nav-item"><a href="#testimonials" class="nav-link">客户见证</a></li>
+				<li class="nav-item"><a href="#faq" class="nav-link">常见问题</a></li>
+                <li class="nav-item"><a href="#contact" class="nav-link">联系我们</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main>
+        <!-- 平台介绍 -->
+        <section id="intro" class="platform-intro">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">平台介绍</h2>
+                    <p class="section-subtitle">了解泉E采平台的基本信息、采购人构成及与齐鲁云采的区别</p>
+                </div>
+
+                <div class="intro-grid">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-info-circle"></i>
+                        </div>
+                        <h3 class="card-title">什么是泉E采平台？</h3>
+                        <p>泉e采是济南市政府与京东合作新启用的济南市政府采购平台，供应商在平台开通店铺后发布、展示、查询、交流相关信息，采购人通过平台采购供应商的商品。</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <h3 class="card-title">采购人有哪些？</h3>
+                        <p>主要是济南市的财政支持单位：政府单位、各级学校、医院、部分国企</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3 class="card-title">平台优势</h3>
+                        <p>60天账期结算，结算有保障</p>
+                    </div>
+                </div>
+
+                <div class="comparison-table">
+                    <div class="table-header">泉E采与齐鲁云采的区别</div>
+                    <div class="table-row">
+                        <div class="table-cell">平台名称</div>
+                        <div class="table-cell">泉E采</div>
+                        <div class="table-cell">齐鲁云采</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">采购类型</div>
+                        <div class="table-cell">分散类产品</div>
+                        <div class="table-cell">集采类产品</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="table-cell">商品示例</div>
+                        <div class="table-cell">办公用品、办公耗材、生活类用品等（硒鼓耗材、办公文具、办公档案、生活用品、生活家电、广告图文等）</div>
+                        <div class="table-cell">办公设备等（电脑、打印机、复印机、投影仪、碎纸机、扫描仪、复印纸、空调、服务器等）</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 平台优势 -->
+        <section id="advantages" class="advantages-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">平台优势</h2>
+                    <p class="section-subtitle">入驻泉E采平台，享受多重优势，助力企业快速发展</p>
+                </div>
+
+                <div class="advantages-grid">
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-lock"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">资金安全保障</h3>
+                            <p>60天账期结算，资金回款有保障，最长60天，确保企业资金安全。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-briefcase"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">海量采购机会</h3>
+                            <p>平台集政府、学校、医疗、国企等采购人于一体，采购机会更多更公平。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">抢占市场先机</h3>
+                            <p>越早入驻优势越大，后期极可能设置更高门槛，现在入驻抢占最佳时机。</p>
+                        </div>
+                    </div>
+
+                    <div class="advantage-card">
+                        <div class="advantage-icon">
+                            <i class="fas fa-award"></i>
+                        </div>
+                        <div class="advantage-content">
+                            <h3 class="advantage-title">提升企业声誉</h3>
+                            <p>参与政府采购平台，是企业实力的体现，有助于其他业务拓展和品牌建设。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 入驻条件 -->
+        <section id="conditions" class="platform-intro">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">入驻条件</h2>
+                    <p class="section-subtitle">了解入驻泉E采平台需要满足的条件和资质要求</p>
+                </div>
+
+                <div class="card">
+                    <ul class="conditions-list">
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>供应商必须是<strong>企业</strong>，一般纳税人（开具13%增值税专用发票）或小规模企业（开具1-3%发票）</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>供应商需缴纳1万元押金</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>平台收取交易1%平台服务费</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>需要<strong>京东邀请码</strong>方可入驻</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>特殊类别供应商还需具备相应的生产或销售资质，例如销售食品类商品需持有食品经营许可证、图书类需要图书经营许可证、医疗类需要二级备案等</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle condition-icon"></i>
+                            <div>注意：入驻后开通的是京东POP企业店，只能面向B端采购提供销售</div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 入驻流程 -->
+        <section id="process" class="process-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">入驻流程</h2>
+                    <p class="section-subtitle">简单9步，快速完成入驻，开启政府采购业务</p>
+                </div>
+
+                <div class="process-container">
+                    <div class="process-line"></div>
+                    <div class="process-steps">
+                        <div class="process-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h4 class="step-title">准备资料</h4>
+                                <p>准备公司基本资料+特殊资质</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h4 class="step-title">获取邀请码</h4>
+                                <p>获取入驻邀请码（联系我获取）</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h4 class="step-title">注册店铺</h4>
+                                <p>注册京东POP企业店</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <h4 class="step-title">签署协议</h4>
+                                <p>签署三费协议/缴纳押金</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <h4 class="step-title">完善信息</h4>
+                                <p>完善商品分类+特殊品牌授权/加白名单</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="process-steps" style="margin-top: 80px;">
+                        <div class="process-step">
+                            <div class="step-number">6</div>
+                            <div class="step-content">
+                                <h4 class="step-title">上架商品</h4>
+                                <p>上架商品并同步至泉e采</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">7</div>
+                            <div class="step-content">
+                                <h4 class="step-title">完成交易</h4>
+                                <p>采购人购买/发货/确认等完成订单交易</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">8</div>
+                            <div class="step-content">
+                                <h4 class="step-title">每月对账</h4>
+                                <p>每月15日对账</p>
+                            </div>
+                        </div>
+
+                        <div class="process-step">
+                            <div class="step-number">9</div>
+                            <div class="step-content">
+                                <h4 class="step-title">账期结算</h4>
+                                <p>账期结账至供应商账户</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 我们的服务 -->
+        <section id="services">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">我们的服务</h2>
+                    <p class="section-subtitle">专业团队提供全方位服务，助您轻松入驻平台</p>
+                </div>
+
+                <div class="services-grid">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-list-alt"></i>
+                        </div>
+                        <h3 class="card-title">全流程入驻服务</h3>
+                        <p>获取邀请码、协议签署、押金缴纳、完善分类、完善品牌授权</p>
+						<h3 class="card-title">   </h3>
+						<h3 class="card-title">运营服务</h3>
+                        <p>平台规则、玩法、问题解决方案、平台沟通等</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-box-open"></i>
+                        </div>
+                        <h3 class="card-title">商品快速上架服务</h3>
+                        <p>京麦市场应用"小壹铺货"提供商品上架管理服务</p>
+                        <ul class="service-features">
+                            <li><i class="fas fa-check feature-icon"></i>按上架数量收费更合理，适应不同规模需求</li>
+                            <li><i class="fas fa-check feature-icon"></i>对接京东开放API接口上架更标准、更快（毫秒级）</li>
+                            <li><i class="fas fa-check feature-icon"></i>对接京东开放API接口技术更合规、更合法</li>
+                            <li><i class="fas fa-check feature-icon"></i>通过京麦市场购买服务，有平台托底，服务有监督有保障</li>
+                            <li><i class="fas fa-check feature-icon"></i>提供标准适配商品库，不用再花时间找京东链接</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-handshake"></i>
+                        </div>
+                        <h3 class="card-title">丰富资源整合服务</h3>
+                        <p>提供厂家一件代发资源和海量且优质的京东官方商品资源</p>
+                        <ul class="service-features">
+                            <li><i class="fas fa-check feature-icon"></i>一站配齐，更快速，不用再东奔西走找资源</li>
+                            <li><i class="fas fa-check feature-icon"></i>一件代发，更省心</li>
+                            <li><i class="fas fa-check feature-icon"></i>利润最大化，发票正规化</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 客户见证 -->
+        <section id="testimonials" class="testimonials-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">客户见证</h2>
+                    <p class="section-subtitle">听听已经入驻平台的供应商怎么说</p>
+                </div>
+
+                <div class="testimonials-grid">
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "通过泉E采平台，一个月内就收到了多个陌生流量订单，办公用品销售额在一个月内增长了20%，政府单位的采购稳定且付款及时，大大减轻了我们的资金压力。"
+                        </div>
+                        <div class="testimonial-author">
+                            <div class="author-avatar">张</div>
+                            <div class="author-info">
+                                <h4>张经理</h4>
+                                <p>济南某办公用品公司</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "入驻流程比想象中简单，壹知产公司的服务团队非常专业，帮助我们快速完成所有手续。现在我们的商品已经上架并接到了多个订单。"
+                        </div>
+                        <div class="testimonial-author">
+                            <div class="author-avatar">李</div>
+                            <div class="author-info">
+                                <h4>李总</h4>
+                                <p>济南某耗材供应商</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "作为一家小型企业，能够参与到政府采购中是我们以前不敢想的。泉E采平台给了我们公平竞争的机会，60天账期也解决了我们的资金周转问题。"
+                        </div>
+                        <div class="testimonial-author">
+                            <div class="author-avatar">王</div>
+                            <div class="author-info">
+                                <h4>王女士</h4>
+                                <p>济南某生活用品供应商</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ部分 -->
+        <section id="faq" class="faq-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">常见问题</h2>
+                    <p class="section-subtitle">关于泉E采平台的常见问题解答</p>
+                </div>
+
+                <div class="faq-container">
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>入驻泉E采平台需要哪些资质？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>入驻泉E采平台需要企业营业执照、一般纳税人或小规模纳税人资质，以及1万元押金。特殊类别商品还需要相应的经营许可证，如食品经营许可证、图书经营许可证等。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>如何获取京东邀请码？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>京东邀请码需要通过我们服务商获取。请联系我们的客服人员，我们会协助您获取邀请码并完成入驻流程。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>平台收取哪些费用？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>平台收取1万元押金（可退）和交易金额1%的平台服务费。此外，我们提供的服务会根据您的需求收取相应的服务费用。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>账期结算是如何进行的？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>平台采用60天账期结算方式。每月15日进行对账，对账完成后按照账期将款项结算至供应商账户。</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>与齐鲁云采有什么区别？</span>
+                            <i class="fas fa-chevron-down faq-toggle"></i>
+                        </div>
+                        <div class="faq-answer">
+                            <p>泉E采主要采购分散类产品，如办公用品、办公耗材、生活类用品等；而齐鲁云采主要采购集采类产品，如电脑、打印机、空调等办公设备。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 联系我们 -->
+        <section id="contact" class="contact-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">联系我们</h2>
+                    <p class="section-subtitle">立即联系我们，获取入驻邀请码，开启政府采购新机遇</p>
+                </div>
+
+                <div class="contact-container">
+                    <div class="contact-info">
+                        <h3>联系方式</h3>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-building contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>公司名称</h4>
+                                <p>山东壹知产数字科技有限公司</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-user contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>联系人</h4>
+                                <p>王老师</p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-phone contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>联系电话</h4>
+                                <p><a href="tel:13105315957">13105315957</a> <a href="tel:0531-86099058">0531-86099058</a></p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-envelope contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>电子邮箱</h4>
+                                <p><a href="mailto:Wangyunlei@yizhichan.co">Wangyunlei@yizhichan.co</a></p>
+                            </div>
+                        </div>
+
+                        <div class="contact-item-main">
+                            <i class="fas fa-map-marker-alt contact-icon-main"></i>
+                            <div class="contact-details">
+                                <h4>公司地址</h4>
+                                <p>山东省济南市市中区大观园街道纬二路49号汇宝大厦2106A</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="contact-form">
+                        <h3>提交入驻申请</h3>
+                        <form id="contact-form">
+                            <div class="form-group">
+                                <label for="company-name">公司名称</label>
+                                <input type="text" id="company-name" name="enterprise_name" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="contact-person">联系人</label>
+                                <input type="text" id="contact-person" name="name" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="phone">联系电话</label>
+                                <input type="tel" id="phone" name="phone" required>
+                                <input type="hidden" name="platform_name" value="泉E采">
+                                <input type="hidden" name="requirement" value="入驻泉E采平台">
+                            </div>
+                            <button type="submit" class="submit-btn">提交申请</button>
+							<div class="form-group">
+                                <label for="contact-person">此服务由“山东壹知产数字科技有限公司”提供</label>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 地图 -->
+                <div class="map-container">
+                    <div id="location-map"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>官方平台</h3>
+                    <ul class="footer-links">
+                        <li><a href="https://qyc.zhongcy.cn/login" target="blank">济南泉e采阳光采购平台</a></li>
+                        <li><a href="https://qyc.zhongcy.cn/login" target="blank">泉易采</a></li>
+                        <li><a href="http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001" target="blank">齐鲁云采</a></li>
+                        <li><a href="https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001" target="blank">框架协议</a></li>
+                        <li><a href="https://jnggzy.jinan.gov.cn/" target="blank">济南市公共资源交易中心</a></li>
+                        <li><a href="http://www.ccgp-shandong.gov.cn/#/home" target="blank">山东省政府采购信息公开平台</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>快速链接</h3>
+                    <ul class="footer-links">
+                        <li><a href="#intro">平台介绍</a></li>
+                        <li><a href="#advantages">平台优势</a></li>
+                        <li><a href="#conditions">入驻条件</a></li>
+                        <li><a href="#process">入驻流程</a></li>
+                        <li><a href="#services">我们的服务</a></li>
+                        <li><a href="#testimonials">客户见证</a></li>
+                        <li><a href="#faq">常见问题</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>联系我们</h3>
+                    <ul class="footer-links">
+                        <li><i class="fas fa-phone"></i> <a href="tel:13105315957">13105315957</a></li>
+                        <li><i class="fas fa-phone"></i> <a href="tel:0531-86099058">0531-86099058</a></li>
+                        <li><i class="fas fa-envelope"></i> <a href="mailto:Wangyunlei@yizhichan.co">Wangyunlei@yizhichan.co</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h3>平台关键词</h3>
+                    <p>泉E采、泉易采、济南泉e采阳光采购平台、齐鲁云采、山东省政府采购网上商城、济南市政府采购网上商城、济南政府采购、济南办公用品采购</p>
+                </div>
+            </div>
+
+            <div class="copyright">
+                <p>© 2023-2025 山东壹知产数字科技有限公司 版权所有 | <a href="https://beian.miit.gov.cn/#/Integrated/index" target="blank">鲁ICP备2021004355号</a> | 电信增值业务许可证：鲁B2-20210548 | <a href="https://beian.mps.gov.cn/#/query/webSearch" target="blank">鲁公网安备 37010302001675</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 页面加载进度
+        window.addEventListener('load', function() {
+            const loadingBar = document.getElementById('loading-bar');
+            loadingBar.style.width = '100%';
+            setTimeout(() => {
+                loadingBar.style.opacity = '0';
+                setTimeout(() => {
+                    loadingBar.style.display = 'none';
+                }, 300);
+            }, 500);
+        });
+
+        // 返回顶部按钮
+        const backToTopButton = document.getElementById('back-to-top');
+
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('visible');
+            } else {
+                backToTopButton.classList.remove('visible');
+            }
+        });
+
+        backToTopButton.addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+
+        // 平滑滚动
+        document.querySelectorAll('nav a, .header-cta').forEach(anchor => {
+            if(anchor.getAttribute('href') === './index.html') {
+                return;
+            }
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                document.querySelector(targetId).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // FAQ展开/收起
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', function() {
+                const item = this.parentElement;
+                item.classList.toggle('active');
+            });
+        });
+
+        // 侧边联系栏切换
+        const sideContactBar = document.querySelector('.side-contact-bar');
+        const sideContactToggle = document.querySelector('.side-contact-toggle');
+
+        sideContactToggle.addEventListener('click', function() {
+            sideContactBar.classList.toggle('collapsed');
+        });
+
+        // 初始化地图
+        function initMap() {
+            // 济南市坐标
+            const jinanCoords = [36.6512, 117.12];
+
+            // 创建地图
+            const map = L.map('location-map').setView(jinanCoords, 12);
+
+            // 添加地图图层
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // 添加标记
+            L.marker(jinanCoords).addTo(map)
+                .bindPopup('山东壹知产数字科技有限公司<br>济南市市中区大观园街道纬二路49号汇宝大厦2106A')
+                .openPopup();
+        }
+
+        // 页面加载完成后初始化地图
+        window.addEventListener('load', initMap);
+    </script>
+    <script src="js/sendMessage.js?v=20260916a"></script>
+    <script>
+        // 调用封装方法
+        handleFormSubmit(
+            '#contact-form',
+            '/api/official-site-inquiry',
+            function(data) { console.log('提交成功', data); },
+            function(err) { console.log('提交失败', err); }
+        );
+    </script>
+</body>
+</html>
