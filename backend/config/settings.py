@@ -7,9 +7,21 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.getenv(
     "DJANGO_ALLOWED_HOSTS",
-    "localhost,127.0.0.1,0.0.0.0,backend,comp",
+    "localhost,127.0.0.1,0.0.0.0,backend,comp,one,182.168.1.166,182.168.1.120",
 ).split(",")
-CSRF_TRUSTED_ORIGINS = [origin for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
+CSRF_TRUSTED_ORIGINS = [
+    origin
+    for origin in [
+        *os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(","),
+        "http://localhost:18082",
+        "http://127.0.0.1:18082",
+        "http://comp:18082",
+        "http://one:18082",
+        "http://182.168.1.166:18082",
+        "http://182.168.1.120:18082",
+    ]
+    if origin.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -114,6 +126,13 @@ CORS_ALLOWED_ORIGINS = [
         "http://comp:5174",
         "http://comp:18082",
         "http://comp:8000",
+        "http://comp:18080",
+        "http://182.168.1.166:18082",
+        "http://182.168.1.166:18080",
+        "http://one:18082",
+        "http://one:18080",
+        "http://182.168.1.120:18082",
+        "http://182.168.1.120:18080",
         "https://assist.qlyc.co",
         "https://qlyc.co",
         "https://www.qlyc.co",

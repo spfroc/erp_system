@@ -1,4 +1,5 @@
 import { openDB } from "idb";
+import { backendApiUrl } from "./apiConfig";
 import {
   DEFAULT_ACCEPTANCE_STATUS,
   DEFAULT_DELIVERY_STATUS,
@@ -37,9 +38,7 @@ async function getDatabase() {
 }
 
 function apiUrl(path: string) {
-  const url = new URL(path, window.location.origin);
-  if (import.meta.env.DEV) url.port = "8000";
-  return url.toString();
+  return backendApiUrl(path);
 }
 
 export function migrateData(current: Partial<AppData>): AppData {

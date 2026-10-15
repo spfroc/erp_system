@@ -9,11 +9,11 @@ docker compose -f deploy/docker-compose.dev.yml up --build
 Services:
 
 - `frontend` - Vite development server on host port `18082`.
-- `backend` - Django development server on port `8000`.
-- `ocr-service` - FastAPI development server on port `8100`.
-- `mysql` - MySQL 8.0.21 on port `3306`, matching the production RDS major/minor version.
-- `redis` - Redis on port `6379`.
-- `minio` - Object storage API on `9000`, console on `9001`.
+- `backend` - Django development server on host port `18080` (container `8000`).
+- `ocr-service` - FastAPI development server on host port `18081` (container `8100`).
+- `mysql` - MySQL 8.0.21 on host port `13306` (container `3306`).
+- `redis` - Redis on host port `16379` (container `6379`).
+- `minio` - Object storage API on host `19000`, console on `19001`.
 
 ## Huawei Cloud RDS MySQL
 

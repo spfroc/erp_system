@@ -3,7 +3,10 @@ services:
     build:
       context: ../frontend
     working_dir: /app
-    command: sh -c "test -d node_modules && npm run dev -- --host 0.0.0.0 || (npm install && npm run dev -- --host 0.0.0.0)"
+    command: sh -c "test -d node_modules && npm run dev || (npm install && npm run dev)"
+    environment:
+      VITE_BACKEND_PORT: "18080"
+      VITE_OCR_PORT: "18081"
     ports:
       - "18082:5173"
     volumes:
@@ -30,7 +33,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       OCR_SERVICE_URL: http://ocr-service:8100
     ports:
-      - "8000:8000"
+      - "18080:8000"
     volumes:
       - ../backend:/app
     depends_on:
@@ -47,7 +50,7 @@ services:
     working_dir: /app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
     ports:
-      - "8100:8100"
+      - "18081:8100"
     volumes:
       - ../ocr-service:/app
 
@@ -60,7 +63,7 @@ services:
       MYSQL_PASSWORD: yicai
       MYSQL_ROOT_PASSWORD: yicai-root
     ports:
-      - "3306:3306"
+      - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -72,7 +75,7 @@ services:
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "16379:6379"
 
   minio:
     image: minio/minio:latest
@@ -81,8 +84,8 @@ services:
       MINIO_ROOT_USER: yicai
       MINIO_ROOT_PASSWORD: yicai123456
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "19000:9000"
+      - "19001:9001"
     volumes:
       - minio_data:/data
 

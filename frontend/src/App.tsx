@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import * as XLSX from "xlsx";
+import { backendApiUrl, ocrServiceUrl } from "./apiConfig";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -563,15 +564,6 @@ function parseOptionNumber(value: string) {
   return Number(value.match(/\d+/)?.[0] ?? "0");
 }
 
-function ocrServiceUrl(path: string) {
-  if (!import.meta.env.DEV) return new URL(path, window.location.origin).toString();
-  const origin = window.location.origin;
-  const url = new URL(origin);
-  url.port = "8100";
-  url.pathname = path;
-  return url.toString();
-}
-
 async function prepareOcrUpload(file: File) {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") return file;
   try {
@@ -598,12 +590,6 @@ async function prepareOcrUpload(file: File) {
   } catch {
     return file;
   }
-}
-
-function backendApiUrl(path: string) {
-  const url = new URL(path, window.location.origin);
-  if (import.meta.env.DEV) url.port = "8000";
-  return url.toString();
 }
 
 function throwIfAuthExpired(response: Response) {
@@ -3688,6 +3674,20 @@ export default function App() {
   };
 
   if (!canAccessView(permissions, view)) {
+    if (visibleNavItems.length === 0) {
+      return (
+        <div className="loading">
+          <div className="loading-card">
+            <AlertTriangle size={28} />
+            <h1>当前账号无可用页面权限</h1>
+            <p>请确认已分配角色，且角色权限数据已写入 roles 表后重新登录。</p>
+            <div className="loading-actions">
+              <button className="primary" type="button" onClick={() => void logout()}>重新登录</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return <div className="loading">正在校验页面权限...</div>;
   }
 
