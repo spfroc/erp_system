@@ -1721,6 +1721,7 @@ def _apply_collection_list_query(collection: str, queryset, request):
                 | Q(brand__icontains=search)
                 | Q(company_name__icontains=search)
                 | Q(phone__icontains=search)
+                | Q(data__domains__icontains=search)
             )
     elif collection == "officialPages":
         site_id = (get("siteId") or "").strip()

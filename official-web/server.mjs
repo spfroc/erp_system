@@ -8,6 +8,7 @@ import {
   renderNoticeListPage,
   renderNoticesSitemapXml,
 } from "./lib/notices-ssr.mjs";
+import { fetchOfficialHomeConfig, injectHomeConfigIntoHtml } from "./lib/home-config.mjs";
 import { fetchOfficialSeo, getSiteSeo, requestOrigin } from "./lib/seo.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -309,6 +310,24 @@ const server = http.createServer(async (req, res) => {
       sendText(res, 404, "Not Found", "text/html; charset=utf-8");
       return;
     }
+
+    const isHomeHtml =
+      filePath.endsWith(`${path.sep}index.html`) &&
+      (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "");
+    if (isHomeHtml) {
+      try {
+        const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+        const homeConfig = await fetchOfficialHomeConfig(host);
+        if (homeConfig) {
+          const html = fs.readFileSync(filePath, "utf8");
+          sendHtml(res, 200, injectHomeConfigIntoHtml(html, homeConfig));
+          return;
+        }
+      } catch {
+        // fall through to static file
+      }
+    }
+
     sendFile(res, filePath);
   } catch (error) {
     sendText(res, 500, error instanceof Error ? error.message : "Internal Server Error");

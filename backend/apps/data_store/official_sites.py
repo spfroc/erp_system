@@ -48,6 +48,138 @@ def normalize_host(value: str | None) -> str:
     return host
 
 
+def bare_host(value: str | None) -> str:
+    host = normalize_host(value)
+    return host[4:] if host.startswith("www.") else host
+
+
+def _normalize_domains(value: Any, primary: str = "") -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = re.split(r"[\r\n,]+", value)
+    else:
+        items = []
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        host = normalize_host(raw)
+        if not host:
+            continue
+        key = bare_host(host)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(host)
+    primary_host = normalize_host(primary)
+    if primary_host:
+        primary_bare = bare_host(primary_host)
+        result = [item for item in result if bare_host(item) != primary_bare]
+        result.insert(0, primary_host)
+    return result
+
+
+def _text_item(value: Any, *keys: str, default: str = "") -> str:
+    if not isinstance(value, dict):
+        return default
+    for key in keys:
+        text = str(value.get(key) or "").strip()
+        if text:
+            return text
+    return default
+
+
+def _normalize_contact(value: Any, fallback: dict[str, Any] | None = None) -> dict[str, str]:
+    src = value if isinstance(value, dict) else {}
+    fb = fallback or {}
+    return {
+        "hotline": _text_item(src, "hotline", "phone") or str(fb.get("phone") or fb.get("hotline") or "").strip(),
+        "mobile": _text_item(src, "mobile"),
+        "wechatQrUrl": _text_item(src, "wechatQrUrl", "wechat_qr_url") or "/image/wx.png",
+        "email": _text_item(src, "email") or str(fb.get("email") or "").strip(),
+        "contactName": _text_item(src, "contactName", "contact_name"),
+        "address": _text_item(src, "address") or str(fb.get("address") or "").strip(),
+    }
+
+
+def _normalize_named_list(value: Any, *, name_keys: tuple[str, ...] = ("title", "name", "label")) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    items: list[dict[str, str]] = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            continue
+        title = ""
+        for key in name_keys:
+            title = str(raw.get(key) or "").strip()
+            if title:
+                break
+        if not title:
+            continue
+        items.append(
+            {
+                "title": title,
+                "description": str(raw.get("description") or raw.get("text") or "").strip(),
+                "icon": str(raw.get("icon") or "").strip(),
+                "name": str(raw.get("name") or title).strip(),
+                "label": str(raw.get("label") or title).strip(),
+                "value": str(raw.get("value") or title).strip(),
+                "url": str(raw.get("url") or raw.get("href") or "").strip(),
+                "contentHtml": str(raw.get("contentHtml") or raw.get("content") or "").strip(),
+            }
+        )
+    return items
+
+
+def _normalize_industries(value: Any) -> list[dict[str, str]]:
+    return [
+        {"title": item["title"], "description": item["description"], "icon": item["icon"]}
+        for item in _normalize_named_list(value, name_keys=("title", "name"))
+    ]
+
+
+def _normalize_inquiry_platforms(value: Any) -> list[dict[str, str]]:
+    return [
+        {"label": item["label"], "value": item["value"]}
+        for item in _normalize_named_list(value, name_keys=("label", "name", "title", "value"))
+    ]
+
+
+def _normalize_footer_platforms(value: Any) -> list[dict[str, str]]:
+    return [
+        {"name": item["name"], "url": item["url"]}
+        for item in _normalize_named_list(value, name_keys=("name", "title", "label"))
+    ]
+
+
+def _normalize_footer_services(value: Any) -> list[dict[str, str]]:
+    return [
+        {"title": item["title"], "contentHtml": item["contentHtml"], "url": item["url"]}
+        for item in _normalize_named_list(value, name_keys=("title", "name", "label"))
+    ]
+
+
+def _normalize_footer(value: Any) -> dict[str, Any]:
+    src = value if isinstance(value, dict) else {}
+    return {
+        "platforms": _normalize_footer_platforms(src.get("platforms")),
+        "services": _normalize_footer_services(src.get("services")),
+        "keywords": str(src.get("keywords") or "").strip(),
+    }
+
+
+def _normalize_beian(value: Any) -> dict[str, str]:
+    src = value if isinstance(value, dict) else {}
+    return {
+        "copyright": _text_item(src, "copyright"),
+        "icpText": _text_item(src, "icpText", "icp_text"),
+        "icpUrl": _text_item(src, "icpUrl", "icp_url") or "https://beian.miit.gov.cn/#/Integrated/index",
+        "telecomLicense": _text_item(src, "telecomLicense", "telecom_license"),
+        "policeText": _text_item(src, "policeText", "police_text"),
+        "policeUrl": _text_item(src, "policeUrl", "police_url") or "https://beian.mps.gov.cn/#/query/webSearch",
+    }
+
+
 def site_defaults(payload: dict) -> dict:
     data = normalize_site_payload(payload)
     return {
@@ -58,10 +190,9 @@ def site_defaults(payload: dict) -> dict:
         "domain": data.get("domain") or "",
         "brand": data.get("brand") or "",
         "company_name": data.get("companyName") or "",
-        "phone": data.get("phone") or "",
+        "phone": data.get("phone") or data.get("contact", {}).get("hotline") or "",
         "status": data.get("status") or "启用",
     }
-
 
 def page_defaults(payload: dict) -> dict:
     data = normalize_page_payload(payload)
@@ -81,17 +212,39 @@ def normalize_site_payload(payload: dict) -> dict:
     now = _now()
     domain = normalize_host(payload.get("domain") or payload.get("host"))
     key = (payload.get("key") or "").strip() or (domain.replace("www.", "").split(".")[0] if domain else "")
+    contact = _normalize_contact(
+        payload.get("contact"),
+        {
+            "phone": payload.get("phone"),
+            "email": payload.get("email"),
+            "address": payload.get("address"),
+            "hotline": payload.get("phone"),
+        },
+    )
+    domains = _normalize_domains(payload.get("domains"), primary=domain)
+    if not domains and domain:
+        domains = [domain]
+    phone = (payload.get("phone") or "").strip() or contact.get("hotline") or ""
+    email = (payload.get("email") or "").strip() or contact.get("email") or ""
+    address = (payload.get("address") or "").strip() or contact.get("address") or ""
     return {
         **payload,
         "id": payload.get("id") or f"site-{key}",
         "key": key,
         "name": (payload.get("name") or "").strip() or key,
-        "domain": domain,
+        "domain": domain or (domains[0] if domains else ""),
+        "domains": domains,
+        "mirrorKey": (payload.get("mirrorKey") or key).strip() or key,
         "brand": (payload.get("brand") or "").strip(),
         "companyName": (payload.get("companyName") or "").strip(),
-        "phone": (payload.get("phone") or "").strip(),
-        "email": (payload.get("email") or "").strip(),
-        "address": (payload.get("address") or "").strip(),
+        "phone": phone,
+        "email": email,
+        "address": address,
+        "contact": contact,
+        "industries": _normalize_industries(payload.get("industries")),
+        "inquiryPlatforms": _normalize_inquiry_platforms(payload.get("inquiryPlatforms")),
+        "footer": _normalize_footer(payload.get("footer")),
+        "beian": _normalize_beian(payload.get("beian")),
         "logoUrl": (payload.get("logoUrl") or "").strip(),
         "primaryColor": (payload.get("primaryColor") or "").strip() or "#0066cc",
         "seoTitle": (payload.get("seoTitle") or "").strip(),
@@ -108,6 +261,21 @@ def normalize_site_payload(payload: dict) -> dict:
         "updatedAt": now,
     }
 
+
+def public_home_config(site_data: dict[str, Any] | None) -> dict[str, Any]:
+    data = normalize_site_payload(dict(site_data or {}))
+    return {
+        "key": data.get("key") or "",
+        "mirrorKey": data.get("mirrorKey") or data.get("key") or "",
+        "brand": data.get("brand") or "",
+        "companyName": data.get("companyName") or "",
+        "domains": list(data.get("domains") or []),
+        "contact": data.get("contact") or {},
+        "industries": list(data.get("industries") or []),
+        "inquiryPlatforms": list(data.get("inquiryPlatforms") or []),
+        "footer": data.get("footer") or {"platforms": [], "services": [], "keywords": ""},
+        "beian": data.get("beian") or {},
+    }
 
 def normalize_page_payload(payload: dict) -> dict:
     now = _now()
@@ -341,17 +509,106 @@ OFFICIAL_SEO_DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 
+_YICAI_CONTACT = {
+    "hotline": "0531-86099058",
+    "mobile": "13105315957",
+    "wechatQrUrl": "/image/wx.png",
+    "email": "Wangyunlei@yizhichan.co",
+    "contactName": "王老师",
+    "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
+}
+
+_YICAI_INDUSTRIES = [
+    {"title": "办公用品", "description": "笔、纸、文件夹、办公耗材等各类办公用品供应商", "icon": "fa-pencil-alt"},
+    {"title": "办公设备", "description": "打印机、复印机、扫描仪等办公设备供应商", "icon": "fa-print"},
+    {"title": "IT设备", "description": "计算机、服务器、网络设备等IT设备供应商", "icon": "fa-laptop"},
+    {"title": "电器类", "description": "空调、冰箱、电视等家用及商用电器供应商", "icon": "fa-tv"},
+    {"title": "生活日用品", "description": "清洁用品、个人护理等生活日用品供应商", "icon": "fa-home"},
+    {"title": "五金工具", "description": "手动工具、电动工具、五金配件等供应商", "icon": "fa-tools"},
+    {"title": "消防救援", "description": "消防器材、应急救援设备等供应商", "icon": "fa-fire-extinguisher"},
+    {"title": "系统集成", "description": "舞台灯光、音响设备、会议系统、安防监控、信息化系统集成等服务供应商", "icon": "fa-server"},
+]
+
+_YICAI_INQUIRY_PLATFORMS = [
+    {"label": "齐鲁云采", "value": "齐鲁云采"},
+    {"label": "框架协议", "value": "框架协议"},
+    {"label": "泉E采", "value": "泉E采"},
+    {"label": "多个平台", "value": "多个平台"},
+]
+
+_YICAI_FOOTER = {
+    "platforms": [
+        {"name": "泉e采阳光采购平台/泉易采", "url": "https://qyc.zhongcy.cn/login"},
+        {"name": "齐鲁云采", "url": "http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001"},
+        {"name": "框架协议", "url": "https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001"},
+        {"name": "济南市公共资源交易中心", "url": "https://jnggzy.jinan.gov.cn/"},
+        {"name": "山东省政府采购信息公开平台", "url": "http://www.ccgp-shandong.gov.cn/#/home"},
+    ],
+    "services": [
+        {"title": "采购公告", "contentHtml": "", "url": "/notices"},
+        {"title": "平台入驻服务", "contentHtml": "", "url": "#"},
+        {"title": "技术对接服务", "contentHtml": "", "url": "#"},
+        {"title": "运营指导服务", "contentHtml": "", "url": "#"},
+        {"title": "资源整合服务", "contentHtml": "", "url": "#"},
+    ],
+    "keywords": "",
+}
+
+_YICAI_BEIAN = {
+    "copyright": "© 2023-2025 山东壹知产数字科技有限公司 版权所有",
+    "icpText": "鲁ICP备2021004355号",
+    "icpUrl": "https://beian.miit.gov.cn/#/Integrated/index",
+    "telecomLicense": "电信增值业务许可证：鲁B2-20210548",
+    "policeText": "鲁公网安备 37010302001675",
+    "policeUrl": "https://beian.mps.gov.cn/#/query/webSearch",
+}
+
+_QHC_FOOTER = {
+    "platforms": [
+        {"name": "青岛政企阳光采购平台", "url": "https://qhc.zhongcy.cn/login"},
+        {"name": "青岛国易采购", "url": "https://qhc.zhongcy.cn/login"},
+        {"name": "青岛市公共资源交易网", "url": "http://ggzy.qingdao.gov.cn"},
+        {"name": "齐鲁云采", "url": "http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001"},
+        {"name": "框架协议", "url": "https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001"},
+        {"name": "山东省政府采购信息公开平台", "url": "http://www.ccgp-shandong.gov.cn/#/home"},
+    ],
+    "services": [
+        {"title": "平台介绍", "contentHtml": "", "url": "#intro"},
+        {"title": "入驻条件", "contentHtml": "", "url": "#conditions"},
+        {"title": "入驻流程", "contentHtml": "", "url": "#process"},
+        {"title": "服务内容", "contentHtml": "", "url": "#services"},
+        {"title": "入驻代办/代运营", "contentHtml": "", "url": "#agency-service"},
+    ],
+    "keywords": "青慧采 | 青慧采入驻代办 | 青慧采代运营 | 青慧采项目商机 | 青岛政企阳光采购平台 | 青岛政府采购 | 青岛国企采购 | 京东政企合作 | 小额零星采购",
+}
+
+_QHC_BEIAN = {
+    "copyright": "© 2023-2025 山东壹知产数字科技有限公司 版权所有",
+    "icpText": "鲁ICP备2021004355号",
+    "icpUrl": "https://beian.miit.gov.cn/#/Integrated/index",
+    "telecomLicense": "电信增值业务许可证：鲁B2-20210548",
+    "policeText": "鲁公网安备 37010302001037",
+    "policeUrl": "https://beian.mps.gov.cn/#/query/webSearch",
+}
+
 SITE_SEEDS = [
     {
         "id": "site-qlyc",
         "key": "qlyc",
         "name": "壹采官网",
         "domain": "www.qlyc.co",
+        "domains": ["www.qlyc.co", "www.yizhichan.co"],
+        "mirrorKey": "qlyc",
         "brand": "壹采",
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
         "email": "Wangyunlei@yizhichan.co",
         "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
+        "contact": _YICAI_CONTACT,
+        "industries": _YICAI_INDUSTRIES,
+        "inquiryPlatforms": _YICAI_INQUIRY_PLATFORMS,
+        "footer": _YICAI_FOOTER,
+        "beian": _YICAI_BEIAN,
         "logoUrl": "/image/logo.png",
         "primaryColor": "#0066cc",
         **OFFICIAL_SEO_DEFAULTS["qlyc"],
@@ -359,28 +616,20 @@ SITE_SEEDS = [
         "homePublished": True,
     },
     {
-        "id": "site-yizhichan",
-        "key": "yizhichan",
-        "name": "壹知产官网",
-        "domain": "www.yizhichan.co",
-        "brand": "壹知产",
-        "companyName": "山东壹知产数字科技有限公司",
-        "phone": "0531-86099058",
-        "email": "Wangyunlei@yizhichan.co",
-        "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
-        "primaryColor": "#0066cc",
-        **OFFICIAL_SEO_DEFAULTS["yizhichan"],
-        "status": "启用",
-        "homePublished": False,
-    },
-    {
         "id": "site-jinanyunji",
         "key": "jinanyunji",
         "name": "济南云集官网",
         "domain": "www.jinanyunji.com",
+        "domains": ["www.jinanyunji.com"],
+        "mirrorKey": "jinanyunji",
         "brand": "济南云集",
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
+        "contact": {**_YICAI_CONTACT},
+        "industries": [],
+        "inquiryPlatforms": [],
+        "footer": {"platforms": [], "services": [], "keywords": ""},
+        "beian": {**_YICAI_BEIAN},
         "primaryColor": "#0066cc",
         **OFFICIAL_SEO_DEFAULTS["jinanyunji"],
         "status": "启用",
@@ -391,16 +640,26 @@ SITE_SEEDS = [
         "key": "qinghuicai",
         "name": "青慧采官网",
         "domain": "www.qinghuicai.cn",
+        "domains": ["www.qinghuicai.cn"],
+        "mirrorKey": "qinghuicai",
         "brand": "青慧采",
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
+        "email": "Wangyunlei@yizhichan.co",
+        "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
+        "contact": {**_YICAI_CONTACT},
+        "industries": [],
+        "inquiryPlatforms": [{"label": "青慧采", "value": "青慧采"}],
+        "footer": _QHC_FOOTER,
+        "beian": _QHC_BEIAN,
         "primaryColor": "#1f7a4d",
         **OFFICIAL_SEO_DEFAULTS["qinghuicai"],
         "status": "启用",
-        "homePublished": False,
+        "homePublished": True,
     },
 ]
 
+_HOME_CONFIG_FIELDS = ("domains", "mirrorKey", "contact", "industries", "inquiryPlatforms", "footer", "beian")
 
 _SEO_FIELDS = (
     "seoTitle",
@@ -422,6 +681,7 @@ def public_seo_payload(site_data: dict[str, Any]) -> dict[str, Any]:
         "key": data.get("key") or "",
         "name": data.get("name") or "",
         "domain": data.get("domain") or "",
+        "domains": list(data.get("domains") or []),
         "brand": data.get("brand") or "",
         "seoTitle": data.get("seoTitle") or "",
         "seoDescription": data.get("seoDescription") or "",
@@ -433,6 +693,62 @@ def public_seo_payload(site_data: dict[str, Any]) -> dict[str, Any]:
         "baiduSiteVerification": data.get("baiduSiteVerification") or "",
         "googleSiteVerification": data.get("googleSiteVerification") or "",
     }
+
+
+def _is_empty_home_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list):
+        return len(value) == 0
+    if isinstance(value, dict):
+        if not value:
+            return True
+        # footer/contact/beian: empty if all nested values empty
+        return all(_is_empty_home_value(item) for item in value.values())
+    return False
+
+
+def _merge_home_config_defaults(data: dict[str, Any], seed: dict[str, Any]) -> bool:
+    changed = False
+    for field in _HOME_CONFIG_FIELDS:
+        if field not in seed:
+            continue
+        if _is_empty_home_value(data.get(field)) and not _is_empty_home_value(seed.get(field)):
+            data[field] = deepcopy(seed.get(field))
+            changed = True
+    # Always ensure yizhichan alias on qlyc when missing
+    if (data.get("key") or seed.get("key")) == "qlyc":
+        domains = _normalize_domains(data.get("domains"), primary=data.get("domain") or seed.get("domain") or "")
+        for alias in ("www.yizhichan.co", "yizhichan.co"):
+            if bare_host(alias) not in {bare_host(item) for item in domains}:
+                domains.append(normalize_host(alias))
+                changed = True
+        if domains != list(data.get("domains") or []):
+            data["domains"] = domains
+            changed = True
+    return changed
+
+
+def _retire_legacy_yizhichan_site() -> None:
+    """qlyc/yizhichan 共用 site-qlyc；旧 site-yizhichan 软删除避免 host 解析抢占。"""
+    from django.utils import timezone as dj_tz
+
+    legacy = OfficialSiteRecord.objects.filter(id="site-yizhichan", is_deleted=False).first()
+    if not legacy:
+        return
+    now = dj_tz.now()
+    legacy.is_deleted = True
+    legacy.deleted_at = now
+    legacy.deleted_by = "system:merge-domains"
+    legacy.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
+    page = OfficialPageRecord.objects.filter(id="page-site-yizhichan-home", is_deleted=False).first()
+    if page:
+        page.is_deleted = True
+        page.deleted_at = now
+        page.deleted_by = "system:merge-domains"
+        page.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
 
 
 def apply_official_seo_defaults(*, overwrite: bool = False) -> list[dict[str, Any]]:
@@ -467,6 +783,7 @@ def apply_official_seo_defaults(*, overwrite: bool = False) -> list[dict[str, An
 
 
 def ensure_default_official_sites() -> list[OfficialSiteRecord]:
+    _retire_legacy_yizhichan_site()
     created_sites: list[OfficialSiteRecord] = []
     for seed in SITE_SEEDS:
         payload = normalize_site_payload(deepcopy(seed))
@@ -475,13 +792,15 @@ def ensure_default_official_sites() -> list[OfficialSiteRecord]:
             # 尊重后台删除，不再自动恢复种子站点。
             continue
         if existing:
-            # 已有站点：仅补齐空的 SEO 字段，避免每次 ensure 覆盖运营配置。
+            # 已有站点：仅补齐空的 SEO / 首页运营字段，避免覆盖运营配置。
             data = dict(existing.data or {})
             changed = False
             for field in _SEO_FIELDS:
                 if data.get(field) in (None, "", [], {}) and payload.get(field) not in (None, "", [], {}):
                     data[field] = payload.get(field)
                     changed = True
+            if _merge_home_config_defaults(data, seed):
+                changed = True
             if changed:
                 merged = normalize_site_payload({**data, "id": existing.id, "createdAt": data.get("createdAt")})
                 for attr, value in site_defaults(merged).items():
@@ -544,19 +863,42 @@ def ensure_default_official_sites() -> list[OfficialSiteRecord]:
                 deleted_at=None,
                 deleted_by="",
             )
+        elif payload["key"] == "qinghuicai" and page_existing.status != "published" and seed.get("homePublished"):
+            # 青慧采首页纳入运营配置后默认发布，便于公开 API 返回 homeConfig 配套 page
+            page_existing.status = "published"
+            data = dict(page_existing.data or {})
+            data["status"] = "published"
+            page_existing.data = data
+            page_existing.save(update_fields=["status", "data", "updated_at"])
     return created_sites
+
+
+def _site_matches_host(site: OfficialSiteRecord, bare: str) -> bool:
+    if bare_host(site.domain) == bare:
+        return True
+    data = site.data or {}
+    for item in data.get("domains") or []:
+        if bare_host(item) == bare:
+            return True
+    return False
 
 
 def find_official_site_by_host(host: str) -> OfficialSiteRecord | None:
     ensure_default_official_sites()
     normalized = normalize_host(host)
-    bare = normalized[4:] if normalized.startswith("www.") else normalized
-    return (
-        OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=normalized).first()
-        or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=f"www.{bare}").first()
-        or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=bare).first()
-        or OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", key=bare.split(".")[0]).first()
-    )
+    bare = bare_host(normalized)
+    if not bare:
+        return None
+    # Prefer explicit domain column matches, then domains[] aliases.
+    for candidate in (normalized, f"www.{bare}", bare):
+        site = OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", domain=candidate).first()
+        if site:
+            return site
+    for site in OfficialSiteRecord.objects.filter(is_deleted=False, status="启用").iterator():
+        if _site_matches_host(site, bare):
+            return site
+    key = bare.split(".")[0]
+    return OfficialSiteRecord.objects.filter(is_deleted=False, status="启用", key=key).first()
 
 
 def resolve_public_site(host: str, slug: str = "home") -> dict | None:
@@ -573,4 +915,9 @@ def resolve_public_site(host: str, slug: str = "home") -> dict | None:
         .order_by("sort_order", "id")
         .first()
     )
-    return {"site": site.data, "page": page.data if page else None}
+    site_data = site.data or {}
+    return {
+        "site": site_data,
+        "page": page.data if page else None,
+        "homeConfig": public_home_config(site_data),
+    }

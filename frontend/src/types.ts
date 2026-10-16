@@ -602,16 +602,65 @@ export interface NoticeCollectionRun {
   updatedAt?: string;
 }
 
+export interface OfficialSiteContact {
+  hotline?: string;
+  mobile?: string;
+  wechatQrUrl?: string;
+  email?: string;
+  contactName?: string;
+  address?: string;
+}
+
+export interface OfficialIndustryItem {
+  title: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface OfficialInquiryPlatform {
+  label: string;
+  value: string;
+}
+
+export interface OfficialFooterLink {
+  name?: string;
+  title?: string;
+  url?: string;
+  contentHtml?: string;
+}
+
+export interface OfficialSiteFooter {
+  platforms?: OfficialFooterLink[];
+  services?: OfficialFooterLink[];
+  keywords?: string;
+}
+
+export interface OfficialSiteBeian {
+  copyright?: string;
+  icpText?: string;
+  icpUrl?: string;
+  telecomLicense?: string;
+  policeText?: string;
+  policeUrl?: string;
+}
+
 export interface OfficialSite {
   id: string;
   key: string;
   name: string;
   domain: string;
+  domains?: string[];
+  mirrorKey?: string;
   brand: string;
   companyName?: string;
   phone?: string;
   email?: string;
   address?: string;
+  contact?: OfficialSiteContact;
+  industries?: OfficialIndustryItem[];
+  inquiryPlatforms?: OfficialInquiryPlatform[];
+  footer?: OfficialSiteFooter;
+  beian?: OfficialSiteBeian;
   logoUrl?: string;
   primaryColor?: string;
   seoTitle?: string;
