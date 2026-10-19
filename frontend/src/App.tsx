@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { backendApiUrl, ocrServiceUrl } from "./apiConfig";
-import { Notices } from "./Notices";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -233,7 +232,6 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "receiptStats", label: "收款统计", icon: BarChart3, permission: "finance.view" },
   { id: "paymentStats", label: "付款统计", icon: BarChart3, permission: "finance.view" },
   { id: "trademarkCertificates", label: "商标注册", icon: Stamp, permission: "trademarkCertificate.view" },
-  { id: "notices", label: "公告管理", icon: FileText, permission: "notice.view" },
   { id: "logs", label: "操作日志", icon: History, permission: "user.manage" },
   { id: "collectionAccounts", label: "收款账号管理", icon: Banknote, permission: "user.manage" },
   { id: "optionSettings", label: "选项管理", icon: BadgeCheck, permission: "user.manage" },
@@ -3942,7 +3940,6 @@ export default function App() {
         {view === "receiptStats" && <CashflowStats data={data} kind="receipt" />}
         {view === "paymentStats" && <CashflowStats data={data} kind="payment" />}
         {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
-        {view === "notices" && <Notices onNotice={setNotice} />}
         {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
         {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
         {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
