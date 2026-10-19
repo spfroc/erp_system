@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { backendApiUrl, ocrServiceUrl } from "./apiConfig";
+import { Notices } from "./Notices";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -165,7 +166,7 @@ import {
 } from "./serviceContract";
 import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
-type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
+type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "notices" | "logs" | "collectionAccounts" | "optionSettings" | "access";
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
 const ORDER_PAGE_COPY: Record<OrderListTab, { title: string; subtitle: string; search: string }> = {
@@ -218,6 +219,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "receiptStats", label: "收款统计", icon: BarChart3, permission: "finance.view" },
   { id: "paymentStats", label: "付款统计", icon: BarChart3, permission: "finance.view" },
   { id: "trademarkCertificates", label: "商标注册", icon: Stamp, permission: "trademarkCertificate.view" },
+  { id: "notices", label: "公告管理", icon: FileText, permission: "notice.view" },
   { id: "logs", label: "操作日志", icon: History, permission: "user.manage" },
   { id: "collectionAccounts", label: "收款账号管理", icon: Banknote, permission: "user.manage" },
   { id: "optionSettings", label: "选项管理", icon: BadgeCheck, permission: "user.manage" },
@@ -330,14 +332,16 @@ const permissionLabels: Record<PermissionKey, string> = {
   "platformAccount.manage": "管理平台账号",
   "trademarkCertificate.view": "查看商标注册证",
   "trademarkCertificate.manage": "管理商标注册证",
+  "notice.view": "查看公告",
+  "notice.manage": "管理公告",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "user.manage"] },
 ];
@@ -352,6 +356,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "trademarkCertificate.view") {
     return permissionSet.has("trademarkCertificate.manage");
+  }
+  if (permission === "notice.view") {
+    return permissionSet.has("notice.manage");
   }
   if (permission === "serviceOrder.view") {
     return permissionSet.has("serviceOrder.manage");
@@ -3936,6 +3943,7 @@ export default function App() {
         {view === "receiptStats" && <CashflowStats data={data} kind="receipt" />}
         {view === "paymentStats" && <CashflowStats data={data} kind="payment" />}
         {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
+        {view === "notices" && <Notices onNotice={setNotice} />}
         {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
         {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
         {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}

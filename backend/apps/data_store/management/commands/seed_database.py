@@ -60,6 +60,8 @@ ALL_PERMISSIONS = [
     "platformAccount.manage",
     "trademarkCertificate.view",
     "trademarkCertificate.manage",
+    "notice.view",
+    "notice.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",

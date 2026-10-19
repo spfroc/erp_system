@@ -562,6 +562,8 @@ PERMISSION_ALIASES = {
     "purchaseOrder.manage": ("purchaseOrder.manage", "purchase.manage"),
     "serviceOrder.view": ("serviceOrder.view", "serviceOrder.manage", "project.view", "onboarding.manage"),
     "serviceOrder.manage": ("serviceOrder.manage", "project.edit", "onboarding.manage", "finance.manage"),
+    "notice.view": ("notice.view", "notice.manage"),
+    "notice.manage": ("notice.manage",),
 }
 
 
