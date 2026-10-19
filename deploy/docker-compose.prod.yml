@@ -51,6 +51,23 @@ services:
     networks:
       - internal
 
+  notice-crawler:
+    build:
+      context: ../notice_crawler
+    container_name: yzc-erp-notice-crawler-prod
+    restart: unless-stopped
+    env_file:
+      - ../notice_crawler/.env
+    environment:
+      EXTRACTOR_BACKEND: heuristic
+      CRAWL_INTERVAL_SECONDS: "10800"
+      CRAWL_STOP_DUP: "5"
+      CRAWL_LOOKBACK_DAYS: "2"
+    networks:
+      - internal
+    volumes:
+      - notice-crawler-data:/app/data
+
 networks:
   internal:
     name: yzc-erp.internal
@@ -60,3 +77,5 @@ networks:
 volumes:
   business-documents:
     name: yzc-erp.business-documents
+  notice-crawler-data:
+    name: yzc-erp.notice-crawler-data

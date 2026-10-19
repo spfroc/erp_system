@@ -80,6 +80,14 @@ python cli.py init-db
 python cli.py ping
 ```
 
+## Docker
+
+`deploy/docker-compose.dev.yml` 与 `deploy/docker-compose.prod.yml` 含 `notice-crawler`。容器启动后立刻抓一轮，然后每 3 小时循环：公告（近 2 天 + `--stop-dup 5`）、京东附件、供应商。
+
+```bash
+docker compose -f deploy/docker-compose.dev.yml up -d --build notice-crawler
+```
+
 ## 常用命令
 
 ```bash

@@ -36,6 +36,30 @@ CLOSED_KIND_KEYWORDS = ("成交结果", "结果公告", "终止", "废标", "失
 # 「进行中」不包含直接采购 / 直购
 DIRECT_PURCHASE_KEYWORDS = ("直接采购", "直购")
 
+# 列表接口按分类抓取时已写入 notice_raw.notice_type，未解析也能显示
+NOTICE_TYPE_LABELS = {
+    "jd-quan-yicai": {
+        "1": "采购公告",
+        "2": "成交公告",
+        "3": "终止公告",
+        "4": "失败公告",
+        "5": "询比公告",
+        "6": "废标公告",
+    },
+    "sd-ggzyjyzx": {
+        "0": "采购公告",
+        "1": "成交公告",
+        "5": "终止公告",
+        "10": "终止公告",
+        "13": "公示公告",
+    },
+    "sd-gpfa-frame": {
+        "0": "采购公告",
+        "1": "成交公告",
+        "10": "终止公告",
+    },
+}
+
 
 def _parse_dt(value: Any):
     """解析字符串 / 秒或毫秒时间戳为 aware datetime。"""
@@ -110,18 +134,34 @@ def _resolve_times(raw: NoticeRaw, parsed: NoticeParsed | None) -> tuple:
     return start, end
 
 
+def _kind_from_notice_type(site_id: str | None, notice_type: Any) -> str:
+    code = str(notice_type).strip() if notice_type not in (None, "") else ""
+    if not code:
+        return ""
+    return NOTICE_TYPE_LABELS.get(site_id or "", {}).get(code, "")
+
+
 def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
     kind = (parsed.notice_kind if parsed and parsed.notice_kind else "") or ""
     kind = kind.strip()
-    if kind:
+    # 解析结果有时只落了接口里的数字编码
+    if kind and not kind.isdigit():
         return kind
     detail = _json_dict(raw.detail_json)
     list_item = _json_dict(raw.list_json)
     for key in ("noticeTypeName", "noticeKind", "typeName"):
         for src in (detail, list_item):
             v = src.get(key)
-            if v:
+            if v and not str(v).strip().isdigit():
                 return str(v).strip()
+    mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
+    if not mapped:
+        mapped = _kind_from_notice_type(
+            raw.site_id,
+            detail.get("noticeType") if detail.get("noticeType") not in (None, "") else list_item.get("noticeType"),
+        )
+    if mapped:
+        return mapped
     title = (raw.title or "") + " " + (parsed.notice_title if parsed and parsed.notice_title else "")
     for token, label in (
         ("废标", "废标公告"),
@@ -133,7 +173,38 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
     ):
         if token in title:
             return label
-    return ""
+    return kind if kind and not kind.isdigit() else ""
+
+
+def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
+    """公告类型筛选：解析字段，或抓取时写入的 notice_type 编码。"""
+    q = Q(
+        id__in=NoticeParsed.objects.filter(notice_kind=notice_kind).values("notice_raw_id")
+    )
+    for sid, mapping in NOTICE_TYPE_LABELS.items():
+        if site_id and sid != site_id:
+            continue
+        codes = [code for code, label in mapping.items() if label == notice_kind]
+        if codes:
+            q |= Q(site_id=sid, notice_type__in=codes)
+    return q
+
+
+def _notice_kind_options(site_id: str) -> list[str]:
+    labels: set[str] = set()
+    kind_qs = NoticeParsed.objects.exclude(notice_kind__isnull=True).exclude(notice_kind="")
+    if site_id:
+        kind_qs = kind_qs.filter(site_id=site_id)
+    labels.update(k.strip() for k in kind_qs.values_list("notice_kind", flat=True).distinct() if k and not str(k).strip().isdigit())
+
+    raw_qs = NoticeRaw.objects.exclude(notice_type__isnull=True).exclude(notice_type="")
+    if site_id:
+        raw_qs = raw_qs.filter(site_id=site_id)
+    for sid, code in raw_qs.values_list("site_id", "notice_type").distinct():
+        label = _kind_from_notice_type(sid, code)
+        if label:
+            labels.add(label)
+    return sorted(labels)
 
 
 def _is_closed_kind(kind: str, title: str = "") -> bool:
@@ -409,10 +480,7 @@ def notice_list(request):
                 | Q(id__in=parsed_ids)
             )
         if notice_kind:
-            kind_ids = list(
-                NoticeParsed.objects.filter(notice_kind=notice_kind).values_list("notice_raw_id", flat=True)[:5000]
-            )
-            qs = qs.filter(id__in=kind_ids)
+            qs = qs.filter(_raw_ids_for_kind(notice_kind, site_id))
         field_ids = _notice_field_filter_ids(
             project_code=project_code,
             project_name=project_name,
@@ -467,15 +535,7 @@ def notice_list(request):
                 _serialize_list_item(r, parsed_map.get(r.id), now=now) for r in page_rows
             ]
 
-        # 公告类型选项随站点变化：选了站点只返回该站出现过的种类
-        kind_qs = NoticeParsed.objects.exclude(notice_kind__isnull=True).exclude(notice_kind="")
-        if site_id:
-            kind_qs = kind_qs.filter(site_id=site_id)
-        notice_kinds = [
-            k
-            for k in kind_qs.values_list("notice_kind", flat=True).distinct().order_by("notice_kind")
-            if k
-        ]
+        notice_kinds = _notice_kind_options(site_id)
 
         return JsonResponse(
             {
