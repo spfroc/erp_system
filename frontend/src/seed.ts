@@ -145,19 +145,19 @@ export const seedData: AppData = {
       id: "role-purchase",
       name: "采购/履约",
       description: "维护供应商、采购、发货、安装和核销。",
-      permissions: ["dashboard.view", "project.view", "entity.view", "product.view", "purchase.manage", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "purchaseOrder.manage"],
+      permissions: ["dashboard.view", "project.view", "entity.view", "product.view", "purchase.manage", "notice.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "purchaseOrder.manage"],
     },
     {
       id: "role-finance",
       name: "财务",
       description: "维护发票、流水、垫付和财务状态。",
-      permissions: ["dashboard.view", "project.view", "entity.view", "finance.view", "finance.manage", "invoice.manage", "profit.view", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
+      permissions: ["dashboard.view", "project.view", "entity.view", "finance.view", "finance.manage", "invoice.manage", "profit.view", "notice.view", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
     },
     {
       id: "role-platform",
       name: "平台运营",
       description: "维护平台入驻、账号资料、备案、CA 和续费。",
-      permissions: ["dashboard.view", "project.view", "entity.view", "entity.create", "onboarding.manage", "platformAccount.view", "platformAccount.manage", "trademarkCertificate.view", "trademarkCertificate.manage", "sensitive.view", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "purchaseOrder.view"],
+      permissions: ["dashboard.view", "project.view", "entity.view", "entity.create", "onboarding.manage", "platformAccount.view", "platformAccount.manage", "trademarkCertificate.view", "trademarkCertificate.manage", "notice.view", "sensitive.view", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "purchaseOrder.view"],
     },
   ],
   users: [
