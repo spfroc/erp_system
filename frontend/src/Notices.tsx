@@ -390,13 +390,11 @@ export function Notices({
                 {text(item.noticeKind)}
                 <em>{text(item.procurementMode)}</em>
               </span>
-              <span>
-                {text(item.publishTime)}
-                <em>
-                  {item.startTime || item.endTime
-                    ? `${text(item.startTime)} ~ ${text(item.endTime)}`
-                    : ""}
-                </em>
+              <span className="notice-times">
+                <em>采集 {text(item.crawledAt)}</em>
+                <em>发布 {text(item.publishTime)}</em>
+                <em>报价开始 {text(item.startTime)}</em>
+                <em>结束 {text(item.endTime)}</em>
               </span>
               <span>
                 <strong className={`notice-progress notice-progress-${item.progressStatus || "unknown"}`}>
@@ -465,9 +463,10 @@ export function Notices({
               <Info label="采购方式" value={detail.procurementMode} />
               <Info label="区域" value={detail.regionName} />
               <Info label="交货地点" value={detail.deliveryAddress} />
-              <Info label="发布时间" value={detail.publishTime} />
-              <Info label="开始时间" value={detail.startTime} />
-              <Info label="截止时间" value={detail.endTime} />
+              <Info label="采集时间" value={detail.crawledAt} />
+              <Info label="公告发布时间" value={detail.publishTime} />
+              <Info label="报价开始时间" value={detail.startTime} />
+              <Info label="结束时间" value={detail.endTime} />
               <Info label="解析状态" value={detail.parseStatus} />
             </div>
 
