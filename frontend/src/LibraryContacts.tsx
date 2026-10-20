@@ -241,7 +241,7 @@ export function LibraryContactsPanel({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>资料库</h2>
+            <h2>政企客户资料库</h2>
             <p>维护客户公司、联系人与跟进标签；可勾选后发送短信。</p>
           </div>
           <div className="panel-title-buttons">

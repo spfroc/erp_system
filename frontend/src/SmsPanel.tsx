@@ -314,7 +314,7 @@ export function SmsPanel({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>短信日志</h2>
+            <h2>短信管理</h2>
             <p>
               独立查看发送记录与模板；通道
               {channel == null

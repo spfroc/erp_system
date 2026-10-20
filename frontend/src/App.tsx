@@ -213,28 +213,28 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: 
   { id: "dashboard", label: "总览", icon: Home, permission: "dashboard.view" },
   { id: "productProjects", label: "商品项目", icon: ClipboardList, permission: "project.view" },
   { id: "serviceProjects", label: "服务项目", icon: ShieldCheck, permission: "project.view" },
+  { id: "contracts", label: "合同管理", icon: FileText, permission: "project.view" },
+  { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
+  { id: "platformAccounts", label: "平台账号", icon: FileScan, permission: "platformAccount.view" },
+  { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
+  { id: "trademarkCertificates", label: "商标管理", icon: Stamp, permission: "trademarkCertificate.view" },
+  { id: "notices", label: "采购信息公告", icon: Bell, permission: "notice.view" },
   { id: "serviceOrders", label: "服务订单", icon: ShieldCheck, permission: "serviceOrder.view" },
   { id: "salesOrders", label: "销售订单", icon: ShoppingCart, permission: "salesOrder.view" },
   { id: "purchaseOrders", label: "采购订单", icon: Truck, permission: "purchaseOrder.view" },
-  { id: "contracts", label: "合同管理", icon: FileText, permission: "project.view" },
-  { id: "entities", label: "企业/单位基础信息库", icon: Building2, permission: "entity.view" },
   { id: "products", label: "商品及价格体系", icon: Boxes, permission: "product.view" },
-  { id: "platformAccounts", label: "平台账号", icon: FileScan, permission: "platformAccount.view" },
-  { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
-  { id: "notices", label: "公告管理", icon: Bell, permission: "notice.view" },
-  { id: "libraryContacts", label: "资料库", icon: BookUser, permission: "library.view" },
-  { id: "customerAccounts", label: "客户账号", icon: Users, permission: "customerAccount.view" },
+  { id: "entities", label: "客户基础信息管理", icon: Building2, permission: "entity.view" },
+  { id: "customerAccounts", label: "登录账号管理", icon: Users, permission: "customerAccount.view" },
+  { id: "libraryContacts", label: "政企客户资料库", icon: BookUser, permission: "library.view" },
   { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
   { id: "officialSeo", label: "SEO配置", icon: Search, permission: "site.view" },
-  { id: "sms", label: "短信日志", icon: MessageCircle, permission: "sms.view" },
-  { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
   { id: "invoices", label: "发票管理", icon: FileText, permission: "invoice.manage" },
   { id: "transactions", label: "交易流水", icon: WalletCards, permission: "finance.view" },
   { id: "financeStatements", label: "财务清单", icon: ClipboardList, permission: "finance.view" },
   { id: "receiptStats", label: "收款统计", icon: BarChart3, permission: "finance.view" },
   { id: "paymentStats", label: "付款统计", icon: BarChart3, permission: "finance.view" },
-  { id: "trademarkCertificates", label: "商标注册", icon: Stamp, permission: "trademarkCertificate.view" },
-  { id: "logs", label: "操作日志", icon: History, permission: "user.manage" },
+  { id: "sms", label: "短信日志", icon: MessageCircle, permission: "sms.view" },
+  { id: "logs", label: "系统操作日志", icon: History, permission: "user.manage" },
   { id: "collectionAccounts", label: "收款账号管理", icon: Banknote, permission: "user.manage" },
   { id: "optionSettings", label: "选项管理", icon: BadgeCheck, permission: "user.manage" },
   { id: "access", label: "用户权限", icon: Users, permission: "user.manage" },
@@ -327,8 +327,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   "project.view": "查看项目",
   "project.create": "新建项目",
   "project.edit": "编辑项目",
-  "entity.view": "查看客户信息",
-  "entity.create": "维护客户信息",
+  "entity.view": "查看客户基础信息",
+  "entity.create": "维护客户基础信息",
   "product.view": "查看商品及价格体系",
   "product.manage": "管理商品及价格体系",
   "purchase.manage": "管理采购履约",
@@ -344,18 +344,18 @@ const permissionLabels: Record<PermissionKey, string> = {
   "onboarding.manage": "管理入驻服务",
   "platformAccount.view": "查看平台账号",
   "platformAccount.manage": "管理平台账号",
-  "trademarkCertificate.view": "查看商标注册证",
-  "trademarkCertificate.manage": "管理商标注册证",
-  "notice.view": "查看公告",
-  "notice.manage": "管理公告与采集",
-  "site.view": "查看官网站点",
-  "site.manage": "管理官网站点",
-  "library.view": "查看资料库",
-  "library.manage": "管理资料库",
+  "trademarkCertificate.view": "查看商标管理",
+  "trademarkCertificate.manage": "管理商标",
+  "notice.view": "查看采购信息公告",
+  "notice.manage": "管理采购信息公告与采集",
+  "site.view": "查看前端网站配置",
+  "site.manage": "管理前端网站配置",
+  "library.view": "查看政企客户资料库",
+  "library.manage": "管理政企客户资料库",
   "sms.view": "查看短信日志",
-  "sms.manage": "发送与管理短信",
-  "customerAccount.view": "查看客户账号",
-  "customerAccount.manage": "管理客户账号",
+  "sms.manage": "短信管理",
+  "customerAccount.view": "查看登录账号",
+  "customerAccount.manage": "管理登录账号",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
@@ -3446,9 +3446,9 @@ export default function App() {
   const [projectMenuOpen, setProjectMenuOpen] = useState(true);
   const [orderMenuOpen, setOrderMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
-  const [baseMenuOpen, setBaseMenuOpen] = useState(false);
   const [officialMenuOpen, setOfficialMenuOpen] = useState(true);
   const [financeMenuOpen, setFinanceMenuOpen] = useState(false);
+  const [logMenuOpen, setLogMenuOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -3665,14 +3665,40 @@ export default function App() {
   const can = (permission: PermissionKey) => hasPermission(permissions, permission);
   const visibleNavItems = navItems.filter((item) => can(item.permission));
   const selectedProject = data.projects.find((project) => project.id === selectedProjectId);
-  const projectNavItems = visibleNavItems.filter((item) => item.id === "productProjects" || item.id === "serviceProjects" || item.id === "contracts");
-  const orderNavItems = visibleNavItems.filter((item) => item.id === "serviceOrders" || item.id === "salesOrders" || item.id === "purchaseOrders");
-  const customerNavItems = visibleNavItems.filter((item) => item.id === "websiteLeads" || item.id === "notices" || item.id === "libraryContacts" || item.id === "customerAccounts");
-  const baseNavItems = visibleNavItems.filter((item) => item.id === "entities" || item.id === "products");
+  const projectNavItems = visibleNavItems.filter((item) =>
+    item.id === "productProjects"
+    || item.id === "serviceProjects"
+    || item.id === "contracts"
+    || item.id === "websiteLeads"
+    || item.id === "platformAccounts"
+    || item.id === "reminders"
+    || item.id === "trademarkCertificates"
+    || item.id === "notices"
+  );
+  const orderNavItems = visibleNavItems.filter((item) =>
+    item.id === "serviceOrders"
+    || item.id === "salesOrders"
+    || item.id === "purchaseOrders"
+    || item.id === "products"
+  );
+  const customerNavItems = visibleNavItems.filter((item) =>
+    item.id === "entities"
+    || item.id === "customerAccounts"
+    || item.id === "libraryContacts"
+  );
   const officialNavItems = visibleNavItems.filter((item) => item.id === "officialSites" || item.id === "officialSeo");
   const financeNavItems = visibleNavItems.filter((item) => item.id === "invoices" || item.id === "transactions" || item.id === "financeStatements" || item.id === "receiptStats" || item.id === "paymentStats");
+  const logNavItems = visibleNavItems.filter((item) => item.id === "sms" || item.id === "logs");
   const systemNavItems = visibleNavItems.filter((item) => item.id === "collectionAccounts" || item.id === "optionSettings" || item.id === "access");
-  const groupedViewIds: View[] = ["productProjects", "serviceProjects", "serviceOrders", "salesOrders", "purchaseOrders", "contracts", "websiteLeads", "notices", "libraryContacts", "customerAccounts", "entities", "products", "officialSites", "officialSeo", "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats", "collectionAccounts", "optionSettings", "access"];
+  const groupedViewIds: View[] = [
+    "productProjects", "serviceProjects", "contracts", "websiteLeads", "platformAccounts", "reminders", "trademarkCertificates", "notices",
+    "serviceOrders", "salesOrders", "purchaseOrders", "products",
+    "entities", "customerAccounts", "libraryContacts",
+    "officialSites", "officialSeo",
+    "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats",
+    "sms", "logs",
+    "collectionAccounts", "optionSettings", "access",
+  ];
   const mainNavItems = visibleNavItems.filter((item) => !groupedViewIds.includes(item.id));
   const openProject = (id: string) => {
     const project = data.projects.find((item) => item.id === id);
@@ -3770,8 +3796,8 @@ export default function App() {
                 onClick={() => setCustomerMenuOpen((open) => !open)}
                 aria-expanded={customerMenuOpen}
               >
-                <MessageSquare size={18} />
-                <span>客户</span>
+                <Building2 size={18} />
+                <span>客户管理</span>
                 <ChevronDown size={15} className={customerMenuOpen ? "open" : ""} />
               </button>
               {customerMenuOpen && customerNavItems.map((item) => {
@@ -3785,28 +3811,6 @@ export default function App() {
               })}
             </div>
           )}
-          {baseNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${baseNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setBaseMenuOpen((open) => !open)}
-                aria-expanded={baseMenuOpen}
-              >
-                <Boxes size={18} />
-                <span>基础配置</span>
-                <ChevronDown size={15} className={baseMenuOpen ? "open" : ""} />
-              </button>
-              {baseMenuOpen && baseNavItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                      <Icon size={16} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-            </div>
-          )}
           {officialNavItems.length > 0 && (
             <div className="nav-group">
               <button
@@ -3815,7 +3819,7 @@ export default function App() {
                 aria-expanded={officialMenuOpen}
               >
                 <Globe size={18} />
-                <span>官网</span>
+                <span>前端网站配置</span>
                 <ChevronDown size={15} className={officialMenuOpen ? "open" : ""} />
               </button>
               {officialMenuOpen && officialNavItems.map((item) => {
@@ -3850,6 +3854,28 @@ export default function App() {
                 <ChevronDown size={15} className={financeMenuOpen ? "open" : ""} />
               </button>
               {financeMenuOpen && financeNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
+                    <Icon size={16} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {logNavItems.length > 0 && (
+            <div className="nav-group">
+              <button
+                className={`nav-group-toggle ${logNavItems.some((item) => item.id === view) ? "active" : ""}`}
+                onClick={() => setLogMenuOpen((open) => !open)}
+                aria-expanded={logMenuOpen}
+              >
+                <History size={18} />
+                <span>日志管理</span>
+                <ChevronDown size={15} className={logMenuOpen ? "open" : ""} />
+              </button>
+              {logMenuOpen && logNavItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
@@ -11571,8 +11597,8 @@ function Entities({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>企业/单位基础信息库</h2>
-            <p>集中维护主体类型、业务身份、纳税人类型及基础资料；统一社会信用代码为必填。</p>
+            <h2>客户基础信息管理</h2>
+            <p>集中维护客户主体、业务身份、纳税人类型及基础资料；列表展示关联服务项目与商品项目数量。</p>
           </div>
           <div className="panel-title-buttons">
             {can("project.edit") && (
@@ -11580,7 +11606,7 @@ function Entities({
                 <FileText size={16} />生成临时合同
               </button>
             )}
-            {can("entity.create") && <button className="primary" onClick={() => openEntityModal()}><UserPlus size={16} />添加企业/单位</button>}
+            {can("entity.create") && <button className="primary" onClick={() => openEntityModal()}><UserPlus size={16} />添加客户</button>}
           </div>
         </div>
         <div className="segmented">
@@ -11595,9 +11621,12 @@ function Entities({
         />
         <div className="table entity-list-table">
           <div className="table-row entity-table head">
-            <span>公司/实体</span><span>身份</span><span>类型/纳税人类型</span><span>统一社会信用代码</span><span>联系人</span><span>修改时间</span><span>操作</span>
+            <span>公司/实体</span><span>身份</span><span>类型/纳税人类型</span><span>统一社会信用代码</span><span>服务项目</span><span>商品项目</span><span>联系人</span><span>修改时间</span><span>操作</span>
           </div>
-          {filteredPage.items.map((org) => (
+          {filteredPage.items.map((org) => {
+            const serviceProjectCount = data.projects.filter((project) => project.type === "服务项目" && project.customerOrgId === org.id).length;
+            const productProjectCount = data.projects.filter((project) => project.type === "商品项目" && project.customerOrgId === org.id).length;
+            return (
             <div className="table-row entity-table" key={org.id}>
               <span className="entity-name-cell">
                 <CopyableLine text={org.name} label="公司名称" onOpen={() => setSelectedOrgId(org.id)}>
@@ -11622,6 +11651,8 @@ function Entities({
                   ) : (org.unifiedCreditCode || "未录入")}
                 </CopyableLine>
               </span>
+              <span>{serviceProjectCount}</span>
+              <span>{productProjectCount}</span>
               <span className="entity-contact-cell">
                 <CopyableLine text={org.legalPerson} label="联系人">
                   {org.legalPerson || "未录入"}
@@ -11640,7 +11671,8 @@ function Entities({
                 {can("entity.create") && <button className="copy-link danger-action" onClick={() => void deleteOrganization(org)}>删除</button>}
               </span>
             </div>
-          ))}
+            );
+          })}
           {filteredPage.items.length === 0 && <div className="table-empty">暂无符合条件的客户信息</div>}
         </div>
         <Pagination {...filteredPage} onPageChange={filteredPage.setPage} />
@@ -13029,7 +13061,7 @@ function TrademarkCertificates({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>商标注册证</h2>
+            <h2>商标管理</h2>
             <p>维护商标注册证资料，支持上传原件 OCR 回填、判重、附件与原件查看。</p>
           </div>
           {canManage && (
@@ -14990,7 +15022,7 @@ function OperationLogs({ data, commit, can }: { data: AppData; commit: (data: Ap
 
   return (
     <div className="panel">
-      <PanelTitle title="操作日志" subtitle="记录关键业务操作；当前开发环境允许删除，正式发布后恢复只读。" />
+      <PanelTitle title="系统操作日志" subtitle="记录关键业务操作；当前开发环境允许删除，正式发布后恢复只读。" />
       <div className="log-list">
         {logsPage.items.map((log) => (
           <article className="log-card" key={log.id}>

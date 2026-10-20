@@ -257,7 +257,7 @@ export function NoticesPanel({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>公告管理</h2>
+            <h2>采购信息公告</h2>
             <p>维护竞价与政采公告，控制是否公开到官网；采集任务命中关键字后写入商机。</p>
           </div>
           <div className="panel-title-buttons">

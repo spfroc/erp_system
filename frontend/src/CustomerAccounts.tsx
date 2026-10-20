@@ -155,7 +155,7 @@ export function CustomerAccountsPanel({
       <div className="panel">
         <div className="panel-title action-title">
           <div>
-            <h2>客户账号</h2>
+            <h2>登录账号管理</h2>
             <p>官网客户控制台登录账号。与员工账号分开，权限只控制公告、订阅和统计。</p>
           </div>
           <div className="panel-title-buttons">
@@ -213,7 +213,7 @@ export function CustomerAccountsPanel({
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
-              <h3>{editing ? "编辑客户账号" : "新增客户账号"}</h3>
+              <h3>{editing ? "编辑登录账号" : "新增登录账号"}</h3>
               <button className="icon-button" type="button" onClick={() => setShowForm(false)} aria-label="关闭">
                 <X size={16} />
               </button>
