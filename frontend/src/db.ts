@@ -19,6 +19,7 @@ import {
   reconcileInvoiceProjectIds,
 } from "./productProjectFlow";
 import { seedData } from "./seed";
+import { DEFAULT_NAV_CATEGORIES, DEFAULT_NAV_GROUPS, DEFAULT_NAV_ITEMS } from "./navCatalog";
 import type { AppData, OptionGroup, PurchaseOrder, WebsiteLead } from "./types";
 import { formatShopCategories, type ServiceContractDraft, type ServiceContractFileFormat } from "./serviceContract";
 
@@ -66,6 +67,10 @@ export function migrateData(current: Partial<AppData>): AppData {
     libraryContacts: current.libraryContacts ?? seedData.libraryContacts ?? [],
     smsTemplates: current.smsTemplates ?? seedData.smsTemplates ?? [],
     smsRecords: current.smsRecords ?? seedData.smsRecords ?? [],
+    customerAccounts: current.customerAccounts ?? seedData.customerAccounts ?? [],
+    navCategories: current.navCategories?.length ? current.navCategories : (seedData.navCategories ?? DEFAULT_NAV_CATEGORIES),
+    navGroups: current.navGroups?.length ? current.navGroups : (seedData.navGroups ?? DEFAULT_NAV_GROUPS),
+    navMenuItems: current.navMenuItems?.length ? current.navMenuItems : (seedData.navMenuItems ?? DEFAULT_NAV_ITEMS),
   } as AppData;
   migrated.organizations = migrated.organizations.map((organization) => ({
     ...organization,

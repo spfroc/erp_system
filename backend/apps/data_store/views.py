@@ -22,6 +22,9 @@ from .models import (
     InvoiceRecord,
     LibraryContactRecord,
     ManagedFile,
+    NavCategoryRecord,
+    NavGroupRecord,
+    NavMenuItemRecord,
     NoticeCollectionRunRecord,
     NoticeCollectionSourceRecord,
     NoticeRecord,
@@ -50,6 +53,7 @@ from .models import (
     UserRecord,
     WebsiteLeadRecord,
 )
+from .nav_defaults import nav_category_defaults, nav_group_defaults, nav_menu_item_defaults
 from .library_sms import (
     center_sms_config,
     fetch_center_sms_records,
@@ -128,6 +132,9 @@ COLLECTIONS = {
     "smsTemplates": SmsTemplateRecord,
     "smsRecords": SmsRecordRecord,
     "customerAccounts": CustomerAccountRecord,
+    "navCategories": NavCategoryRecord,
+    "navGroups": NavGroupRecord,
+    "navMenuItems": NavMenuItemRecord,
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
@@ -167,6 +174,9 @@ COLLECTION_PERMISSIONS = {
     "smsTemplates": {"read": "sms.view", "write": "sms.manage"},
     "smsRecords": {"read": "sms.view", "write": "sms.manage"},
     "customerAccounts": {"read": "customerAccount.view", "write": "customerAccount.manage"},
+    "navCategories": {"read": "menu.view", "write": "menu.manage"},
+    "navGroups": {"read": "menu.view", "write": "menu.manage"},
+    "navMenuItems": {"read": "menu.view", "write": "menu.manage"},
 }
 
 
@@ -625,6 +635,7 @@ PERMISSION_ALIASES = {
     "purchaseOrder.manage": ("purchaseOrder.manage", "purchase.manage"),
     "serviceOrder.view": ("serviceOrder.view", "serviceOrder.manage", "project.view", "onboarding.manage"),
     "serviceOrder.manage": ("serviceOrder.manage", "project.edit", "onboarding.manage", "finance.manage"),
+    "menu.view": ("menu.view", "menu.manage"),
 }
 
 
@@ -742,6 +753,12 @@ def _record_defaults(model, payload: dict) -> dict:
         from .portal import account_defaults
 
         defaults.update(account_defaults(payload))
+    elif model is NavCategoryRecord:
+        defaults.update(nav_category_defaults(payload))
+    elif model is NavGroupRecord:
+        defaults.update(nav_group_defaults(payload))
+    elif model is NavMenuItemRecord:
+        defaults.update(nav_menu_item_defaults(payload))
     elif model is OrganizationRecord:
         defaults.update(
             name=payload.get("name", ""),
@@ -1849,6 +1866,8 @@ def _apply_collection_list_query(collection: str, queryset, request):
         queryset = queryset.order_by("-data__occurredAt", "-date", "-id")
     elif collection == "optionGroups":
         queryset = queryset.order_by("key")
+    elif collection in {"navCategories", "navGroups", "navMenuItems"}:
+        queryset = queryset.order_by("sort_order", "id")
     elif collection == "platformAccounts":
         queryset = _created_desc_order(queryset)
     else:

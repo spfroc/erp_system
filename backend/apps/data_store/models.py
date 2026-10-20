@@ -360,6 +360,42 @@ class CustomerAccountRecord(BaseRecord):
         db_table = "customer_accounts"
 
 
+class NavCategoryRecord(BaseRecord):
+    key = models.CharField(max_length=64, db_index=True)
+    label = models.CharField(max_length=100)
+    sort_order = models.IntegerField(default=0, db_index=True)
+    enabled = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = "nav_categories"
+
+
+class NavGroupRecord(BaseRecord):
+    key = models.CharField(max_length=64, db_index=True)
+    label = models.CharField(max_length=100)
+    category_key = models.CharField(max_length=64, blank=True, db_index=True)
+    icon_key = models.CharField(max_length=64, blank=True)
+    sort_order = models.IntegerField(default=0, db_index=True)
+    enabled = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = "nav_groups"
+
+
+class NavMenuItemRecord(BaseRecord):
+    view_id = models.CharField(max_length=64, db_index=True)
+    label = models.CharField(max_length=100)
+    category_key = models.CharField(max_length=64, blank=True, db_index=True)
+    group_key = models.CharField(max_length=64, blank=True, db_index=True)
+    permission = models.CharField(max_length=64, db_index=True)
+    icon_key = models.CharField(max_length=64, blank=True)
+    sort_order = models.IntegerField(default=0, db_index=True)
+    enabled = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = "nav_menu_items"
+
+
 class SmsRecordRecord(BaseRecord):
     task_id = models.CharField(max_length=100, blank=True, db_index=True)
     mobile = models.CharField(max_length=255, blank=True, db_index=True)

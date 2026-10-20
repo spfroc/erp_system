@@ -46,9 +46,20 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { createCollectionItem, createId, deleteCollectionItem, diffPartialAppData, downloadServiceContract, downloadStandaloneServiceContract, loadData, patchCollectionItem, queryCollection, resetData, saveData, AUTH_EXPIRED_EVENT, AuthExpiredError } from "./db";
+import {
+  CRITICAL_NAV_VIEW_IDS,
+  DEFAULT_NAV_CATEGORIES,
+  DEFAULT_NAV_GROUPS,
+  DEFAULT_NAV_ITEMS,
+  VIEW_CATALOG_BY_ID,
+  catalogEntryForView,
+  resolveNavIcon,
+  type View,
+} from "./navCatalog";
+import { MenuSettingsPanel } from "./MenuSettings";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
 import { LibraryContactsPanel } from "./LibraryContacts";
-import { NoticesPanel } from "./Notices";
+import { Notices } from "./Notices";
 import { CustomerAccountsPanel } from "./CustomerAccounts";
 import { OfficialSeoPanel } from "./OfficialSeo";
 import { OfficialSitesPanel } from "./OfficialSites";
@@ -173,9 +184,8 @@ import {
   type ServiceContractFileFormat,
   type ServiceContractPlatform,
 } from "./serviceContract";
-import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
+import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, NavCategory, NavGroup, NavMenuItem, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
-type View = "dashboard" | "productProjects" | "serviceProjects" | "serviceOrders" | "salesOrders" | "purchaseOrders" | "contracts" | "entities" | "products" | "platformAccounts" | "websiteLeads" | "notices" | "libraryContacts" | "customerAccounts" | "sms" | "officialSites" | "officialSeo" | "reminders" | "invoices" | "transactions" | "financeStatements" | "receiptStats" | "paymentStats" | "trademarkCertificates" | "logs" | "collectionAccounts" | "optionSettings" | "access";
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
 const ORDER_PAGE_COPY: Record<OrderListTab, { title: string; subtitle: string; search: string }> = {
@@ -209,36 +219,66 @@ interface SearchableSelectOption {
   detail?: string;
 }
 
-const navItems: Array<{ id: View; label: string; icon: typeof Home; permission: PermissionKey }> = [
-  { id: "dashboard", label: "总览", icon: Home, permission: "dashboard.view" },
-  { id: "productProjects", label: "商品项目", icon: ClipboardList, permission: "project.view" },
-  { id: "serviceProjects", label: "服务项目", icon: ShieldCheck, permission: "project.view" },
-  { id: "contracts", label: "合同管理", icon: FileText, permission: "project.view" },
-  { id: "websiteLeads", label: "商机管理", icon: MessageSquare, permission: "lead.manage" },
-  { id: "platformAccounts", label: "平台账号", icon: FileScan, permission: "platformAccount.view" },
-  { id: "reminders", label: "每日任务管理", icon: ClipboardList, permission: "dashboard.view" },
-  { id: "trademarkCertificates", label: "商标管理", icon: Stamp, permission: "trademarkCertificate.view" },
-  { id: "notices", label: "采购信息公告", icon: Bell, permission: "notice.view" },
-  { id: "serviceOrders", label: "服务订单", icon: ShieldCheck, permission: "serviceOrder.view" },
-  { id: "salesOrders", label: "销售订单", icon: ShoppingCart, permission: "salesOrder.view" },
-  { id: "purchaseOrders", label: "采购订单", icon: Truck, permission: "purchaseOrder.view" },
-  { id: "products", label: "商品及价格体系", icon: Boxes, permission: "product.view" },
-  { id: "entities", label: "客户基础信息管理", icon: Building2, permission: "entity.view" },
-  { id: "customerAccounts", label: "登录账号管理", icon: Users, permission: "customerAccount.view" },
-  { id: "libraryContacts", label: "政企客户资料库", icon: BookUser, permission: "library.view" },
-  { id: "officialSites", label: "官网站点", icon: Globe, permission: "site.view" },
-  { id: "officialSeo", label: "SEO配置", icon: Search, permission: "site.view" },
-  { id: "invoices", label: "发票管理", icon: FileText, permission: "invoice.manage" },
-  { id: "transactions", label: "交易流水", icon: WalletCards, permission: "finance.view" },
-  { id: "financeStatements", label: "财务清单", icon: ClipboardList, permission: "finance.view" },
-  { id: "receiptStats", label: "收款统计", icon: BarChart3, permission: "finance.view" },
-  { id: "paymentStats", label: "付款统计", icon: BarChart3, permission: "finance.view" },
-  { id: "sms", label: "短信日志", icon: MessageCircle, permission: "sms.view" },
-  { id: "logs", label: "系统操作日志", icon: History, permission: "user.manage" },
-  { id: "collectionAccounts", label: "收款账号管理", icon: Banknote, permission: "user.manage" },
-  { id: "optionSettings", label: "选项管理", icon: BadgeCheck, permission: "user.manage" },
-  { id: "access", label: "用户权限", icon: Users, permission: "user.manage" },
-];
+type ResolvedNavItem = {
+  id: View;
+  label: string;
+  icon: typeof Home;
+  permission: PermissionKey;
+  categoryKey: string;
+  groupKey: string;
+  sortOrder: number;
+};
+
+function resolveNavConfig(data: AppData): { categories: NavCategory[]; groups: NavGroup[]; items: ResolvedNavItem[] } {
+  const categories = (data.navCategories?.length ? data.navCategories : DEFAULT_NAV_CATEGORIES)
+    .filter((category) => category.enabled !== false)
+    .slice()
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.key.localeCompare(b.key));
+  const groups = (data.navGroups?.length ? data.navGroups : DEFAULT_NAV_GROUPS)
+    .filter((group) => group.enabled !== false)
+    .slice()
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.key.localeCompare(b.key));
+  const groupCategory = new Map(groups.map((group) => [group.key, group.categoryKey || ""]));
+  const rawItems = data.navMenuItems?.length ? data.navMenuItems : DEFAULT_NAV_ITEMS;
+  const items = rawItems
+    .filter((item) => item.enabled !== false && catalogEntryForView(item.viewId))
+    .map((item) => {
+      const catalog = VIEW_CATALOG_BY_ID[item.viewId as View];
+      const groupKey = item.groupKey || "";
+      const categoryKey = item.categoryKey || groupCategory.get(groupKey) || "";
+      return {
+        id: item.viewId as View,
+        label: item.label || catalog.label,
+        icon: resolveNavIcon(item.iconKey || catalog.iconKey),
+        permission: (item.permission || catalog.permission) as PermissionKey,
+        categoryKey,
+        groupKey,
+        sortOrder: item.sortOrder ?? 0,
+      };
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  return { categories, groups, items };
+}
+
+function withCriticalNavItems(items: ResolvedNavItem[], can: (permission: PermissionKey) => boolean): ResolvedNavItem[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const viewId of CRITICAL_NAV_VIEW_IDS) {
+    const catalog = VIEW_CATALOG_BY_ID[viewId];
+    if (!catalog || !can(catalog.permission)) continue;
+    if (byId.has(viewId)) continue;
+    const fallback = DEFAULT_NAV_ITEMS.find((item) => item.viewId === viewId);
+    byId.set(viewId, {
+      id: viewId,
+      label: catalog.label,
+      icon: resolveNavIcon(catalog.iconKey),
+      permission: catalog.permission,
+      categoryKey: fallback?.categoryKey || "system",
+      groupKey: fallback?.groupKey || "system",
+      sortOrder: fallback?.sortOrder ?? 999,
+    });
+  }
+  return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+}
 
 const statusColumns: ProjectStatus[] = ["初始化", "进行中", "已完成", "终止"];
 const projectStatusOptions: ProjectStatus[] = [...PRODUCT_PROJECT_STATUSES];
@@ -346,8 +386,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   "platformAccount.manage": "管理平台账号",
   "trademarkCertificate.view": "查看商标管理",
   "trademarkCertificate.manage": "管理商标",
-  "notice.view": "查看采购信息公告",
-  "notice.manage": "管理采购信息公告与采集",
+  "notice.view": "查看公告",
+  "notice.manage": "管理公告",
   "site.view": "查看前端网站配置",
   "site.manage": "管理前端网站配置",
   "library.view": "查看政企客户资料库",
@@ -356,14 +396,16 @@ const permissionLabels: Record<PermissionKey, string> = {
   "sms.manage": "短信管理",
   "customerAccount.view": "查看登录账号",
   "customerAccount.manage": "管理登录账号",
+  "menu.view": "查看菜单配置",
+  "menu.manage": "管理菜单配置",
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "library.view", "sms.view", "customerAccount.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "library.manage", "sms.manage", "customerAccount.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "library.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "library.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "user.manage"] },
 ];
@@ -390,6 +432,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "customerAccount.view") {
     return permissionSet.has("customerAccount.manage");
+  }
+  if (permission === "menu.view") {
+    return permissionSet.has("menu.manage");
   }
   if (permission === "sms.view") {
     return permissionSet.has("sms.manage");
@@ -2981,8 +3026,13 @@ function requiredPermissionForLog(log: Omit<OperationLog, "id" | "createdAt">): 
   return null;
 }
 
-function canAccessView(permissionSet: Set<PermissionKey>, view: View) {
-  const item = navItems.find((nav) => nav.id === view);
+function canAccessView(permissionSet: Set<PermissionKey>, view: View, navItems: ResolvedNavItem[] = []) {
+  const item = navItems.find((nav) => nav.id === view) || (() => {
+    const catalog = catalogEntryForView(view);
+    return catalog
+      ? { id: view, label: catalog.label, icon: resolveNavIcon(catalog.iconKey), permission: catalog.permission, categoryKey: "", groupKey: "", sortOrder: 0 }
+      : null;
+  })();
   return item ? hasPermission(permissionSet, item.permission) : false;
 }
 
@@ -3443,13 +3493,12 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [orderFocus, setOrderFocus] = useState<OrderFocus>({});
   const [currentUserId, setCurrentUserId] = useState(() => window.localStorage.getItem(SESSION_USER_KEY) ?? "");
-  const [projectMenuOpen, setProjectMenuOpen] = useState(true);
-  const [orderMenuOpen, setOrderMenuOpen] = useState(true);
-  const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
-  const [officialMenuOpen, setOfficialMenuOpen] = useState(true);
-  const [financeMenuOpen, setFinanceMenuOpen] = useState(false);
-  const [logMenuOpen, setLogMenuOpen] = useState(false);
-  const [systemMenuOpen, setSystemMenuOpen] = useState(false);
+  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({
+    projects: true,
+    orders: true,
+    customers: true,
+    official: true,
+  });
   const [showHelp, setShowHelp] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
@@ -3544,43 +3593,21 @@ export default function App() {
     }
     userSnapshotReloadRef.current = false;
     const permissionSet = userPermissionSet(data, validUser);
-    if (!canAccessView(permissionSet, view)) {
-      setView(navItems.find((item) => hasPermission(permissionSet, item.permission))?.id ?? "dashboard");
+    const { items: resolvedNav } = resolveNavConfig(data);
+    const accessibleNav = withCriticalNavItems(resolvedNav, (permission) => hasPermission(permissionSet, permission))
+      .filter((item) => hasPermission(permissionSet, item.permission));
+    if (!canAccessView(permissionSet, view, accessibleNav)) {
+      setView(accessibleNav[0]?.id ?? "dashboard");
     }
   }, [currentUserId, data, view]);
 
   useEffect(() => {
-    if (
-      view === "productProjects"
-      || view === "serviceProjects"
-      || view === "contracts"
-      || view === "websiteLeads"
-      || view === "platformAccounts"
-      || view === "reminders"
-      || view === "trademarkCertificates"
-      || view === "notices"
-    ) {
-      setProjectMenuOpen(true);
-    }
-    if (view === "serviceOrders" || view === "salesOrders" || view === "purchaseOrders" || view === "products") {
-      setOrderMenuOpen(true);
-    }
-    if (view === "entities" || view === "customerAccounts" || view === "libraryContacts") {
-      setCustomerMenuOpen(true);
-    }
-    if (view === "officialSites" || view === "officialSeo") {
-      setOfficialMenuOpen(true);
-    }
-    if (view === "invoices" || view === "transactions" || view === "financeStatements" || view === "receiptStats" || view === "paymentStats") {
-      setFinanceMenuOpen(true);
-    }
-    if (view === "sms" || view === "logs") {
-      setLogMenuOpen(true);
-    }
-    if (view === "collectionAccounts" || view === "optionSettings" || view === "access") {
-      setSystemMenuOpen(true);
-    }
-  }, [view]);
+    if (!data) return;
+    const { items } = resolveNavConfig(data);
+    const current = items.find((item) => item.id === view);
+    if (!current?.groupKey) return;
+    setOpenNavGroups((prev) => (prev[current.groupKey] ? prev : { ...prev, [current.groupKey]: true }));
+  }, [view, data]);
 
   async function commit(next: AppData, log?: Omit<OperationLog, "id" | "createdAt">) {
     const previous = data!;
@@ -3675,50 +3702,34 @@ export default function App() {
 
   const permissions = userPermissionSet(data, currentUser);
   const can = (permission: PermissionKey) => hasPermission(permissions, permission);
-  const visibleNavItems = navItems.filter((item) => can(item.permission));
+  const { categories: navCategories, groups: navGroups, items: resolvedNavItems } = resolveNavConfig(data);
+  const visibleNavItems = withCriticalNavItems(resolvedNavItems, can).filter((item) => can(item.permission));
   const selectedProject = data.projects.find((project) => project.id === selectedProjectId);
-  const projectNavItems = visibleNavItems.filter((item) =>
-    item.id === "productProjects"
-    || item.id === "serviceProjects"
-    || item.id === "contracts"
-    || item.id === "websiteLeads"
-    || item.id === "platformAccounts"
-    || item.id === "reminders"
-    || item.id === "trademarkCertificates"
-    || item.id === "notices"
+  const navCategorySections = navCategories
+    .map((category) => {
+      const topItems = visibleNavItems.filter((item) => !item.groupKey && item.categoryKey === category.key);
+      const groups = navGroups
+        .filter((group) => (group.categoryKey || "") === category.key)
+        .map((group) => ({
+          group,
+          items: visibleNavItems.filter((item) => item.groupKey === group.key),
+        }))
+        .filter((section) => section.items.length > 0);
+      return { category, topItems, groups };
+    })
+    .filter((section) => section.topItems.length > 0 || section.groups.length > 0);
+  const knownCategoryKeys = new Set(navCategories.map((category) => category.key));
+  const orphanTopItems = visibleNavItems.filter((item) => !item.groupKey && !knownCategoryKeys.has(item.categoryKey));
+  const orphanGroupedItems = visibleNavItems.filter(
+    (item) => item.groupKey && !navGroups.some((group) => group.key === item.groupKey),
   );
-  const orderNavItems = visibleNavItems.filter((item) =>
-    item.id === "serviceOrders"
-    || item.id === "salesOrders"
-    || item.id === "purchaseOrders"
-    || item.id === "products"
-  );
-  const customerNavItems = visibleNavItems.filter((item) =>
-    item.id === "entities"
-    || item.id === "customerAccounts"
-    || item.id === "libraryContacts"
-  );
-  const officialNavItems = visibleNavItems.filter((item) => item.id === "officialSites" || item.id === "officialSeo");
-  const financeNavItems = visibleNavItems.filter((item) => item.id === "invoices" || item.id === "transactions" || item.id === "financeStatements" || item.id === "receiptStats" || item.id === "paymentStats");
-  const logNavItems = visibleNavItems.filter((item) => item.id === "sms" || item.id === "logs");
-  const systemNavItems = visibleNavItems.filter((item) => item.id === "collectionAccounts" || item.id === "optionSettings" || item.id === "access");
-  const groupedViewIds: View[] = [
-    "productProjects", "serviceProjects", "contracts", "websiteLeads", "platformAccounts", "reminders", "trademarkCertificates", "notices",
-    "serviceOrders", "salesOrders", "purchaseOrders", "products",
-    "entities", "customerAccounts", "libraryContacts",
-    "officialSites", "officialSeo",
-    "invoices", "transactions", "financeStatements", "receiptStats", "paymentStats",
-    "sms", "logs",
-    "collectionAccounts", "optionSettings", "access",
-  ];
-  const mainNavItems = visibleNavItems.filter((item) => !groupedViewIds.includes(item.id));
   const openProject = (id: string) => {
     const project = data.projects.find((item) => item.id === id);
     setSelectedProjectId(id);
     setView(projectViewFor(project));
   };
 
-  if (!canAccessView(permissions, view)) {
+  if (!canAccessView(permissions, view, visibleNavItems)) {
     if (visibleNavItems.length === 0) {
       return (
         <div className="loading">
@@ -3748,7 +3759,58 @@ export default function App() {
           </div>
         </div>
         <nav>
-          {mainNavItems.slice(0, 1).map((item) => {
+          {navCategorySections.map(({ category, topItems, groups }, categoryIndex) => (
+            <div className="nav-category" key={category.id || category.key}>
+              {categoryIndex > 0 && <div className="nav-category-divider" aria-hidden="true" />}
+              {topItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}>
+                    <Icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+              {groups.map(({ group, items }) => {
+                const GroupIcon = resolveNavIcon(group.iconKey);
+                const isOpen = openNavGroups[group.key] !== false;
+                const groupActive = items.some((item) => item.id === view);
+                return (
+                  <div className="nav-group" key={group.id || group.key}>
+                    <button
+                      className={`nav-group-toggle ${groupActive ? "active" : ""}`}
+                      onClick={() => setOpenNavGroups((prev) => ({ ...prev, [group.key]: !isOpen }))}
+                      aria-expanded={isOpen}
+                    >
+                      <GroupIcon size={18} />
+                      <span>{group.label}</span>
+                      <ChevronDown size={15} className={isOpen ? "open" : ""} />
+                    </button>
+                    {isOpen && items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.id}
+                          className={`nav-subitem ${view === item.id ? "active" : ""}`}
+                          onClick={() => {
+                            if (item.id === "productProjects" || item.id === "serviceProjects" || item.id === "serviceOrders" || item.id === "salesOrders" || item.id === "purchaseOrders") {
+                              setSelectedProjectId(null);
+                              setOrderFocus({});
+                            }
+                            setView(item.id);
+                          }}
+                        >
+                          <Icon size={16} />
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {[...orphanTopItems, ...orphanGroupedItems].map((item) => {
             const Icon = item.icon;
             return (
               <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}>
@@ -3757,169 +3819,6 @@ export default function App() {
               </button>
             );
           })}
-          {projectNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${projectNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setProjectMenuOpen((open) => !open)}
-                aria-expanded={projectMenuOpen}
-              >
-                <ClipboardList size={18} />
-                <span>项目管理</span>
-                <ChevronDown size={15} className={projectMenuOpen ? "open" : ""} />
-              </button>
-              {projectMenuOpen && projectNavItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => { setSelectedProjectId(null); setOrderFocus({}); setView(item.id); }}>
-                      <Icon size={16} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-            </div>
-          )}
-          {orderNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${orderNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setOrderMenuOpen((open) => !open)}
-                aria-expanded={orderMenuOpen}
-              >
-                <ShoppingCart size={18} />
-                <span>订单</span>
-                <ChevronDown size={15} className={orderMenuOpen ? "open" : ""} />
-              </button>
-              {orderMenuOpen && orderNavItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => { setSelectedProjectId(null); setOrderFocus({}); setView(item.id); }}>
-                      <Icon size={16} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-            </div>
-          )}
-          {customerNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${customerNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setCustomerMenuOpen((open) => !open)}
-                aria-expanded={customerMenuOpen}
-              >
-                <Building2 size={18} />
-                <span>客户管理</span>
-                <ChevronDown size={15} className={customerMenuOpen ? "open" : ""} />
-              </button>
-              {customerMenuOpen && customerNavItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                    <Icon size={16} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {officialNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${officialNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setOfficialMenuOpen((open) => !open)}
-                aria-expanded={officialMenuOpen}
-              >
-                <Globe size={18} />
-                <span>前端网站配置</span>
-                <ChevronDown size={15} className={officialMenuOpen ? "open" : ""} />
-              </button>
-              {officialMenuOpen && officialNavItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                    <Icon size={16} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {mainNavItems.slice(1).map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}>
-                <Icon size={18} />
-                {item.label}
-              </button>
-            );
-          })}
-          {financeNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${financeNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setFinanceMenuOpen((open) => !open)}
-                aria-expanded={financeMenuOpen}
-              >
-                <WalletCards size={18} />
-                <span>财务管理</span>
-                <ChevronDown size={15} className={financeMenuOpen ? "open" : ""} />
-              </button>
-              {financeMenuOpen && financeNavItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                    <Icon size={16} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {logNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${logNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setLogMenuOpen((open) => !open)}
-                aria-expanded={logMenuOpen}
-              >
-                <History size={18} />
-                <span>日志管理</span>
-                <ChevronDown size={15} className={logMenuOpen ? "open" : ""} />
-              </button>
-              {logMenuOpen && logNavItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                    <Icon size={16} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {systemNavItems.length > 0 && (
-            <div className="nav-group">
-              <button
-                className={`nav-group-toggle ${systemNavItems.some((item) => item.id === view) ? "active" : ""}`}
-                onClick={() => setSystemMenuOpen((open) => !open)}
-                aria-expanded={systemMenuOpen}
-              >
-                <Users size={18} />
-                <span>系统设置</span>
-                <ChevronDown size={15} className={systemMenuOpen ? "open" : ""} />
-              </button>
-              {systemMenuOpen && systemNavItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} className={`nav-subitem ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                    <Icon size={16} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </nav>
         <div className="sidebar-note">
         </div>
@@ -3951,7 +3850,7 @@ export default function App() {
         {view === "products" && <Products data={data} commit={commit} can={can} />}
         {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
         {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
-        {view === "notices" && <NoticesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+        {view === "notices" && <Notices onNotice={setNotice} />}
         {view === "customerAccounts" && <CustomerAccountsPanel onNotice={setNotice} can={can} />}
         {view === "libraryContacts" && (
           <LibraryContactsPanel
@@ -3989,6 +3888,14 @@ export default function App() {
         {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
         {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
         {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
+        {view === "menuSettings" && (
+          <MenuSettingsPanel
+            data={data}
+            applyData={(next) => setData(next)}
+            onNotice={setNotice}
+            can={can}
+          />
+        )}
         {view === "access" && <AccessControl data={data} commit={commit} />}
         {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       </main>

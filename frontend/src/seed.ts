@@ -1,3 +1,4 @@
+import { DEFAULT_NAV_CATEGORIES, DEFAULT_NAV_GROUPS, DEFAULT_NAV_ITEMS } from "./navCatalog";
 import type { AppData } from "./types";
 
 const now = new Date().toISOString();
@@ -131,6 +132,8 @@ export const seedData: AppData = {
         "sms.manage",
         "customerAccount.view",
         "customerAccount.manage",
+        "menu.view",
+        "menu.manage",
         "lead.manage",
         "sensitive.view",
         "profit.view",
@@ -611,4 +614,7 @@ export const seedData: AppData = {
   smsTemplates: [],
   smsRecords: [],
   customerAccounts: [],
+  navCategories: DEFAULT_NAV_CATEGORIES.map((item) => ({ ...item })),
+  navGroups: DEFAULT_NAV_GROUPS.map((item) => ({ ...item })),
+  navMenuItems: DEFAULT_NAV_ITEMS.map((item) => ({ ...item })),
 };

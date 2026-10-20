@@ -824,10 +824,42 @@ export type PermissionKey =
   | "sms.manage"
   | "customerAccount.view"
   | "customerAccount.manage"
+  | "menu.view"
+  | "menu.manage"
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
   | "user.manage";
+
+export interface NavCategory {
+  id: string;
+  key: string;
+  label: string;
+  sortOrder: number;
+  enabled: boolean;
+}
+
+export interface NavGroup {
+  id: string;
+  key: string;
+  label: string;
+  categoryKey: string;
+  iconKey: string;
+  sortOrder: number;
+  enabled: boolean;
+}
+
+export interface NavMenuItem {
+  id: string;
+  viewId: string;
+  label: string;
+  categoryKey: string;
+  groupKey: string;
+  permission: PermissionKey;
+  iconKey: string;
+  sortOrder: number;
+  enabled: boolean;
+}
 
 export interface Role {
   id: string;
@@ -877,6 +909,9 @@ export interface AppData {
   smsTemplates: SmsTemplate[];
   smsRecords: SmsRecord[];
   customerAccounts: CustomerAccount[];
+  navCategories: NavCategory[];
+  navGroups: NavGroup[];
+  navMenuItems: NavMenuItem[];
 }
 
 export interface CustomerAccount {

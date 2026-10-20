@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.data_store.models import AppState
+from apps.data_store.nav_defaults import DEFAULT_NAV_CATEGORIES, DEFAULT_NAV_GROUPS, DEFAULT_NAV_ITEMS
 from apps.data_store.views import COLLECTIONS, DEFAULT_KEY, save_app_data
 
 
@@ -41,6 +42,9 @@ APP_COLLECTIONS = [
     "smsTemplates",
     "smsRecords",
     "customerAccounts",
+    "navCategories",
+    "navGroups",
+    "navMenuItems",
 ]
 
 ALL_PERMISSIONS = [
@@ -77,6 +81,8 @@ ALL_PERMISSIONS = [
     "sms.manage",
     "customerAccount.view",
     "customerAccount.manage",
+    "menu.view",
+    "menu.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",
@@ -170,6 +176,9 @@ def default_seed() -> dict[str, Any]:
         }
         for group in OPTION_GROUP_DEFINITIONS
     ]
+    data["navCategories"] = [dict(item) for item in DEFAULT_NAV_CATEGORIES]
+    data["navGroups"] = [dict(item) for item in DEFAULT_NAV_GROUPS]
+    data["navMenuItems"] = [dict(item) for item in DEFAULT_NAV_ITEMS]
     return data
 
 
