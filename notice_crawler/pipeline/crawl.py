@@ -5,8 +5,7 @@ from typing import Optional
 
 from tqdm import tqdm
 
-from clients.jd_quan import SITE_ID as JD_SITE
-from clients.jd_quan import JdQuanClient
+from clients.jd_quan import JdQuanClient, jd_site_configs
 from clients.sd_mall import SITE_ID as MALL_SITE
 from clients.sd_mall import SdMallClient
 from sqlalchemy import select
@@ -192,9 +191,32 @@ def crawl_jd(
     stop_dup: Optional[int] = None,
 ) -> None:
     # 列表按创建时间倒序，接口本身没有日期参数，按 createTime 在本地截断
+    # 泉易采 / 青慧采共用同一套接口，按合同号分 site_id 入库
     start_day = _as_day(start_date)
     end_day = _as_day(end_date)
-    client = JdQuanClient()
+    for site_cfg in jd_site_configs():
+        _crawl_jd_site(
+            JdQuanClient.from_config(site_cfg),
+            max_pages=max_pages,
+            page_size=page_size,
+            with_detail=with_detail,
+            start_day=start_day,
+            end_day=end_day,
+            stop_dup=stop_dup,
+        )
+
+
+def _crawl_jd_site(
+    client: JdQuanClient,
+    *,
+    max_pages: Optional[int] = None,
+    page_size: int = 50,
+    with_detail: bool = True,
+    start_day: Optional[date] = None,
+    end_day: Optional[date] = None,
+    stop_dup: Optional[int] = None,
+) -> None:
+    site_id = client.site_id
     session = get_session()
     try:
         for auction_type, notice_type, label, business_type in client.iter_categories():
@@ -203,7 +225,7 @@ def crawl_jd(
             total_pages = None
             dup = _DupStop(stop_dup)
             stop_category = False
-            pbar = tqdm(desc=f"{JD_SITE}/{label}", unit="page")
+            pbar = tqdm(desc=f"{site_id}/{label}", unit="page")
             while True:
                 if max_pages and page > max_pages:
                     break
@@ -230,18 +252,18 @@ def crawl_jd(
                         continue
                     if start_day and created and created < start_day:
                         stop_category = True
-                        tqdm.write(f"{label} 早于 {start_day.isoformat()}，停止该类")
+                        tqdm.write(f"{client.label}/{label} 早于 {start_day.isoformat()}，停止该类")
                         break
                     notice_key = f"{auction_no}:{item_notice_type}"
-                    if dup.hit(raw_exists(session, JD_SITE, notice_key)):
+                    if dup.hit(raw_exists(session, site_id, notice_key)):
                         stop_category = True
-                        tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
+                        tqdm.write(f"{client.label}/{label} 连续重复 {dup.limit} 条，停止该类")
                         break
                     if dup.streak:
                         continue
                     upsert_raw(
                         session,
-                        site_id=JD_SITE,
+                        site_id=site_id,
                         notice_key=notice_key,
                         auction_type=str(item.get("auctionType") or auction_type),
                         notice_type=str(item_notice_type if item_notice_type is not None else notice_type),
@@ -249,9 +271,10 @@ def crawl_jd(
                         region_name=None,
                         publish_time=parse_dt(item.get("createTime")),
                         list_json=item,
-                        source_url=(
-                            f"{client.origin}/jj/notice/detail?auctionNo={auction_no}"
-                            f"&noticeType={item_notice_type}"
+                        source_url=client.notice_detail_url(
+                            auction_no,
+                            item_notice_type,
+                            business_type=business_type,
                         ),
                         crawl_status="list_only",
                     )
@@ -262,7 +285,7 @@ def crawl_jd(
                             content_text = json_detail_to_text(detail)
                             raw = upsert_raw(
                                 session,
-                                site_id=JD_SITE,
+                                site_id=site_id,
                                 notice_key=notice_key,
                                 detail_json=detail,
                                 content_html=None,
@@ -277,7 +300,7 @@ def crawl_jd(
                                 raw.error_message = str(exc)[:1000]
                             raw = session.execute(
                                 select(NoticeRaw).where(
-                                    NoticeRaw.site_id == JD_SITE,
+                                    NoticeRaw.site_id == site_id,
                                     NoticeRaw.notice_key == notice_key,
                                 )
                             ).scalar_one()
@@ -293,7 +316,7 @@ def crawl_jd(
                                 session.add(
                                     NoticeAttachment(
                                         notice_raw_id=raw.id,
-                                        site_id=JD_SITE,
+                                        site_id=site_id,
                                         notice_key=notice_key,
                                         file_name=att.get("file_name"),
                                         file_url=att["file_url"],
@@ -304,13 +327,13 @@ def crawl_jd(
                         except Exception as exc:  # noqa: BLE001
                             upsert_raw(
                                 session,
-                                site_id=JD_SITE,
+                                site_id=site_id,
                                 notice_key=notice_key,
                                 crawl_status="detail_fail",
                                 error_message=str(exc),
                             )
                 session.commit()
-                save_cursor(session, JD_SITE, cursor_key, page, total)
+                save_cursor(session, site_id, cursor_key, page, total)
                 session.commit()
                 pbar.update(1)
                 if stop_category or page >= total_pages or not items:

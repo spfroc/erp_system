@@ -35,6 +35,8 @@ class Settings:
     # 验证码 OCR（对齐 vip-rebuild qlyc:login）
     qlyc_captcha_url: str = os.getenv("QLYC_CAPTCHA_URL", "http://verify.qlyc.co/upload_image")
     jd_contract_num: str = os.getenv("JD_CONTRACT_NUM", "VSP-20250526220758")
+    # 青慧采（青岛国易）同一套京东公告页，不同合同号；留空则跳过
+    jd_qhc_contract_num: str = os.getenv("JD_QHC_CONTRACT_NUM", "VSP-20251223153455")
     jd_app_source: str = os.getenv("JD_APP_SOURCE", "CLT")
     jd_impersonate: str = os.getenv("JD_IMPERSONATE", "chrome131")
     # api=云端 OpenAI 兼容；heuristic=规则；local_gguf / local_hf=本地模型

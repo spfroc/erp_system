@@ -521,7 +521,7 @@ class HeuristicExtractor(BaseExtractor):
             ("询比", "询比公告"),
             ("公示", "公示公告"),
             ("采购公告", "采购公告"),
-            ("竞价公告", "采购公告"),
+            ("竞价公告", "竞价公告"),
         ]
         for key, kind in kind_map:
             if key in (title or "") or key in full[:200]:

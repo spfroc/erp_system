@@ -6,6 +6,7 @@
 |---------|------|
 | `sd-ggzyjyzx` | 山东网上商城采购公告（全省） |
 | `jd-quan-yicai` | 京东泉易采（普通竞价/反拍/询比）+ 附件 |
+| `jd-qing-huicai` | 京东青慧采（同一套接口，合同号 `JD_QHC_CONTRACT_NUM`） |
 
 ## 数据流
 
@@ -40,7 +41,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -U pip
 pip install -r requirements.txt
 cp .env.example .env               # Windows: copy .env.example .env
-# 编辑 NOTICE_DB_URL / JD_CONTRACT_NUM
+# 编辑 NOTICE_DB_URL / JD_CONTRACT_NUM / JD_QHC_CONTRACT_NUM
 ```
 
 ### 本地模型（默认 `EXTRACTOR_BACKEND=local_gguf`）
@@ -113,7 +114,9 @@ python cli.py enrich --limit 500
 
 # 京东附件（正文常在 PDF 里）
 python cli.py download-att --site jd-quan-yicai --limit 20
+python cli.py download-att --site jd-qing-huicai --limit 20
 python cli.py parse-att --site jd-quan-yicai --limit 20
+python cli.py parse-att --site jd-qing-huicai --limit 20
 
 # 供应商（vip-rebuild TouchCustomer）：写入 mall_customer
 # 流程对齐 QlycLoginService：账号密码登录拿 access_token → 本地 js/decode.js 解密列表
@@ -137,5 +140,6 @@ CPU 上 1.5B 大约每条几十秒～两分钟；有 GPU 可设 `LOCAL_N_GPU_LAY
 
 1. 山东商城全省抓取：**不要**在列表 Body 里写死 `regionGuidList=["1487001"]`。
 2. 京东必须 `curl_cffi` 伪装，且带 `contractNum` + `appSource` + `businessType`。
-3. 询比公告 `noticeType=5`（不是竞价的 1）。
-4. 先 `--max-pages 1` 验证，再放开全量。
+3. 询比公告 `noticeType=5`（不是竞价的 1）；询比详情页路径为 `/xj/`，竞价为 `/jj/`。
+4. `crawl --site jd` 会依次抓泉易采与青慧采（`JD_QHC_CONTRACT_NUM` 为空则跳过青慧采）。
+5. 先 `--max-pages 1` 验证，再放开全量。

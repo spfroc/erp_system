@@ -25,7 +25,9 @@ while true; do
     || echo "crawl failed"
 
   python cli.py download-att --site jd-quan-yicai --limit "$ATT_LIMIT" \
-    || echo "download-att failed"
+    || echo "download-att quan failed"
+  python cli.py download-att --site jd-qing-huicai --limit "$ATT_LIMIT" \
+    || echo "download-att qhc failed"
 
   python cli.py crawl-supplier --stop-dup "$STOP_DUP" --page-size 50 \
     || echo "crawl-supplier failed"

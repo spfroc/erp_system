@@ -10,6 +10,7 @@ import requests
 from sqlalchemy import delete, select
 from tqdm import tqdm
 
+from clients.jd_quan import is_jd_site
 from config import settings
 from db import NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
 
@@ -29,7 +30,7 @@ PARSE_SCHEMA_HINT = {
     "deal_supplier_phone": "成交供应商电话",
     "deal_supplier_address": "成交供应商地址",
     "quote_count": "报价供应商数量整数",
-    "notice_kind": "采购公告/成交公告/终止公告/废标公告/失败公告/询比公告/公示公告",
+    "notice_kind": "竞价公告/询比公告/采购公告/成交公告/终止公告/废标公告/失败公告/公示公告",
     "procurement_mode": "普通竞价/反拍/询比/二次竞价/顺序轮候/直购/议价/批量采购等",
     "publish_time": "YYYY-MM-DD HH:MM:SS 或 null",
     "start_time": "竞价/报价开始时间 YYYY-MM-DD HH:MM:SS",
@@ -192,7 +193,7 @@ def extract_fields(
             list_item=list_item,
         )
     # 京东：详情 JSON 结构化映射（对齐 xiaoyihuicai JdBusinessOpportunityService）
-    if site_id == "jd-quan-yicai":
+    if is_jd_site(site_id):
         from pipeline.extractors.jd_json import extract_jd_json
 
         return extract_jd_json(detail, list_item, title=title)
@@ -400,7 +401,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
     # 公告种类
     kind = str(parsed.get("notice_kind") or "").strip()
     if not kind or kind.isdigit():
-        if raw.site_id == "jd-quan-yicai":
+        if is_jd_site(raw.site_id):
             nt = str(
                 (detail or {}).get("noticeType")
                 or (list_item or {}).get("noticeType")
@@ -408,7 +409,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 or ""
             )
             jd_kind = {
-                "1": "采购公告",
+                "1": "竞价公告",
                 "2": "成交公告",
                 "3": "终止公告",
                 "4": "失败公告",
@@ -444,7 +445,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
 
     # 采购方式
     if not parsed.get("procurement_mode"):
-        if raw.site_id == "jd-quan-yicai":
+        if is_jd_site(raw.site_id):
             parsed["procurement_mode"] = _pick(
                 (list_item or {}).get("procurementName"),
                 {
@@ -481,7 +482,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                     break
 
     # 京东成交 / 商品
-    if raw.site_id == "jd-quan-yicai" and nested:
+    if is_jd_site(raw.site_id) and nested:
         deal_info = _jd_deal_from_detail(nested)
         for k, v in deal_info.items():
             if k in {"quotes", "suppliers"}:
@@ -733,7 +734,7 @@ def parse_pending(
             text = raw.content_text or html_fallback(raw)
             # 商城：即使 content_text 短，只要 detail 里有 HTML 也能规则抽
             if (not text or len(text.strip()) < 20) and not html:
-                if raw.site_id == "jd-quan-yicai":
+                if is_jd_site(raw.site_id):
                     continue
                 raw.parse_status = "skipped"
                 session.commit()

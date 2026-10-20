@@ -40,7 +40,7 @@ class NoticeRaw(Base):
     site_id = Column(
         String(64),
         nullable=False,
-        comment="站点标识：sd-ggzyjyzx / jd-quan-yicai",
+        comment="站点标识：sd-ggzyjyzx / jd-quan-yicai / jd-qing-huicai",
     )
     notice_key = Column(
         String(128),
