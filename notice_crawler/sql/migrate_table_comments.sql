@@ -4,7 +4,7 @@
 ALTER TABLE notice_raw COMMENT = '公告原始数据';
 ALTER TABLE notice_raw
   MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
-  MODIFY COLUMN site_id VARCHAR(64) NOT NULL COMMENT '站点标识：sd-ggzyjyzx / jd-quan-yicai',
+  MODIFY COLUMN site_id VARCHAR(64) NOT NULL COMMENT '站点标识：sd-ggzyjyzx / jd-quan-yicai / jd-qing-huicai',
   MODIFY COLUMN notice_key VARCHAR(128) NOT NULL COMMENT '站点内唯一键 noticeGuid/auctionNo+noticeType',
   MODIFY COLUMN auction_type VARCHAR(32) NULL COMMENT '站点侧采购方式编码',
   MODIFY COLUMN notice_type VARCHAR(32) NULL COMMENT '站点侧公告类型编码',

@@ -4,7 +4,7 @@
 -- 原始公告（列表+详情整包保留）
 CREATE TABLE IF NOT EXISTS notice_raw (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
-  site_id         VARCHAR(64)  NOT NULL COMMENT '站点标识：sd-ggzyjyzx / jd-quan-yicai',
+  site_id         VARCHAR(64)  NOT NULL COMMENT '站点标识：sd-ggzyjyzx / jd-quan-yicai / jd-qing-huicai',
   notice_key      VARCHAR(128) NOT NULL COMMENT '站点内唯一键 noticeGuid/auctionNo+noticeType',
   auction_type    VARCHAR(32)  NULL COMMENT '站点侧采购方式编码',
   notice_type     VARCHAR(32)  NULL COMMENT '站点侧公告类型编码',

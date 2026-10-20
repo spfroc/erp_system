@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from curl_cffi import requests as cffi_requests
@@ -10,7 +11,9 @@ from clients.http_session import proxy_url
 from config import settings
 from utils import ensure_https
 
+# 兼容旧引用：默认仍是泉易采
 SITE_ID = "jd-quan-yicai"
+SITE_ID_QING_HUICAI = "jd-qing-huicai"
 
 # (auctionType, noticeType, label, businessType)
 # 竞价/反拍 noticeType: 1/2/3/4/6；询比 noticeType: 5/2/3/4/6
@@ -33,12 +36,60 @@ CATEGORIES: List[Tuple[str, str, str, str]] = [
 ]
 
 
+@dataclass(frozen=True)
+class JdSiteConfig:
+    site_id: str
+    label: str
+    contract_num: str
+    app_source: str = "CLT"
+
+
+def jd_site_configs() -> List[JdSiteConfig]:
+    """泉易采 + 青慧采（同一套京东公告接口，不同合同号）。"""
+    sites = [
+        JdSiteConfig(
+            site_id=SITE_ID,
+            label="京东泉易采",
+            contract_num=settings.jd_contract_num,
+            app_source=settings.jd_app_source,
+        ),
+    ]
+    qhc = (settings.jd_qhc_contract_num or "").strip()
+    if qhc:
+        sites.append(
+            JdSiteConfig(
+                site_id=SITE_ID_QING_HUICAI,
+                label="京东青慧采",
+                contract_num=qhc,
+                app_source=settings.jd_app_source,
+            )
+        )
+    return sites
+
+
+def is_jd_site(site_id: Optional[str]) -> bool:
+    return bool(site_id) and (
+        site_id.startswith("jd-")
+        or site_id in {SITE_ID, SITE_ID_QING_HUICAI}
+    )
+
+
+def notice_path_for_business(business_type: str | int) -> str:
+    """询比走 /xj，竞价/反拍走 /jj。"""
+    return "xj" if str(business_type) == "2" else "jj"
+
+
 class JdQuanClient:
     def __init__(
         self,
+        *,
+        site_id: Optional[str] = None,
         contract_num: Optional[str] = None,
         app_source: Optional[str] = None,
+        label: Optional[str] = None,
     ) -> None:
+        self.site_id = site_id or SITE_ID
+        self.label = label or ("京东青慧采" if self.site_id == SITE_ID_QING_HUICAI else "京东泉易采")
         self.contract_num = contract_num or settings.jd_contract_num
         self.app_source = app_source or settings.jd_app_source
         self.origin = "https://zcy-auction-view-pro.pf.jd.com"
@@ -53,6 +104,15 @@ class JdQuanClient:
                 "Chrome/131.0.0.0 Safari/537.36"
             ),
         }
+
+    @classmethod
+    def from_config(cls, cfg: JdSiteConfig) -> "JdQuanClient":
+        return cls(
+            site_id=cfg.site_id,
+            contract_num=cfg.contract_num,
+            app_source=cfg.app_source,
+            label=cfg.label,
+        )
 
     def _sleep(self) -> None:
         time.sleep(settings.request_interval)
@@ -109,6 +169,19 @@ class JdQuanClient:
                 {"auctionNo": auction_no, "noticeType": int(notice_type)},
             )
             or {}
+        )
+
+    def notice_detail_url(
+        self,
+        auction_no: str,
+        notice_type: Any,
+        *,
+        business_type: str | int = "1",
+    ) -> str:
+        path = notice_path_for_business(business_type)
+        return (
+            f"{self.origin}/{path}/notice/detail"
+            f"?auctionNo={auction_no}&noticeType={notice_type}"
         )
 
     def extract_attachments(self, detail: Dict[str, Any]) -> List[Dict[str, str]]:

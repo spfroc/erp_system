@@ -1,4 +1,4 @@
-"""京东泉易采结构化解析（对齐 xiaoyihuicai JdBusinessOpportunityService）。
+"""京东泉易采 / 青慧采结构化解析（对齐 xiaoyihuicai JdBusinessOpportunityService）。
 
 字段来自详情 JSON，不走模型：
 - auctionNoticeBaseInfo：预算、起止时间、采购单位
@@ -14,8 +14,9 @@ from typing import Any, Dict, List, Optional
 
 from pipeline.extractors.base import EXTRACT_SCHEMA
 
+# 与京东公告页 tab 一致（竞价页叫「竞价公告」，询比页叫「询比公告」）
 NOTICE_KIND = {
-    1: "采购公告",
+    1: "竞价公告",
     2: "成交公告",
     3: "终止公告",
     4: "失败公告",

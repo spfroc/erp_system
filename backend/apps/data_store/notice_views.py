@@ -18,7 +18,19 @@ from .views import _require_permission
 SITE_LABELS = {
     "sd-ggzyjyzx": "山东网上商城",
     "jd-quan-yicai": "京东泉易采",
+    "jd-qing-huicai": "京东青慧采",
 }
+
+# 与京东公告页 tab 一致：竞价公告 / 询比公告 / 成交 / 终止 / 失败 / 废标
+JD_NOTICE_TYPE_LABELS = {
+    "1": "竞价公告",
+    "2": "成交公告",
+    "3": "终止公告",
+    "4": "失败公告",
+    "5": "询比公告",
+    "6": "废标公告",
+}
+JD_SITE_IDS = frozenset({"jd-quan-yicai", "jd-qing-huicai"})
 
 # 结果类公告一般不算「进行中」
 CLOSED_NOTICE_KINDS = (
@@ -38,14 +50,8 @@ DIRECT_PURCHASE_KEYWORDS = ("直接采购", "直购")
 
 # 列表接口按分类抓取时已写入 notice_raw.notice_type，未解析也能显示
 NOTICE_TYPE_LABELS = {
-    "jd-quan-yicai": {
-        "1": "采购公告",
-        "2": "成交公告",
-        "3": "终止公告",
-        "4": "失败公告",
-        "5": "询比公告",
-        "6": "废标公告",
-    },
+    "jd-quan-yicai": JD_NOTICE_TYPE_LABELS,
+    "jd-qing-huicai": JD_NOTICE_TYPE_LABELS,
     "sd-ggzyjyzx": {
         "0": "采购公告",
         "1": "成交公告",
@@ -141,19 +147,43 @@ def _kind_from_notice_type(site_id: str | None, notice_type: Any) -> str:
     return NOTICE_TYPE_LABELS.get(site_id or "", {}).get(code, "")
 
 
+def _normalize_display_kind(site_id: str | None, kind: str) -> str:
+    """把历史统一名改回各站原文（京东竞价页叫「竞价公告」不是「采购公告」）。"""
+    text = (kind or "").strip()
+    if not text or text.isdigit():
+        return text
+    if site_id in JD_SITE_IDS and text == "采购公告":
+        return "竞价公告"
+    return text
+
+
 def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
+    detail = _json_dict(raw.detail_json)
+    list_item = _json_dict(raw.list_json)
+
+    # 京东：优先用站点 notice_type 对应的原文 tab 名
+    if raw.site_id in JD_SITE_IDS:
+        mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
+        if not mapped:
+            mapped = _kind_from_notice_type(
+                raw.site_id,
+                detail.get("noticeType")
+                if detail.get("noticeType") not in (None, "")
+                else list_item.get("noticeType"),
+            )
+        if mapped:
+            return mapped
+
     kind = (parsed.notice_kind if parsed and parsed.notice_kind else "") or ""
-    kind = kind.strip()
+    kind = _normalize_display_kind(raw.site_id, kind)
     # 解析结果有时只落了接口里的数字编码
     if kind and not kind.isdigit():
         return kind
-    detail = _json_dict(raw.detail_json)
-    list_item = _json_dict(raw.list_json)
     for key in ("noticeTypeName", "noticeKind", "typeName"):
         for src in (detail, list_item):
             v = src.get(key)
             if v and not str(v).strip().isdigit():
-                return str(v).strip()
+                return _normalize_display_kind(raw.site_id, str(v))
     mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
     if not mapped:
         mapped = _kind_from_notice_type(
@@ -170,6 +200,8 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
         ("结果公告", "结果公告"),
         ("成交公告", "成交公告"),
         ("失败", "失败公告"),
+        ("询比", "询比公告"),
+        ("竞价公告", "竞价公告"),
     ):
         if token in title:
             return label
@@ -178,9 +210,20 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
 
 def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
     """公告类型筛选：解析字段，或抓取时写入的 notice_type 编码。"""
-    q = Q(
-        id__in=NoticeParsed.objects.filter(notice_kind=notice_kind).values("notice_raw_id")
-    )
+    parsed_qs = NoticeParsed.objects.filter(notice_kind=notice_kind)
+    if site_id:
+        parsed_qs = parsed_qs.filter(site_id=site_id)
+    q = Q(id__in=parsed_qs.values("notice_raw_id"))
+
+    # 京东历史曾把竞价公告写成「采购公告」，筛选时兼容
+    if notice_kind == "竞价公告":
+        legacy = NoticeParsed.objects.filter(
+            site_id__in=JD_SITE_IDS if not site_id else [site_id],
+            notice_kind="采购公告",
+        )
+        if not site_id or site_id in JD_SITE_IDS:
+            q |= Q(id__in=legacy.values("notice_raw_id"))
+
     for sid, mapping in NOTICE_TYPE_LABELS.items():
         if site_id and sid != site_id:
             continue
@@ -195,7 +238,10 @@ def _notice_kind_options(site_id: str) -> list[str]:
     kind_qs = NoticeParsed.objects.exclude(notice_kind__isnull=True).exclude(notice_kind="")
     if site_id:
         kind_qs = kind_qs.filter(site_id=site_id)
-    labels.update(k.strip() for k in kind_qs.values_list("notice_kind", flat=True).distinct() if k and not str(k).strip().isdigit())
+    for sid, kind in kind_qs.values_list("site_id", "notice_kind").distinct():
+        if not kind or str(kind).strip().isdigit():
+            continue
+        labels.add(_normalize_display_kind(sid, str(kind)))
 
     raw_qs = NoticeRaw.objects.exclude(notice_type__isnull=True).exclude(notice_type="")
     if site_id:
