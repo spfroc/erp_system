@@ -2,9 +2,9 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PIP_DEFAULT_TIMEOUT=120
-ENV PIP_RETRIES=10
-ENV PIP_INDEX_URL=https://repo.huaweicloud.com/repository/pypi/simple
+ENV PIP_DEFAULT_TIMEOUT=300
+ENV PIP_RETRIES=15
+ENV PIP_INDEX_URL=https://mirrors.huaweicloud.com/repository/pypi/simple
 
 WORKDIR /app
 

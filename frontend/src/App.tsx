@@ -3550,22 +3550,34 @@ export default function App() {
   }, [currentUserId, data, view]);
 
   useEffect(() => {
-    if (view === "productProjects" || view === "serviceProjects") {
+    if (
+      view === "productProjects"
+      || view === "serviceProjects"
+      || view === "contracts"
+      || view === "websiteLeads"
+      || view === "platformAccounts"
+      || view === "reminders"
+      || view === "trademarkCertificates"
+      || view === "notices"
+    ) {
       setProjectMenuOpen(true);
     }
-    if (view === "serviceOrders" || view === "salesOrders" || view === "purchaseOrders") {
+    if (view === "serviceOrders" || view === "salesOrders" || view === "purchaseOrders" || view === "products") {
       setOrderMenuOpen(true);
     }
-    if (view === "websiteLeads" || view === "notices" || view === "libraryContacts") {
+    if (view === "entities" || view === "customerAccounts" || view === "libraryContacts") {
       setCustomerMenuOpen(true);
     }
-    if (view === "entities" || view === "products") {
-      setBaseMenuOpen(true);
+    if (view === "officialSites" || view === "officialSeo") {
+      setOfficialMenuOpen(true);
     }
     if (view === "invoices" || view === "transactions" || view === "financeStatements" || view === "receiptStats" || view === "paymentStats") {
       setFinanceMenuOpen(true);
     }
-    if (view === "optionSettings" || view === "access") {
+    if (view === "sms" || view === "logs") {
+      setLogMenuOpen(true);
+    }
+    if (view === "collectionAccounts" || view === "optionSettings" || view === "access") {
       setSystemMenuOpen(true);
     }
   }, [view]);
