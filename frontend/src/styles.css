@@ -1720,7 +1720,7 @@ nav button:hover {
 }
 
 .table-row.notice-table {
-  grid-template-columns: minmax(180px, 1.4fr) 0.7fr 0.9fr 0.9fr 0.75fr 0.7fr 0.95fr 0.65fr 0.55fr;
+  grid-template-columns: minmax(180px, 1.3fr) 0.65fr 0.85fr 0.85fr 0.7fr 0.65fr minmax(150px, 1.15fr) 0.6fr 0.5fr;
   align-items: start;
 }
 
@@ -1731,6 +1731,15 @@ nav button:hover {
   font-style: normal;
   font-size: 12px;
   margin-top: 2px;
+}
+
+.table-row.notice-table .notice-times em {
+  margin-top: 0;
+  line-height: 1.45;
+}
+
+.table-row.notice-table .notice-times em + em {
+  margin-top: 1px;
 }
 
 .table-row.notice-goods-table {
