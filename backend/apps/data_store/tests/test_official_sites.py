@@ -90,3 +90,26 @@ class OfficialSiteTests(TestCase):
         site.refresh_from_db()
         self.assertTrue(site.data.get("seoKeywords"))
         self.assertIn("Sitemap:", site.data.get("robotsTxt") or "")
+
+    def test_ensure_fills_empty_industries_from_seed(self):
+        ensure_default_official_sites()
+        site = OfficialSiteRecord.objects.get(id="site-qlyc")
+        data = dict(site.data or {})
+        data["industries"] = []
+        site.data = data
+        site.save(update_fields=["data"])
+
+        ensure_default_official_sites()
+        site.refresh_from_db()
+        industries = site.data.get("industries") or []
+        self.assertGreaterEqual(len(industries), 8)
+        self.assertEqual(industries[0]["title"], "办公用品")
+
+        jinanyunji = OfficialSiteRecord.objects.get(id="site-jinanyunji")
+        data = dict(jinanyunji.data or {})
+        data["industries"] = []
+        jinanyunji.data = data
+        jinanyunji.save(update_fields=["data"])
+        ensure_default_official_sites()
+        jinanyunji.refresh_from_db()
+        self.assertGreaterEqual(len(jinanyunji.data.get("industries") or []), 8)

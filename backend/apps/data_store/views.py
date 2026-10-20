@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 
 from .models import (
     AppState,
+    CustomerAccountRecord,
     InvoiceRecord,
     LibraryContactRecord,
     ManagedFile,
@@ -126,9 +127,12 @@ COLLECTIONS = {
     "libraryContacts": LibraryContactRecord,
     "smsTemplates": SmsTemplateRecord,
     "smsRecords": SmsRecordRecord,
+    "customerAccounts": CustomerAccountRecord,
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
+# 大表已走 /api/collections 分页，禁止打进启动包（one 上资料库 14 万+、短信 5 万+）。
+APP_DATA_BOOTSTRAP_SKIP = frozenset({"libraryContacts", "smsRecords"})
 
 COLLECTION_PERMISSIONS = {
     "roles": {"read": "user.manage", "write": "user.manage"},
@@ -162,6 +166,7 @@ COLLECTION_PERMISSIONS = {
     "libraryContacts": {"read": "library.view", "write": "library.manage"},
     "smsTemplates": {"read": "sms.view", "write": "sms.manage"},
     "smsRecords": {"read": "sms.view", "write": "sms.manage"},
+    "customerAccounts": {"read": "customerAccount.view", "write": "customerAccount.manage"},
 }
 
 
@@ -508,7 +513,7 @@ def _collection_public_data(collection: str, record) -> dict:
 
 def _sanitize_record_data(collection: str, data: dict, can_view_sensitive: bool = False) -> dict:
     sanitized = dict(data)
-    if collection == "users":
+    if collection in {"users", "customerAccounts"}:
         for field in USER_SENSITIVE_FIELDS:
             sanitized.pop(field, None)
     if collection == "platformAccounts" and not can_view_sensitive:
@@ -550,14 +555,14 @@ def _is_masked_value(value) -> bool:
 
 def _preserve_sensitive_fields(collection: str, payload: dict, existing: dict | None) -> dict:
     merged = dict(payload)
-    fields = USER_SENSITIVE_FIELDS if collection == "users" else PLATFORM_SENSITIVE_FIELDS if collection == "platformAccounts" else set()
+    fields = USER_SENSITIVE_FIELDS if collection in {"users", "customerAccounts"} else PLATFORM_SENSITIVE_FIELDS if collection == "platformAccounts" else set()
     for field in fields:
         if field not in merged or _is_masked_value(merged.get(field)):
             if existing and existing.get(field):
                 merged[field] = existing[field]
             else:
                 merged.pop(field, None)
-    if collection == "users" and merged.get("password"):
+    if collection in {"users", "customerAccounts"} and merged.get("password"):
         password = str(merged["password"])
         try:
             identify_hasher(password)
@@ -660,6 +665,21 @@ def _collection_permission(collection: str, action: str) -> str:
     return permissions.get(action, "user.manage")
 
 
+def _customer_account_conflict(data: dict, existing) -> JsonResponse | None:
+    phone = str(data.get("phone") or "").strip()
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "请填写账号名称。"}, status=400)
+    if not phone:
+        return JsonResponse({"detail": "请填写手机号。"}, status=400)
+    if not existing and not data.get("password"):
+        return JsonResponse({"detail": "请设置登录密码。"}, status=400)
+    duplicate = CustomerAccountRecord.objects.filter(is_deleted=False, phone=phone).exclude(id=data.get("id")).exists()
+    if duplicate:
+        return JsonResponse({"detail": "该手机号已有客户账号。"}, status=400)
+    return None
+
+
 def _password_matches(stored_password: str, raw_password: str) -> bool:
     if not stored_password:
         return raw_password == "123456"
@@ -718,6 +738,10 @@ def _record_defaults(model, payload: dict) -> dict:
             phone=payload.get("phone", "") or "",
             status=payload.get("status", "启用"),
         )
+    elif model is CustomerAccountRecord:
+        from .portal import account_defaults
+
+        defaults.update(account_defaults(payload))
     elif model is OrganizationRecord:
         defaults.update(
             name=payload.get("name", ""),
@@ -1106,11 +1130,19 @@ def _protect_referenced_organizations(incoming_organization_ids: set[str]) -> No
 def load_app_data() -> dict | None:
     # 业务表有数据时以表为准，避免每次读写再解析/回写整份 app_state JSON。
     # 不先扫一遍 exists()：表都在时那是 N 次多余查询。
-    payload = {key: _serialize_queryset(model) for key, model in COLLECTIONS.items()}
+    payload = {
+        key: ([] if key in APP_DATA_BOOTSTRAP_SKIP else _serialize_queryset(model))
+        for key, model in COLLECTIONS.items()
+    }
     if any(payload.values()):
         return payload
     legacy = _legacy_state_data()
-    return legacy or None
+    if not legacy:
+        return None
+    # 旧快照里也可能塞了大表，启动时同样剥离。
+    for key in APP_DATA_BOOTSTRAP_SKIP:
+        legacy[key] = []
+    return legacy
 
 
 def _normalize_delete_ids(delete_ids: dict | None) -> dict[str, list[str]]:
@@ -1151,7 +1183,9 @@ def save_app_data(data: dict, partial: bool = False, delete_ids: dict | None = N
         if not isinstance(incoming, list):
             incoming = []
         ids_to_delete = set(delete_ids.get(key) or [])
-        if not partial:
+        # 资料库/短信记录只走 collections API；全量 app-data 快照不得因缺项软删大表。
+        skip_bootstrap = key in APP_DATA_BOOTSTRAP_SKIP
+        if not partial and not skip_bootstrap:
             incoming_ids = {item.get("id") for item in incoming if isinstance(item, dict) and item.get("id")}
             # 全量快照仍按「未出现即删除」。部分保存只 upsert 提交的记录，
             # 删除必须走 delete_ids 或单条 DELETE，避免浏览器滞后快照误删。
@@ -1165,6 +1199,8 @@ def save_app_data(data: dict, partial: bool = False, delete_ids: dict | None = N
                 )
             _soft_delete_queryset(model.objects.filter(id__in=ids_to_delete))
         if partial and key not in data:
+            continue
+        if skip_bootstrap and not partial and not incoming:
             continue
         for item in incoming:
             if not isinstance(item, dict) or not item.get("id") or item["id"] in ids_to_delete:
@@ -1765,6 +1801,16 @@ def _apply_collection_list_query(collection: str, queryset, request):
                 | Q(content__icontains=search)
                 | Q(prefix__icontains=search)
             )
+    elif collection == "customerAccounts":
+        status = (get("status") or "").strip()
+        if status and status != "全部":
+            queryset = queryset.filter(status=status)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search)
+                | Q(phone__icontains=search)
+                | Q(customer_name__icontains=search)
+            )
     elif collection == "smsRecords":
         sms_type = (get("type") or "").strip()
         if sms_type and sms_type != "全部":
@@ -1821,7 +1867,7 @@ def _sync_app_state_snapshot():
     legacy = current.data if current and isinstance(current.data, dict) else {}
     merged = dict(legacy)
     for key, model in COLLECTIONS.items():
-        merged[key] = _serialize_queryset(model)
+        merged[key] = [] if key in APP_DATA_BOOTSTRAP_SKIP else _serialize_queryset(model)
     AppState.objects.update_or_create(key=DEFAULT_KEY, defaults={"data": merged})
 
 
@@ -1835,7 +1881,7 @@ def _patch_app_state_collections(keys) -> None:
         model = COLLECTIONS.get(key)
         if not model:
             continue
-        merged[key] = _serialize_queryset(model)
+        merged[key] = [] if key in APP_DATA_BOOTSTRAP_SKIP else _serialize_queryset(model)
     current.data = merged
     current.save(update_fields=["data"])
 
@@ -2172,6 +2218,10 @@ def collection_items(request, collection):
 
     existing = model.objects.filter(id=data["id"]).first()
     data = _preserve_sensitive_fields(collection, data, existing.data if existing else None)
+    if collection == "customerAccounts":
+        conflict = _customer_account_conflict(data, existing)
+        if conflict:
+            return conflict
     if collection == "platformAccounts":
         data = _ensure_platform_account_timestamps(data, existing)
     if collection == "trademarkCertificates":
@@ -2240,6 +2290,10 @@ def collection_item(request, collection, record_id):
     data = {**_column_json_from_record(record), **existing_data, **incoming} if request.method == "PATCH" else incoming
     data["id"] = record.id
     data = _preserve_sensitive_fields(collection, data, record.data)
+    if collection == "customerAccounts":
+        conflict = _customer_account_conflict(data, record)
+        if conflict:
+            return conflict
     if collection == "platformAccounts":
         if request.method in {"PUT", "PATCH"} and not incoming.get("updatedAt"):
             data["updatedAt"] = timezone.now().isoformat()
@@ -2363,6 +2417,8 @@ DOCUMENT_PERMISSIONS = {
     "contract": {"read": "project.view", "write": "project.edit"},
     "trademark_certificate": {"read": "trademarkCertificate.view", "write": "trademarkCertificate.manage"},
     "trademark_attachment": {"read": "trademarkCertificate.view", "write": "trademarkCertificate.manage"},
+    # 官网微信二维码等站点素材：写入需 site.manage；公开页 img 需匿名可读。
+    "site_wechat_qr": {"read": "site.view", "write": "site.manage"},
 }
 
 # These types keep one file per owner (upsert). Others always create a new ManagedFile.
@@ -2372,7 +2428,12 @@ SINGLE_FILE_DOCUMENT_TYPES = {
     "payment_voucher",
     "contract",
     "trademark_certificate",
+    "site_wechat_qr",
 }
+
+# 官网前台可匿名访问的图片类附件（仍走 /api/documents/<id>/，由 official-web 反代）。
+PUBLIC_DOCUMENT_TYPES = frozenset({"site_wechat_qr"})
+
 
 
 def _normalize_registration_no(value) -> str:
@@ -2488,12 +2549,15 @@ def download_document(request, file_id):
     permissions = DOCUMENT_PERMISSIONS.get(record.document_type)
     if not permissions:
         return JsonResponse({"detail": "文件类型无效。"}, status=404)
-    _, permission_error = _require_permission(request, permissions["read"])
-    if permission_error:
-        return permission_error
+    if record.document_type not in PUBLIC_DOCUMENT_TYPES:
+        _, permission_error = _require_permission(request, permissions["read"])
+        if permission_error:
+            return permission_error
     response = FileResponse(record.file.open("rb"), content_type=record.content_type or "application/octet-stream")
     response["Content-Disposition"] = f"inline; filename*=UTF-8''{quote(record.original_name)}"
     response["X-Original-Filename"] = record.original_name
+    if record.document_type in PUBLIC_DOCUMENT_TYPES:
+        response["Cache-Control"] = "public, max-age=86400"
     return response
 
 

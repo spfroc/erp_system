@@ -1,6 +1,14 @@
 from django.test import TestCase
 
-from apps.data_store.models import AppState, OrganizationRecord, ProductRecord, ProjectItemRecord, ProjectRecord
+from apps.data_store.models import (
+    AppState,
+    LibraryContactRecord,
+    OrganizationRecord,
+    ProductRecord,
+    ProjectItemRecord,
+    ProjectRecord,
+    SmsRecordRecord,
+)
 from apps.data_store.views import (
     DEFAULT_KEY,
     ProtectedOrganizationError,
@@ -264,3 +272,29 @@ class SoftDeleteTests(TestCase):
         save_app_data({"operationLogs": logs}, partial=True)
         loaded = load_app_data() or {}
         self.assertEqual(len(loaded.get("operationLogs") or []), APP_DATA_OPERATION_LOG_LIMIT)
+
+    def test_load_app_data_skips_library_and_sms_records(self):
+        LibraryContactRecord.objects.create(
+            id="lc-1",
+            name="张三",
+            mobile="13800000000",
+            data={"id": "lc-1", "name": "张三", "mobile": "13800000000"},
+        )
+        SmsRecordRecord.objects.create(
+            id="sms-1",
+            mobile="13800000000",
+            content="hi",
+            data={"id": "sms-1", "mobile": "13800000000", "content": "hi", "status": "sent"},
+        )
+        save_app_data({"products": [self.product]}, partial=True)
+
+        loaded = load_app_data() or {}
+        self.assertEqual(loaded.get("libraryContacts"), [])
+        self.assertEqual(loaded.get("smsRecords"), [])
+        self.assertEqual(LibraryContactRecord.objects.filter(is_deleted=False).count(), 1)
+        self.assertEqual(SmsRecordRecord.objects.filter(is_deleted=False).count(), 1)
+
+        # 全量快照缺大表不得软删
+        save_app_data({"products": [self.product]})
+        self.assertFalse(LibraryContactRecord.objects.get(id="lc-1").is_deleted)
+        self.assertFalse(SmsRecordRecord.objects.get(id="sms-1").is_deleted)

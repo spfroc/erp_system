@@ -3,8 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import requests
-
+from clients.http_session import build_session
 from config import settings
 
 SITE_ID = "sd-gpfa-frame"
@@ -22,9 +21,8 @@ CATEGORIES: List[Tuple[int, int, str]] = [
 class SdGpfaClient:
     def __init__(self) -> None:
         self.base = "https://ggzyjyzx.shandong.gov.cn:8182"
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
+        self.session = build_session(
+            headers={
                 "Accept": "application/json",
                 "siteCode": settings.sd_site_code,
                 "regionGuid": settings.sd_region_guid,

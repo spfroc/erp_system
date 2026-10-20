@@ -429,6 +429,40 @@ def _tables_missing_response():
     )
 
 
+def query_crawled_notices(*, page: int = 1, page_size: int = 20, search: str = "", site_id: str = "", notice_kind: str = "") -> dict:
+    """客户控制台和后台列表共用的抓取公告查询。"""
+    page = max(int(page or 1), 1)
+    page_size = min(max(int(page_size or 20), 1), 100)
+    qs = NoticeRaw.objects.all().order_by("-publish_time", "-id")
+    if site_id:
+        qs = qs.filter(site_id=site_id)
+    if notice_kind and notice_kind != "全部":
+        qs = qs.filter(_raw_ids_for_kind(notice_kind, site_id))
+    keyword = (search or "").strip()
+    if keyword:
+        parsed_ids = list(
+            NoticeParsed.objects.filter(
+                Q(project_code__icontains=keyword)
+                | Q(project_name__icontains=keyword)
+                | Q(buyer_name__icontains=keyword)
+                | Q(notice_title__icontains=keyword)
+            ).values_list("notice_raw_id", flat=True)[:2000]
+        )
+        qs = qs.filter(Q(title__icontains=keyword) | Q(notice_key__icontains=keyword) | Q(id__in=parsed_ids))
+    total = qs.count()
+    rows = list(qs[(page - 1) * page_size : page * page_size])
+    parsed_map = {
+        item.notice_raw_id: item
+        for item in NoticeParsed.objects.filter(notice_raw_id__in=[row.id for row in rows])
+    }
+    return {
+        "items": [_serialize_list_item(row, parsed_map.get(row.id)) for row in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def notice_list(request):

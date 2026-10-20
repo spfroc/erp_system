@@ -1,9 +1,14 @@
+x-tz: &default-tz
+  TZ: Asia/Shanghai
+
 services:
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile.prod
     container_name: yzc-erp-frontend-prod
+    environment:
+      <<: *default-tz
     restart: unless-stopped
     depends_on:
       backend:
@@ -13,6 +18,8 @@ services:
     networks:
       - internal
       - prod.host
+    volumes:
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
     labels:
       - traefik.enable=true
       - traefik.docker.network=prod.host
@@ -31,11 +38,14 @@ services:
     env_file:
       - path: ../.env.prod
         format: raw
+    environment:
+      <<: *default-tz
     restart: unless-stopped
     networks:
       - internal
     volumes:
       - business-documents:/app/media
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8000),2); s.close()"]
       interval: 10s
@@ -47,26 +57,74 @@ services:
     build:
       context: ../ocr-service
     container_name: yzc-erp-ocr-prod
+    environment:
+      <<: *default-tz
     restart: unless-stopped
     networks:
       - internal
+    volumes:
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
 
   notice-crawler:
     build:
       context: ../notice_crawler
     container_name: yzc-erp-notice-crawler-prod
     restart: unless-stopped
+    # 宿主机网络：才能访问内网 SOCKS（192.168.0.19），绕过公网对山东商城的封锁
+    network_mode: host
     env_file:
-      - ../notice_crawler/.env
+      - path: ../.env.prod
+        format: raw
     environment:
-      EXTRACTOR_BACKEND: heuristic
-      CRAWL_INTERVAL_SECONDS: "10800"
-      CRAWL_STOP_DUP: "5"
-      CRAWL_LOOKBACK_DAYS: "2"
-    networks:
-      - internal
+      <<: *default-tz
+      NOTICE_HTTP_PROXY: socks5h://192.168.0.19:19081
+      HTTPS_PROXY: socks5h://192.168.0.19:19081
+      HTTP_PROXY: socks5h://192.168.0.19:19081
+      ALL_PROXY: socks5h://192.168.0.19:19081
+      NO_PROXY: localhost,127.0.0.1
+      no_proxy: localhost,127.0.0.1
     volumes:
       - notice-crawler-data:/app/data
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+
+  official-web:
+    image: node:22-alpine
+    container_name: yzc-erp-official-web-prod
+    working_dir: /app
+    command: node server.mjs
+    env_file:
+      - path: ../.env.official
+        format: raw
+    environment:
+      <<: *default-tz
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||5180)+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+      - prod.host
+    volumes:
+      - ../official-web:/app
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=prod.host
+      - traefik.http.routers.yzc-official.rule=Host(`preview.qlyc.co`) || Host(`yizhichan.qlyc.co`) || Host(`preview.qinghuicai.cn`)
+      - traefik.http.routers.yzc-official.entrypoints=websecure
+      - traefik.http.routers.yzc-official.tls.certresolver=letsencrypt
+      - traefik.http.routers.yzc-portal.rule=Host(`portal.qlyc.co`)
+      - traefik.http.routers.yzc-portal.entrypoints=websecure
+      - traefik.http.routers.yzc-portal.tls.certresolver=letsencrypt
+      - traefik.http.routers.yzc-portal.service=yzc-official
+      - traefik.http.services.yzc-official.loadbalancer.server.port=5180
+    depends_on:
+      backend:
+        condition: service_healthy
 
 networks:
   internal:

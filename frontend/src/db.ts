@@ -543,12 +543,27 @@ async function fetchServerData(): Promise<{ raw: Partial<AppData> | null; data: 
 
 export type CollectionDeleteIds = Partial<Record<keyof AppData, string[]>>;
 
+/** 大表走 /api/collections，禁止打进 app-data 全量快照。 */
+const APP_DATA_BOOTSTRAP_SKIP = new Set<keyof AppData>(["libraryContacts", "smsRecords"]);
+
+function stripBootstrapHeavyCollections(data: Partial<AppData>): Partial<AppData> {
+  const next = { ...data };
+  for (const key of APP_DATA_BOOTSTRAP_SKIP) {
+    delete next[key];
+  }
+  return next;
+}
+
 async function saveServerData(
   data: Partial<AppData>,
   partial = false,
   deleteIds?: CollectionDeleteIds,
 ): Promise<AppData | null> {
-  const body: { data: Partial<AppData>; partial: boolean; deleteIds?: CollectionDeleteIds } = { data, partial };
+  const payloadData = partial ? data : stripBootstrapHeavyCollections(data);
+  const body: { data: Partial<AppData>; partial: boolean; deleteIds?: CollectionDeleteIds } = {
+    data: payloadData,
+    partial,
+  };
   if (partial && deleteIds && Object.keys(deleteIds).length) {
     body.deleteIds = deleteIds;
   }
@@ -661,6 +676,8 @@ export function diffPartialAppData(previous: AppData, next: AppData): {
   const upserts: Partial<AppData> = {};
   const deleteIds: CollectionDeleteIds = {};
   (Object.keys(next) as Array<keyof AppData>).forEach((key) => {
+    // 分页缓存的资料库/短信记录不参与 app-data 增量同步。
+    if (APP_DATA_BOOTSTRAP_SKIP.has(key)) return;
     if (next[key] === previous[key]) return;
     const prevItems = previous[key];
     const nextItems = next[key];

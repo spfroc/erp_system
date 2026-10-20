@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-import requests
 from sqlalchemy import select
 from tqdm import tqdm
 
+from clients.http_session import build_session
 from config import settings
 from db import NoticeAttachment, NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
 from pipeline.parse_llm import (
@@ -39,10 +39,11 @@ def download_pending(*, limit: int = 50, site_id: Optional[str] = None) -> int:
             stmt = stmt.where(NoticeAttachment.site_id == site_id)
         stmt = stmt.order_by(NoticeAttachment.id.asc()).limit(limit)
         rows = session.execute(stmt).scalars().all()
+        http = build_session()
         for att in tqdm(rows, desc="download-att"):
             url = ensure_https(att.file_url)
             try:
-                resp = requests.get(url, timeout=60)
+                resp = http.get(url, timeout=60)
                 resp.raise_for_status()
                 content = resp.content
                 sha = hashlib.sha256(content).hexdigest()

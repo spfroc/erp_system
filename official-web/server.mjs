@@ -26,6 +26,16 @@ const HOST_TO_SITE = {
   "jinanyunji.com": "jinanyunji",
   "www.qinghuicai.cn": "qinghuicai",
   "qinghuicai.cn": "qinghuicai",
+  "preview.qlyc.co": "qlyc",
+  "yizhichan.qlyc.co": "yizhichan",
+  "preview.qinghuicai.cn": "qinghuicai",
+  "portal.qlyc.co": "portal",
+};
+
+const PREVIEW_CONFIG_HOST = {
+  "preview.qlyc.co": "www.qlyc.co",
+  "yizhichan.qlyc.co": "www.yizhichan.co",
+  "preview.qinghuicai.cn": "www.qinghuicai.cn",
 };
 
 const MIME = {
@@ -143,7 +153,7 @@ function proxyApi(req, res, url) {
   const headers = {
     accept: req.headers.accept || "application/json",
     "user-agent": req.headers["user-agent"] || "official-web",
-    host: target.host,
+    host: process.env.BACKEND_HTTP_HOST || target.host,
   };
   if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
   if (req.headers.cookie) headers.cookie = req.headers.cookie;
@@ -163,6 +173,7 @@ function proxyApi(req, res, url) {
         "Content-Type": upstreamRes.headers["content-type"] || "application/json; charset=utf-8",
         "Cache-Control": "no-store",
       };
+      if (upstreamRes.headers["set-cookie"]) responseHeaders["set-cookie"] = upstreamRes.headers["set-cookie"];
       res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
       upstreamRes.pipe(res);
     },
@@ -212,9 +223,9 @@ function parseNoticeDetailId(pathname) {
 }
 
 async function handleRobotsTxt(req, res, siteKey, root) {
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
   try {
-    const remote = await fetchOfficialSeo(host);
+    const remote = await fetchOfficialSeo(PREVIEW_CONFIG_HOST[requestHost] || requestHost);
     const seo = getSiteSeo(siteKey, remote);
     if (seo.robotsTxt) {
       sendText(res, 200, `${seo.robotsTxt}\n`, "text/plain; charset=utf-8", {
@@ -289,6 +300,18 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
+    if (requestHost === "portal.qlyc.co" || url.searchParams.get("site") === "portal") {
+      const portalRoot = path.join(__dirname, "portal");
+      const portalFile = url.pathname === "/" || url.pathname === "" ? path.join(portalRoot, "index.html") : resolveStaticFile(portalRoot, url.pathname);
+      if (!portalFile) {
+        sendText(res, 404, "Not Found", "text/html; charset=utf-8");
+        return;
+      }
+      sendFile(res, portalFile);
+      return;
+    }
+
     const siteKey = resolveSiteKey(req, url);
     const root = siteRoot(siteKey);
     if (!fs.existsSync(root)) {
@@ -316,8 +339,8 @@ const server = http.createServer(async (req, res) => {
       (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "");
     if (isHomeHtml) {
       try {
-        const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
-        const homeConfig = await fetchOfficialHomeConfig(host);
+        const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
+        const homeConfig = await fetchOfficialHomeConfig(PREVIEW_CONFIG_HOST[requestHost] || requestHost);
         if (homeConfig) {
           const html = fs.readFileSync(filePath, "utf8");
           sendHtml(res, 200, injectHomeConfigIntoHtml(html, homeConfig));

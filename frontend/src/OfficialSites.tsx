@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Globe, Plus, Trash2, X } from "lucide-react";
 import { createCollectionItem, createId, deleteCollectionItem, patchCollectionItem, queryCollection, AuthExpiredError } from "./db";
+import { ImageUploadField } from "./ImageUploadField";
 import { CopyableLine, Pagination, SearchField } from "./listUi";
 import type {
   AppData,
@@ -13,6 +14,37 @@ import type {
   OfficialSiteFooter,
   PermissionKey,
 } from "./types";
+
+/** 官网首页「常见行业」用的 Font Awesome 6 solid 图标。 */
+export const INDUSTRY_ICON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "fa-pencil-alt", label: "文具" },
+  { value: "fa-print", label: "打印设备" },
+  { value: "fa-laptop", label: "电脑" },
+  { value: "fa-tv", label: "电器" },
+  { value: "fa-home", label: "家居日用" },
+  { value: "fa-tools", label: "工具" },
+  { value: "fa-fire-extinguisher", label: "消防" },
+  { value: "fa-server", label: "系统集成" },
+  { value: "fa-box", label: "包装仓储" },
+  { value: "fa-shopping-cart", label: "采购" },
+  { value: "fa-medkit", label: "医疗" },
+  { value: "fa-hard-hat", label: "工程" },
+  { value: "fa-car", label: "车辆" },
+  { value: "fa-utensils", label: "餐饮" },
+];
+
+/** 与 backend official_sites._YICAI_INDUSTRIES 保持一致，供空库补齐与后台一键填充。 */
+export const DEFAULT_OFFICIAL_INDUSTRIES: OfficialIndustryItem[] = [
+  { title: "办公用品", description: "笔、纸、文件夹、办公耗材等各类办公用品供应商", icon: "fa-pencil-alt" },
+  { title: "办公设备", description: "打印机、复印机、扫描仪等办公设备供应商", icon: "fa-print" },
+  { title: "IT设备", description: "计算机、服务器、网络设备等IT设备供应商", icon: "fa-laptop" },
+  { title: "电器类", description: "空调、冰箱、电视等家用及商用电器供应商", icon: "fa-tv" },
+  { title: "生活日用品", description: "清洁用品、个人护理等生活日用品供应商", icon: "fa-home" },
+  { title: "五金工具", description: "手动工具、电动工具、五金配件等供应商", icon: "fa-tools" },
+  { title: "消防救援", description: "消防器材、应急救援设备等供应商", icon: "fa-fire-extinguisher" },
+  { title: "系统集成", description: "舞台灯光、音响设备、会议系统、安防监控、信息化系统集成等服务供应商", icon: "fa-server" },
+];
+
 
 type CanAccess = (permission: PermissionKey) => boolean;
 type EditTab = "basic" | "contact" | "industries" | "platforms" | "footer" | "beian";
@@ -46,6 +78,7 @@ const emptyContact = (): OfficialSiteContact => ({
   hotline: "",
   mobile: "",
   wechatQrUrl: "/image/wx.png",
+  wechatQrFileId: "",
   email: "",
   contactName: "",
   address: "",
@@ -170,9 +203,21 @@ export function OfficialSitesPanel({
   const [homePages, setHomePages] = useState<Record<string, OfficialPage>>({});
   const [editing, setEditing] = useState<OfficialSite | null>(null);
   const [creating, setCreating] = useState(false);
+  const [draftSiteId, setDraftSiteId] = useState("");
   const [form, setForm] = useState<SiteForm>(emptyForm);
   const [tab, setTab] = useState<EditTab>("basic");
   const [saving, setSaving] = useState(false);
+  const siteOwnerId = editing?.id || draftSiteId;
+
+  useEffect(() => {
+    const id = "official-font-awesome";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = "/vendor/fontawesome/css/all.min.css";
+    document.head.appendChild(link);
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -221,6 +266,7 @@ export function OfficialSitesPanel({
   function closeModal() {
     setCreating(false);
     setEditing(null);
+    setDraftSiteId("");
     setForm(emptyForm());
     setTab("basic");
   }
@@ -228,6 +274,7 @@ export function OfficialSitesPanel({
   function openCreate() {
     setEditing(null);
     setCreating(true);
+    setDraftSiteId(createId("site"));
     setForm(emptyForm());
     setTab("basic");
   }
@@ -235,6 +282,7 @@ export function OfficialSitesPanel({
   function openEdit(site: OfficialSite) {
     setCreating(false);
     setEditing(site);
+    setDraftSiteId(site.id);
     setForm(siteToForm(site));
     setTab("basic");
   }
@@ -249,13 +297,14 @@ export function OfficialSitesPanel({
       hotline: form.contact.hotline?.trim() || "",
       mobile: form.contact.mobile?.trim() || "",
       wechatQrUrl: form.contact.wechatQrUrl?.trim() || "/image/wx.png",
+      wechatQrFileId: form.contact.wechatQrFileId?.trim() || "",
       email: form.contact.email?.trim() || "",
       contactName: form.contact.contactName?.trim() || "",
       address: form.contact.address?.trim() || "",
     };
     return {
       ...(base || {}),
-      id: base?.id || createId("site"),
+      id: base?.id || draftSiteId || createId("site"),
       key,
       name: form.name.trim(),
       domain,
@@ -608,10 +657,25 @@ export function OfficialSitesPanel({
                       <span>联系人</span>
                       <input value={form.contact.contactName || ""} onChange={(event) => setForm({ ...form, contact: { ...form.contact, contactName: event.target.value } })} />
                     </label>
-                    <label className="span-2">
-                      <span>微信二维码 URL</span>
-                      <input value={form.contact.wechatQrUrl || ""} onChange={(event) => setForm({ ...form, contact: { ...form.contact, wechatQrUrl: event.target.value } })} placeholder="/image/wx.png" />
-                    </label>
+                    <ImageUploadField
+                      label="微信二维码"
+                      ownerId={siteOwnerId}
+                      documentType="site_wechat_qr"
+                      fileId={form.contact.wechatQrFileId}
+                      url={form.contact.wechatQrUrl}
+                      disabled={!canManage}
+                      onChange={({ fileId, url }) =>
+                        setForm({
+                          ...form,
+                          contact: {
+                            ...form.contact,
+                            wechatQrFileId: fileId,
+                            wechatQrUrl: url || "/image/wx.png",
+                          },
+                        })
+                      }
+                      onError={(message) => onNotice({ type: "error", message })}
+                    />
                     <label className="span-2">
                       <span>地址</span>
                       <input value={form.contact.address || ""} onChange={(event) => setForm({ ...form, contact: { ...form.contact, address: event.target.value } })} />
@@ -625,16 +689,30 @@ export function OfficialSitesPanel({
                   <div className="action-title" style={{ marginBottom: 12 }}>
                     <h3>常见行业</h3>
                     {canManage && (
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={() => setForm({ ...form, industries: [...form.industries, { title: "", description: "", icon: "" }] })}
-                      >
-                        <Plus size={14} /> 添加
-                      </button>
+                      <div className="panel-title-buttons">
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              industries: DEFAULT_OFFICIAL_INDUSTRIES.map((item) => ({ ...item })),
+                            })
+                          }
+                        >
+                          填充默认行业
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => setForm({ ...form, industries: [...form.industries, { title: "", description: "", icon: "" }] })}
+                        >
+                          <Plus size={14} /> 添加
+                        </button>
+                      </div>
                     )}
                   </div>
-                  <p className="official-form-hint">青慧采无该区块时可留空。</p>
+                  <p className="official-form-hint">青慧采无该区块时可留空；壹采站可点「填充默认行业」载入 8 条常见配置。</p>
                   {form.industries.map((item, index) => (
                     <div className="official-form-grid" key={`industry-${index}`} style={{ marginBottom: 10 }}>
                       <label>
@@ -649,16 +727,30 @@ export function OfficialSitesPanel({
                         />
                       </label>
                       <label>
-                        <span>图标 class（可选）</span>
-                        <input
-                          value={item.icon || ""}
-                          onChange={(event) => {
-                            const industries = [...form.industries];
-                            industries[index] = { ...item, icon: event.target.value };
-                            setForm({ ...form, industries });
-                          }}
-                          placeholder="fa-laptop"
-                        />
+                        <span>图标</span>
+                        <span className="industry-icon-picker">
+                          <span className="industry-icon-preview" aria-hidden="true">
+                            {item.icon ? <i className={`fas ${item.icon}`} /> : <em>—</em>}
+                          </span>
+                          <select
+                            value={item.icon || ""}
+                            onChange={(event) => {
+                              const industries = [...form.industries];
+                              industries[index] = { ...item, icon: event.target.value };
+                              setForm({ ...form, industries });
+                            }}
+                          >
+                            <option value="">无图标</option>
+                            {item.icon && !INDUSTRY_ICON_OPTIONS.some((option) => option.value === item.icon) ? (
+                              <option value={item.icon}>{item.icon}</option>
+                            ) : null}
+                            {INDUSTRY_ICON_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}（{option.value}）
+                              </option>
+                            ))}
+                          </select>
+                        </span>
                       </label>
                       <label className="span-2">
                         <span>说明</span>

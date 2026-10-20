@@ -92,10 +92,15 @@ def _text_item(value: Any, *keys: str, default: str = "") -> str:
 def _normalize_contact(value: Any, fallback: dict[str, Any] | None = None) -> dict[str, str]:
     src = value if isinstance(value, dict) else {}
     fb = fallback or {}
+    file_id = _text_item(src, "wechatQrFileId", "wechat_qr_file_id")
+    qr_url = _text_item(src, "wechatQrUrl", "wechat_qr_url")
+    if file_id and not qr_url:
+        qr_url = f"/api/documents/{file_id}/"
     return {
         "hotline": _text_item(src, "hotline", "phone") or str(fb.get("phone") or fb.get("hotline") or "").strip(),
         "mobile": _text_item(src, "mobile"),
-        "wechatQrUrl": _text_item(src, "wechatQrUrl", "wechat_qr_url") or "/image/wx.png",
+        "wechatQrUrl": qr_url or "/image/wx.png",
+        "wechatQrFileId": file_id,
         "email": _text_item(src, "email") or str(fb.get("email") or "").strip(),
         "contactName": _text_item(src, "contactName", "contact_name"),
         "address": _text_item(src, "address") or str(fb.get("address") or "").strip(),
@@ -626,7 +631,7 @@ SITE_SEEDS = [
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
         "contact": {**_YICAI_CONTACT},
-        "industries": [],
+        "industries": list(_YICAI_INDUSTRIES),
         "inquiryPlatforms": [],
         "footer": {"platforms": [], "services": [], "keywords": ""},
         "beian": {**_YICAI_BEIAN},
@@ -648,6 +653,7 @@ SITE_SEEDS = [
         "email": "Wangyunlei@yizhichan.co",
         "address": "济南市市中区大观园街道纬二路49号汇宝大厦2106A",
         "contact": {**_YICAI_CONTACT},
+        # 青慧采首页无「常见行业」区块，保持空列表。
         "industries": [],
         "inquiryPlatforms": [{"label": "青慧采", "value": "青慧采"}],
         "footer": _QHC_FOOTER,

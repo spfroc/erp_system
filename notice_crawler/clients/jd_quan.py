@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from curl_cffi import requests as cffi_requests
 
+from clients.http_session import proxy_url
 from config import settings
 from utils import ensure_https
 
@@ -58,14 +59,17 @@ class JdQuanClient:
 
     def request(self, function_id: str, body: Dict[str, Any]) -> Any:
         self._sleep()
-        resp = cffi_requests.post(
-            "https://api.m.jd.com/api",
-            params={"functionId": function_id, "appid": "zcy-auction-view"},
-            data={"body": json.dumps(body, ensure_ascii=False)},
-            headers=self.headers,
-            impersonate=settings.jd_impersonate,
-            timeout=30,
-        )
+        kwargs = {
+            "params": {"functionId": function_id, "appid": "zcy-auction-view"},
+            "data": {"body": json.dumps(body, ensure_ascii=False)},
+            "headers": self.headers,
+            "impersonate": settings.jd_impersonate,
+            "timeout": 30,
+        }
+        proxy = proxy_url()
+        if proxy:
+            kwargs["proxies"] = {"http": proxy, "https": proxy}
+        resp = cffi_requests.post("https://api.m.jd.com/api", **kwargs)
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
         data = resp.json()

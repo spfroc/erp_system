@@ -17,7 +17,7 @@ export function fetchOfficialHomeConfig(host) {
       target,
       {
         method: "GET",
-        headers: { accept: "application/json", "user-agent": "official-web-home", host: target.host },
+        headers: { accept: "application/json", "user-agent": "official-web-home", host: process.env.BACKEND_HTTP_HOST || target.host },
         timeout: 8000,
       },
       (res) => {
@@ -109,14 +109,28 @@ function buildApplyScript(homeConfig) {
     var section = document.querySelector("#contact");
     if (!section) return;
     var html = section.innerHTML;
-    if (c.contactName) html = html.replace(/(联系人[：:]\\s*)([^<]+)/, "$1" + c.contactName);
-    if (c.mobile || c.hotline) {
-      var phones = [c.mobile, c.hotline].filter(Boolean).join(" / ");
-      html = html.replace(/(电话[：:]\\s*)([^<]+)/, "$1" + phones);
+    function replaceLabeled(source, label, value) {
+      if (!value) return source;
+      return source.replace(new RegExp("(" + label + "[：:](?:\\\\s*<\\\\/strong>)?\\\\s*)([^<]+)"), function (all, prefix) {
+        return prefix + value;
+      });
     }
-    if (c.email) html = html.replace(/(邮箱[：:]\\s*)([^<]+)/, "$1" + c.email);
-    if (c.address) html = html.replace(/(地址[：:]\\s*)([^<]+)/, "$1" + c.address);
+    html = replaceLabeled(html, "联系人", c.contactName);
+    if (c.mobile || c.hotline) {
+      html = replaceLabeled(html, "电话", [c.mobile, c.hotline].filter(Boolean).join(" / "));
+    }
+    html = replaceLabeled(html, "邮箱", c.email);
+    html = replaceLabeled(html, "地址", c.address);
     section.innerHTML = html;
+    section.querySelectorAll("h4").forEach(function (heading) {
+      var title = heading.textContent || "";
+      var paragraph = heading.parentElement ? heading.parentElement.querySelector("p") : null;
+      if (!paragraph) return;
+      if (title.indexOf("公司地址") >= 0 && c.address) paragraph.textContent = c.address;
+      else if (title.indexOf("电话") >= 0 && (c.mobile || c.hotline)) paragraph.textContent = [c.mobile, c.hotline].filter(Boolean).join(" / ");
+      else if (title.indexOf("邮箱") >= 0 && c.email) paragraph.textContent = c.email;
+      else if ((title.indexOf("专属顾问") >= 0 || title.indexOf("联系人") >= 0) && c.contactName) paragraph.textContent = c.contactName;
+    });
 
     // 青慧采联系区多为段落堆叠，再补一次侧栏同源电话到 footer 联系我们
   }
@@ -145,7 +159,7 @@ function buildApplyScript(homeConfig) {
           var label = item.title || item.name || "";
           var href = item.url || "#";
           var extra = item.contentHtml ? ("<div>" + item.contentHtml + "</div>") : "";
-          return "<li><a href=\"" + href + "\">" + label + "</a>" + extra + "</li>";
+          return '<li><a href="' + href + '">' + label + '</a>' + extra + '</li>';
         }).join("");
         sec.innerHTML = "";
         sec.appendChild(h);
@@ -168,7 +182,7 @@ function buildApplyScript(homeConfig) {
           box.innerHTML = lines.map(function (line) { return "<li>" + line + "</li>"; }).join("");
         } else {
           box.innerHTML = lines.map(function (line) {
-            return "<i class=\"fas fa-phone\"></i> " + line + "<br>";
+            return '<i class="fas fa-phone"></i> ' + line + '<br>';
           }).join("");
         }
         sec.innerHTML = "";
@@ -214,13 +228,41 @@ function buildApplyScript(homeConfig) {
 </script>`;
 }
 
+function replaceLabeledHtml(source, label, value) {
+  if (!value) return source;
+  const pattern = new RegExp(`(${label}[：:](?:\\s*<\\/strong>)?\\s*)([^<]+)`, "g");
+  return source.replace(pattern, (_all, prefix) => prefix + value);
+}
+
+function replaceHeadingParagraph(source, heading, value) {
+  if (!value) return source;
+  const pattern = new RegExp(`(<h4>\\s*${heading}\\s*</h4>\\s*<p>)[^<]*`, "g");
+  return source.replace(pattern, (_all, prefix) => prefix + value);
+}
+
+function applyServerContactHtml(html, homeConfig) {
+  const contact = homeConfig.contact || {};
+  const phones = [contact.mobile, contact.hotline].filter(Boolean).join(" / ");
+  let next = html;
+  next = replaceLabeledHtml(next, "联系人", contact.contactName || "");
+  next = replaceLabeledHtml(next, "电话", phones);
+  next = replaceLabeledHtml(next, "邮箱", contact.email || "");
+  next = replaceLabeledHtml(next, "地址", contact.address || "");
+  next = replaceHeadingParagraph(next, "公司地址", contact.address || "");
+  next = replaceHeadingParagraph(next, "电话", phones);
+  next = replaceHeadingParagraph(next, "邮箱", contact.email || "");
+  next = replaceHeadingParagraph(next, "专属顾问", contact.contactName || "");
+  return next;
+}
+
 export function injectHomeConfigIntoHtml(html, homeConfig) {
   if (!html || !homeConfig) return html;
+  const withContact = applyServerContactHtml(html, homeConfig);
   const script = buildApplyScript(homeConfig);
-  if (/<\/body>/i.test(html)) {
-    return html.replace(/<\/body>/i, `${script}\n</body>`);
+  if (/<\/body>/i.test(withContact)) {
+    return withContact.replace(/<\/body>/i, `${script}\n</body>`);
   }
-  return `${html}\n${script}`;
+  return `${withContact}\n${script}`;
 }
 
 export function homeConfigMetaComment(homeConfig) {

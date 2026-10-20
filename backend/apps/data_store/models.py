@@ -347,6 +347,19 @@ class SmsTemplateRecord(BaseRecord):
         db_table = "sms_templates"
 
 
+class CustomerAccountRecord(BaseRecord):
+    """官网客户控制台账号，与员工 UserRecord 分开。"""
+
+    name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=50, db_index=True)
+    customer_name = models.CharField(max_length=255, blank=True)
+    customer_org_id = models.CharField(max_length=64, blank=True, db_index=True)
+    status = models.CharField(max_length=20, default="启用", db_index=True)
+
+    class Meta:
+        db_table = "customer_accounts"
+
+
 class SmsRecordRecord(BaseRecord):
     task_id = models.CharField(max_length=100, blank=True, db_index=True)
     mobile = models.CharField(max_length=255, blank=True, db_index=True)

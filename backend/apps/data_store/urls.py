@@ -22,15 +22,26 @@ from .views import (
     public_official_seo,
     public_official_site,
     run_notice_collection,
+)
+from .notice_views import notice_detail as crawled_notice_detail
+from .notice_views import notice_list as crawled_notice_list
+from .views import (
     sms_center_records,
     sms_center_status,
     sms_send,
     upload_document,
     website_leads,
 )
+from .portal import portal_login, portal_logout, portal_me, portal_notices, portal_stats, portal_subscription
 
 
 urlpatterns = [
+    path("portal/login/", portal_login, name="portal-login"),
+    path("portal/logout/", portal_logout, name="portal-logout"),
+    path("portal/me/", portal_me, name="portal-me"),
+    path("portal/notices/", portal_notices, name="portal-notices"),
+    path("portal/stats/", portal_stats, name="portal-stats"),
+    path("portal/subscription/", portal_subscription, name="portal-subscription"),
     path("auth/login/", auth_login, name="auth-login"),
     path("auth/me/", auth_me, name="auth-me"),
     path("auth/logout/", auth_logout, name="auth-logout"),
@@ -60,6 +71,8 @@ urlpatterns = [
     path("public/notices/<str:notice_id>", public_notice_detail, name="public-notice-detail-no-slash"),
     path("official-site-inquiry/", official_site_inquiry, name="official-site-inquiry"),
     path("official-site-inquiry", official_site_inquiry, name="official-site-inquiry-no-slash"),
+    path("notices/crawled/", crawled_notice_list, name="crawled-notice-list"),
+    path("notices/crawled/<int:notice_id>/", crawled_notice_detail, name="crawled-notice-detail"),
     path("notices/collection-runs/", run_notice_collection, name="run-notice-collection"),
     path("notices/collection-runs", run_notice_collection, name="run-notice-collection-no-slash"),
     path("sms/status/", sms_center_status, name="sms-center-status"),

@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import unquote
 
-import requests
 import urllib3
 
+from clients.http_session import build_session
 from config import settings
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -79,17 +79,16 @@ def save_cached_token(token: str, cookies: Optional[dict] = None) -> None:
 
 class QlycLoginClient:
     def __init__(self) -> None:
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update(
-            {
+        self.session = build_session(
+            verify=False,
+            headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/122.0.0.0 Safari/537.36"
                 ),
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            }
+            },
         )
         self.final_url: Optional[str] = None
 
@@ -128,7 +127,7 @@ class QlycLoginClient:
         """对齐 qlyc:login：POST verify.qlyc.co/upload_image。"""
         url = settings.qlyc_captcha_url
         image_b64 = base64.b64encode(image_path.read_bytes()).decode("ascii")
-        resp = requests.post(
+        resp = self.session.post(
             url,
             json={"image_base64": image_b64},
             headers={"Content-Type": "application/json"},

@@ -129,6 +129,8 @@ export const seedData: AppData = {
         "library.manage",
         "sms.view",
         "sms.manage",
+        "customerAccount.view",
+        "customerAccount.manage",
         "lead.manage",
         "sensitive.view",
         "profit.view",
@@ -608,4 +610,5 @@ export const seedData: AppData = {
   libraryContacts: [],
   smsTemplates: [],
   smsRecords: [],
+  customerAccounts: [],
 };

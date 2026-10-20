@@ -40,6 +40,7 @@ APP_COLLECTIONS = [
     "libraryContacts",
     "smsTemplates",
     "smsRecords",
+    "customerAccounts",
 ]
 
 ALL_PERMISSIONS = [
@@ -74,6 +75,8 @@ ALL_PERMISSIONS = [
     "library.manage",
     "sms.view",
     "sms.manage",
+    "customerAccount.view",
+    "customerAccount.manage",
     "lead.manage",
     "sensitive.view",
     "profit.view",

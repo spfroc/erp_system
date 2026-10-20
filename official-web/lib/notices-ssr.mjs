@@ -27,7 +27,7 @@ function fetchJson(pathnameWithQuery) {
         headers: {
           accept: "application/json",
           "user-agent": "official-web-ssr",
-          host: target.host,
+          host: process.env.BACKEND_HTTP_HOST || target.host,
         },
         timeout: FETCH_TIMEOUT_MS,
       },

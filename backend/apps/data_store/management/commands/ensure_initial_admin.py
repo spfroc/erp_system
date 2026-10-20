@@ -37,6 +37,7 @@ class Command(BaseCommand):
                         "site.view", "site.manage",
                         "library.view", "library.manage",
                         "sms.view", "sms.manage",
+                        "customerAccount.view", "customerAccount.manage",
                         "lead.manage", "sensitive.view", "profit.view", "user.manage",
                     ],
                 },

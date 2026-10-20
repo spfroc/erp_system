@@ -4,18 +4,31 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from urllib.parse import quote_plus
+
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 
+def _database_url() -> str:
+    explicit = os.getenv("NOTICE_DB_URL", "").strip()
+    if explicit:
+        return explicit
+    host = os.getenv("MYSQL_HOST", "").strip()
+    user = os.getenv("MYSQL_USER", "").strip()
+    database = os.getenv("MYSQL_DATABASE", "").strip()
+    if host and user and database:
+        password = quote_plus(os.getenv("MYSQL_PASSWORD", ""))
+        port = os.getenv("MYSQL_PORT", "3306").strip() or "3306"
+        return f"mysql+pymysql://{quote_plus(user)}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+    return "mysql+pymysql://root:yicai-root@127.0.0.1:13306/yicai_erp?charset=utf8mb4"
+
+
 @dataclass(frozen=True)
 class Settings:
-    db_url: str = os.getenv(
-        "NOTICE_DB_URL",
-        "mysql+pymysql://root:yicai-root@127.0.0.1:13306/yicai_erp?charset=utf8mb4",
-    )
+    db_url: str = _database_url()
     sd_site_code: str = os.getenv("SD_SITE_CODE", "sdzfcg")
     sd_region_guid: str = os.getenv("SD_REGION_GUID", "1487001")
     sd_region_code: str = os.getenv("SD_REGION_CODE", "370001")

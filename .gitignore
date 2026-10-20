@@ -8,6 +8,8 @@ docs
 .env
 .env.local
 .env.prod
+.env.official
+backend/media/
 npm-debug.log*
 .DS_Store
 __pycache__/

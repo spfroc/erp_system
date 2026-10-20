@@ -12,8 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import requests
-
+from clients.http_session import build_session
 from config import settings
 
 AGREEMENT_TYPES = {
@@ -30,9 +29,8 @@ _DECODE_JS = _JS_DIR / "decode.js"
 
 class SdSupplierClient:
     def __init__(self) -> None:
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
+        self.session = build_session(
+            headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "

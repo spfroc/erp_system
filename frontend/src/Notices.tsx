@@ -84,7 +84,16 @@ export function NoticesPanel({
   const [publicFilter, setPublicFilter] = useState<string>("全部");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
-  const [items, setItems] = useState<Notice[]>([]);
+  const [items, setItems] = useState<Array<Notice & {
+    projectCode?: string;
+    buyerName?: string;
+    dealSupplier?: string;
+    siteLabel?: string;
+    progressLabel?: string;
+    sourceUrl?: string;
+    dealAmount?: number;
+    budgetAmount?: number;
+  }>>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
@@ -115,20 +124,20 @@ export function NoticesPanel({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void queryCollection<Notice>("notices", {
-      page,
-      pageSize: PAGE_SIZE,
-      search: debouncedSearch,
-      filters: {
-        noticeKind: noticeKind === "全部" ? undefined : noticeKind,
-        bidStatus: bidStatus === "全部" ? undefined : bidStatus,
-        isPublic: publicFilter === "公开" ? "true" : publicFilter === "不公开" ? "false" : undefined,
-      },
-    })
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+    if (noticeKind !== "全部") params.set("noticeKind", noticeKind);
+    void fetch(apiUrl(`/api/notices/crawled/?${params.toString()}`), { credentials: "include" })
+      .then(async (response) => {
+        if (response.status === 401) throw new AuthExpiredError();
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.detail || "公告列表加载失败");
+        return body as { items: typeof items; total: number };
+      })
       .then((result) => {
         if (cancelled) return;
-        setItems(result.items);
-        setTotal(result.total);
+        setItems(result.items || []);
+        setTotal(result.total || 0);
       })
       .catch((error) => {
         if (cancelled || error instanceof AuthExpiredError) return;
@@ -333,31 +342,31 @@ export function NoticesPanel({
                     <CopyableLine text={item.title} label="公告标题">
                       <strong>{item.title}</strong>
                     </CopyableLine>
-                    <CopyableLine text={item.projectNumber} label="项目编号" className="is-secondary">
-                      <em>项目编号 {item.projectNumber || "—"}</em>
+                    <CopyableLine text={item.projectCode || item.projectNumber} label="项目编号" className="is-secondary">
+                      <em>项目编号 {item.projectCode || item.projectNumber || "—"}</em>
                     </CopyableLine>
-                    {item.detailUrl ? (
-                      <a className="copy-link" href={item.detailUrl} target="_blank" rel="noreferrer">查看详情</a>
+                    {item.sourceUrl || item.detailUrl ? (
+                      <a className="copy-link" href={item.sourceUrl || item.detailUrl} target="_blank" rel="noreferrer">查看来源</a>
                     ) : null}
                   </span>
                   <span className="notice-main-cell">
-                    <CopyableLine text={item.department} label="采购单位">
-                      <strong>{item.department || "—"}</strong>
+                    <CopyableLine text={item.buyerName || item.department} label="采购单位">
+                      <strong>{item.buyerName || item.department || "—"}</strong>
                     </CopyableLine>
-                    <em>{item.supplierName || item.publisher || "—"}</em>
+                    <em>{item.dealSupplier || item.supplierName || item.siteLabel || "—"}</em>
                     {(item.contactName || item.contactPhone) ? (
                       <em>{[item.contactName, item.contactPhone].filter(Boolean).join(" ")}</em>
                     ) : null}
                   </span>
                   <span className="notice-main-cell">
                     <strong>{item.noticeKind}</strong>
-                    <em>{item.bidStatus || "—"}</em>
+                    <em>{item.progressLabel || item.bidStatus || "—"}</em>
                     <em>{item.category || "—"}</em>
                   </span>
-                  <span>{money(item.amount)}</span>
-                  <span>{item.isPublic ? "公开" : "不公开"}</span>
+                  <span>{money(item.dealAmount ?? item.budgetAmount ?? item.amount)}</span>
+                  <span>{item.siteLabel || (item.isPublic ? "公开" : "不公开")}</span>
                   <span className="option-actions">
-                    {canManage && (
+                    {canManage && typeof item.isPublic === "boolean" && (
                       <button type="button" className="copy-link" onClick={() => void togglePublic(item)}>
                         {item.isPublic ? "取消公开" : "公开到官网"}
                       </button>

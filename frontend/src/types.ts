@@ -606,6 +606,7 @@ export interface OfficialSiteContact {
   hotline?: string;
   mobile?: string;
   wechatQrUrl?: string;
+  wechatQrFileId?: string;
   email?: string;
   contactName?: string;
   address?: string;
@@ -821,6 +822,8 @@ export type PermissionKey =
   | "library.manage"
   | "sms.view"
   | "sms.manage"
+  | "customerAccount.view"
+  | "customerAccount.manage"
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
@@ -873,4 +876,17 @@ export interface AppData {
   libraryContacts: LibraryContact[];
   smsTemplates: SmsTemplate[];
   smsRecords: SmsRecord[];
+  customerAccounts: CustomerAccount[];
+}
+
+export interface CustomerAccount {
+  id: string;
+  name: string;
+  phone: string;
+  customerName?: string;
+  customerOrgId?: string;
+  status: "启用" | "停用";
+  permissions: string[];
+  subscription?: { enabled?: boolean; keywords?: string };
+  createdAt?: string;
 }

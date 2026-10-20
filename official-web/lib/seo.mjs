@@ -64,7 +64,7 @@ export function fetchOfficialSeo(host) {
       target,
       {
         method: "GET",
-        headers: { accept: "application/json", "user-agent": "official-web-seo", host: target.host },
+        headers: { accept: "application/json", "user-agent": "official-web-seo", host: process.env.BACKEND_HTTP_HOST || target.host },
         timeout: 8000,
       },
       (res) => {
