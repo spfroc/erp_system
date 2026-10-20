@@ -102,7 +102,7 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "contracts", label: "合同管理", iconKey: "FileText", permission: "project.view" },
   { viewId: "websiteLeads", label: "商机管理", iconKey: "MessageSquare", permission: "lead.manage" },
   { viewId: "platformAccounts", label: "平台账号", iconKey: "FileScan", permission: "platformAccount.view" },
-  { viewId: "reminders", label: "每日任务管理", iconKey: "ClipboardList", permission: "dashboard.view" },
+  { viewId: "reminders", label: "每日任务清单", iconKey: "ClipboardList", permission: "dashboard.view" },
   { viewId: "trademarkCertificates", label: "商标管理", iconKey: "Stamp", permission: "trademarkCertificate.view" },
   { viewId: "notices", label: "公告管理", iconKey: "FileText", permission: "notice.view" },
   { viewId: "serviceOrders", label: "服务订单", iconKey: "ShieldCheck", permission: "serviceOrder.view" },
@@ -140,8 +140,8 @@ export const DEFAULT_NAV_CATEGORIES: NavCategory[] = [
 ];
 
 export const DEFAULT_NAV_GROUPS: NavGroup[] = [
-  { id: "nav-group-projects", key: "projects", label: "项目管理", categoryKey: "business", iconKey: "ClipboardList", sortOrder: 10, enabled: true },
-  { id: "nav-group-orders", key: "orders", label: "订单", categoryKey: "business", iconKey: "ShoppingCart", sortOrder: 20, enabled: true },
+  { id: "nav-group-serviceProjects", key: "serviceProjects", label: "服务项目管理", categoryKey: "business", iconKey: "ShieldCheck", sortOrder: 10, enabled: true },
+  { id: "nav-group-productProjects", key: "productProjects", label: "商品项目管理", categoryKey: "business", iconKey: "ClipboardList", sortOrder: 20, enabled: true },
   { id: "nav-group-customers", key: "customers", label: "客户管理", categoryKey: "business", iconKey: "Building2", sortOrder: 30, enabled: true },
   { id: "nav-group-finance", key: "finance", label: "财务管理", categoryKey: "business", iconKey: "WalletCards", sortOrder: 40, enabled: true },
   { id: "nav-group-official", key: "official", label: "前端网站配置", categoryKey: "web", iconKey: "Globe", sortOrder: 10, enabled: true },
@@ -149,6 +149,9 @@ export const DEFAULT_NAV_GROUPS: NavGroup[] = [
   { id: "nav-group-logs", key: "logs", label: "日志管理", categoryKey: "system", iconKey: "History", sortOrder: 10, enabled: true },
   { id: "nav-group-system", key: "system", label: "系统设置", categoryKey: "system", iconKey: "Users", sortOrder: 20, enabled: true },
 ];
+
+/** 旧分组：重组后软删，避免侧栏残留「项目管理 / 订单」。 */
+export const OBSOLETE_NAV_GROUP_IDS = ["nav-group-projects", "nav-group-orders"] as const;
 
 function item(
   id: string,
@@ -174,28 +177,31 @@ function item(
 
 export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-dashboard", "dashboard", "overview", "", 10),
-  item("nav-item-productProjects", "productProjects", "business", "projects", 10),
-  item("nav-item-serviceProjects", "serviceProjects", "business", "projects", 20),
-  item("nav-item-contracts", "contracts", "business", "projects", 30),
-  item("nav-item-websiteLeads", "websiteLeads", "business", "projects", 40),
-  item("nav-item-platformAccounts", "platformAccounts", "business", "projects", 50),
-  item("nav-item-reminders", "reminders", "business", "projects", 60),
-  item("nav-item-trademarkCertificates", "trademarkCertificates", "business", "projects", 70),
-  item("nav-item-notices", "notices", "web", "notices", 10),
-  item("nav-item-serviceOrders", "serviceOrders", "business", "orders", 10),
-  item("nav-item-salesOrders", "salesOrders", "business", "orders", 20),
-  item("nav-item-purchaseOrders", "purchaseOrders", "business", "orders", 30),
-  item("nav-item-products", "products", "business", "orders", 40),
+  // 服务项目管理
+  item("nav-item-websiteLeads", "websiteLeads", "business", "serviceProjects", 10),
+  item("nav-item-serviceProjects", "serviceProjects", "business", "serviceProjects", 20),
+  item("nav-item-serviceOrders", "serviceOrders", "business", "serviceProjects", 30),
+  item("nav-item-platformAccounts", "platformAccounts", "business", "serviceProjects", 40),
+  item("nav-item-reminders", "reminders", "business", "serviceProjects", 50),
+  item("nav-item-trademarkCertificates", "trademarkCertificates", "business", "serviceProjects", 60),
+  // 商品项目管理
+  item("nav-item-productProjects", "productProjects", "business", "productProjects", 10),
+  item("nav-item-salesOrders", "salesOrders", "business", "productProjects", 20),
+  item("nav-item-purchaseOrders", "purchaseOrders", "business", "productProjects", 30),
+  item("nav-item-products", "products", "business", "productProjects", 40),
+  // 客户 / 财务（合同并入财务）/ 网站 / 系统
   item("nav-item-entities", "entities", "business", "customers", 10),
   item("nav-item-customerAccounts", "customerAccounts", "business", "customers", 20),
   item("nav-item-libraryContacts", "libraryContacts", "business", "customers", 30),
+  item("nav-item-contracts", "contracts", "business", "finance", 10),
+  item("nav-item-invoices", "invoices", "business", "finance", 20),
+  item("nav-item-transactions", "transactions", "business", "finance", 30),
+  item("nav-item-financeStatements", "financeStatements", "business", "finance", 40),
+  item("nav-item-receiptStats", "receiptStats", "business", "finance", 50),
+  item("nav-item-paymentStats", "paymentStats", "business", "finance", 60),
+  item("nav-item-notices", "notices", "web", "notices", 10),
   item("nav-item-officialSites", "officialSites", "web", "official", 10),
   item("nav-item-officialSeo", "officialSeo", "web", "official", 20),
-  item("nav-item-invoices", "invoices", "business", "finance", 10),
-  item("nav-item-transactions", "transactions", "business", "finance", 20),
-  item("nav-item-financeStatements", "financeStatements", "business", "finance", 30),
-  item("nav-item-receiptStats", "receiptStats", "business", "finance", 40),
-  item("nav-item-paymentStats", "paymentStats", "business", "finance", 50),
   item("nav-item-sms", "sms", "system", "logs", 10),
   item("nav-item-logs", "logs", "system", "logs", 20),
   item("nav-item-collectionAccounts", "collectionAccounts", "system", "system", 10),
