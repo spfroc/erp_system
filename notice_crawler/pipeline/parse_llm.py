@@ -398,50 +398,53 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 raw.notice_key,
             )
 
-    # 公告种类
-    kind = str(parsed.get("notice_kind") or "").strip()
-    if not kind or kind.isdigit():
-        if is_jd_site(raw.site_id):
-            nt = str(
-                (detail or {}).get("noticeType")
-                or (list_item or {}).get("noticeType")
-                or raw.notice_type
-                or ""
-            )
-            jd_kind = {
-                "1": "竞价公告",
-                "2": "成交公告",
-                "3": "终止公告",
-                "4": "失败公告",
-                "5": "询比公告",
-                "6": "废标公告",
-            }
-            if nt in jd_kind:
-                parsed["notice_kind"] = jd_kind[nt]
-        elif detail or list_item:
-            nt = str(
-                (detail or {}).get("noticeType")
-                or (list_item or {}).get("noticeType")
-                or raw.notice_type
-                or ""
-            )
-            # 框架协议
-            gpfa_kind = {"0": "采购公告", "1": "成交公告", "10": "终止公告"}
-            if raw.site_id == "sd-gpfa-frame" and nt in gpfa_kind:
-                parsed["notice_kind"] = gpfa_kind[nt]
-            else:
-                title = (raw.title or "") + " " + (parsed.get("notice_title") or "")
-                for token, label in (
-                    ("废标", "废标公告"),
-                    ("终止", "终止公告"),
-                    ("成交结果", "成交结果公告"),
-                    ("成交", "成交公告"),
-                    ("失败", "失败公告"),
-                    ("采购公告", "采购公告"),
-                ):
-                    if token in title:
-                        parsed["notice_kind"] = label
-                        break
+    # 公告种类：有站点 noticeType 映射时强制对齐（纠正正文套话误判）
+    nt = str(
+        (detail or {}).get("noticeType")
+        or (list_item or {}).get("noticeType")
+        or raw.notice_type
+        or ""
+    )
+    if is_jd_site(raw.site_id):
+        jd_kind = {
+            "1": "竞价公告",
+            "2": "成交公告",
+            "3": "终止公告",
+            "4": "失败公告",
+            "5": "询比公告",
+            "6": "废标公告",
+        }
+        if nt in jd_kind:
+            parsed["notice_kind"] = jd_kind[nt]
+    elif raw.site_id == "sd-ggzyjyzx":
+        sd_kind = {
+            "0": "采购公告",
+            "1": "成交公告",
+            "5": "终止公告",
+            "10": "终止公告",
+            "13": "公示公告",
+        }
+        if nt in sd_kind:
+            parsed["notice_kind"] = sd_kind[nt]
+    elif raw.site_id == "sd-gpfa-frame":
+        gpfa_kind = {"0": "采购公告", "1": "成交公告", "10": "终止公告"}
+        if nt in gpfa_kind:
+            parsed["notice_kind"] = gpfa_kind[nt]
+    else:
+        kind = str(parsed.get("notice_kind") or "").strip()
+        if not kind or kind.isdigit():
+            title = (raw.title or "") + " " + (parsed.get("notice_title") or "")
+            for token, label in (
+                ("废标公告", "废标公告"),
+                ("终止公告", "终止公告"),
+                ("成交结果", "成交结果公告"),
+                ("成交公告", "成交公告"),
+                ("失败公告", "失败公告"),
+                ("采购公告", "采购公告"),
+            ):
+                if token in title:
+                    parsed["notice_kind"] = label
+                    break
 
     # 采购方式
     if not parsed.get("procurement_mode"):

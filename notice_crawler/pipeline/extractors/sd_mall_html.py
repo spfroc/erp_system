@@ -303,20 +303,39 @@ def extract_sd_mall_html(
     if out.get("deal_amount") is None:
         out["deal_amount"] = _money(list_item.get("tradingAmount") or detail.get("tradingAmount"))
 
-    # 公告种类 / 方式（标题启发）
+    # 公告种类：优先列表/详情 noticeType（与抓取分类一致），避免正文套话
+    # 如「反拍项目终止」误命中「终止」
+    nt = list_item.get("noticeType")
+    if nt in (None, ""):
+        nt = detail.get("noticeType")
+    nt_s = str(nt).strip() if nt not in (None, "") else ""
+    sd_kind = {
+        "0": "采购公告",
+        "1": "成交公告",
+        "5": "终止公告",
+        "10": "终止公告",
+        "13": "公示公告",
+    }
+    if nt_s in sd_kind:
+        out["notice_kind"] = sd_kind[nt_s]
+    else:
+        # 仅看标题，不用正文（正文常有「项目终止」规则说明）
+        title_blob = title or ""
+        for key, kind in (
+            ("废标公告", "废标公告"),
+            ("终止公告", "终止公告"),
+            ("失败公告", "失败公告"),
+            ("成交结果", "成交结果公告"),
+            ("成交公告", "成交公告"),
+            ("结果公告", "成交公告"),
+            ("采购公告", "采购公告"),
+            ("公示公告", "公示公告"),
+        ):
+            if key in title_blob:
+                out["notice_kind"] = kind
+                break
+
     blob = f"{title}\n{text}\n{(html or '')[:500]}"
-    for key, kind in (
-        ("废标", "废标公告"),
-        ("终止", "终止公告"),
-        ("失败", "失败公告"),
-        ("成交结果", "成交结果公告"),
-        ("成交", "成交公告"),
-        ("结果公告", "成交公告"),
-        ("采购公告", "采购公告"),
-    ):
-        if key in blob:
-            out["notice_kind"] = kind
-            break
     for key, mode in (
         ("反拍", "反拍"),
         ("直购", "直接采购"),

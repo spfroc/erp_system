@@ -161,18 +161,18 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
     detail = _json_dict(raw.detail_json)
     list_item = _json_dict(raw.list_json)
 
-    # 京东：优先用站点 notice_type 对应的原文 tab 名
-    if raw.site_id in JD_SITE_IDS:
-        mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
-        if not mapped:
-            mapped = _kind_from_notice_type(
-                raw.site_id,
-                detail.get("noticeType")
-                if detail.get("noticeType") not in (None, "")
-                else list_item.get("noticeType"),
-            )
-        if mapped:
-            return mapped
+    # 有站点 notice_type 映射时以其为准（与筛选、抓取分类一致）
+    # 避免正文套话把采购公告误标成终止公告
+    mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
+    if not mapped:
+        mapped = _kind_from_notice_type(
+            raw.site_id,
+            detail.get("noticeType")
+            if detail.get("noticeType") not in (None, "")
+            else list_item.get("noticeType"),
+        )
+    if mapped:
+        return mapped
 
     kind = (parsed.notice_kind if parsed and parsed.notice_kind else "") or ""
     kind = _normalize_display_kind(raw.site_id, kind)
@@ -184,24 +184,17 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
             v = src.get(key)
             if v and not str(v).strip().isdigit():
                 return _normalize_display_kind(raw.site_id, str(v))
-    mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
-    if not mapped:
-        mapped = _kind_from_notice_type(
-            raw.site_id,
-            detail.get("noticeType") if detail.get("noticeType") not in (None, "") else list_item.get("noticeType"),
-        )
-    if mapped:
-        return mapped
     title = (raw.title or "") + " " + (parsed.notice_title if parsed and parsed.notice_title else "")
     for token, label in (
-        ("废标", "废标公告"),
-        ("终止", "终止公告"),
+        ("废标公告", "废标公告"),
+        ("终止公告", "终止公告"),
         ("成交结果", "成交结果公告"),
         ("结果公告", "结果公告"),
         ("成交公告", "成交公告"),
-        ("失败", "失败公告"),
-        ("询比", "询比公告"),
+        ("失败公告", "失败公告"),
+        ("询比公告", "询比公告"),
         ("竞价公告", "竞价公告"),
+        ("采购公告", "采购公告"),
     ):
         if token in title:
             return label
@@ -209,28 +202,40 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
 
 
 def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
-    """公告类型筛选：解析字段，或抓取时写入的 notice_type 编码。"""
-    parsed_qs = NoticeParsed.objects.filter(notice_kind=notice_kind)
-    if site_id:
-        parsed_qs = parsed_qs.filter(site_id=site_id)
-    q = Q(id__in=parsed_qs.values("notice_raw_id"))
-
-    # 京东历史曾把竞价公告写成「采购公告」，筛选时兼容
-    if notice_kind == "竞价公告":
-        legacy = NoticeParsed.objects.filter(
-            site_id__in=JD_SITE_IDS if not site_id else [site_id],
-            notice_kind="采购公告",
-        )
-        if not site_id or site_id in JD_SITE_IDS:
-            q |= Q(id__in=legacy.values("notice_raw_id"))
-
+    """公告类型筛选：优先站点 notice_type；解析字段作无编码时的兜底。"""
+    q = Q()
+    mapped_sites: set[str] = set()
     for sid, mapping in NOTICE_TYPE_LABELS.items():
         if site_id and sid != site_id:
             continue
         codes = [code for code, label in mapping.items() if label == notice_kind]
         if codes:
+            mapped_sites.add(sid)
             q |= Q(site_id=sid, notice_type__in=codes)
-    return q
+
+    # 解析字段兜底：排除「notice_type 已映射成其它类型」的冲突行
+    # （例如正文套话把采购公告误标成终止公告）
+    parsed_qs = NoticeParsed.objects.filter(notice_kind=notice_kind)
+    if site_id:
+        parsed_qs = parsed_qs.filter(site_id=site_id)
+    conflict = Q()
+    for sid, mapping in NOTICE_TYPE_LABELS.items():
+        if site_id and sid != site_id:
+            continue
+        other_codes = [code for code, label in mapping.items() if label != notice_kind]
+        if other_codes:
+            conflict |= Q(site_id=sid, notice_type__in=other_codes)
+    q |= Q(id__in=parsed_qs.values("notice_raw_id")) & ~conflict
+
+    # 京东历史曾把竞价公告写成「采购公告」
+    if notice_kind == "竞价公告" and (not site_id or site_id in JD_SITE_IDS):
+        legacy = NoticeParsed.objects.filter(
+            site_id__in=JD_SITE_IDS if not site_id else [site_id],
+            notice_kind="采购公告",
+        )
+        q |= Q(id__in=legacy.values("notice_raw_id")) & ~conflict
+
+    return q if q else Q(pk__in=[])
 
 
 def _notice_kind_options(site_id: str) -> list[str]:
