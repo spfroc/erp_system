@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -21,6 +20,7 @@ from pipeline.parse_llm import (
     save_parsed,
 )
 from utils import ensure_https
+from utils import now as now_shanghai
 
 
 def _ext_from_name(name: str, url: str) -> str:
@@ -58,7 +58,7 @@ def download_pending(*, limit: int = 50, site_id: Optional[str] = None) -> int:
                 att.file_size = len(content)
                 att.content_sha256 = sha
                 att.download_status = "done"
-                att.downloaded_at = datetime.now()
+                att.downloaded_at = now_shanghai()
                 att.error_message = None
                 done += 1
             except Exception as exc:  # noqa: BLE001
@@ -123,7 +123,7 @@ def parse_attachments(*, limit: int = 50, site_id: Optional[str] = None, use_llm
                     parsed["extra"]["from_attachment"] = att.file_name
                     att.parsed_json = dumps(parsed)
                     att.parse_status = "parsed"
-                    att.parsed_at = datetime.now()
+                    att.parsed_at = now_shanghai()
                     # 同步到公告：待解析整单写入；已解析则只补空字段，避免附件覆盖正文结果
                     if raw is not None:
                         if raw.parse_status in ("pending", "parse_fail", "skipped"):

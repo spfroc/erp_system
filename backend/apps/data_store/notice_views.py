@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any
 
@@ -113,6 +113,20 @@ def _dig(data: dict, *paths: str):
     return None
 
 
+def _from_notice_db(value):
+    """notice_* 表由爬虫写入上海墙钟 naive DATETIME。
+
+    Django USE_TZ=True 读 MySQL 时会把 naive 误标成 UTC，这里还原为 Asia/Shanghai。
+    """
+    if value is None:
+        return None
+    if timezone.is_aware(value):
+        wall = timezone.make_naive(value, dt_timezone.utc)
+    else:
+        wall = value
+    return timezone.make_aware(wall, timezone.get_default_timezone())
+
+
 def _resolve_times(raw: NoticeRaw, parsed: NoticeParsed | None) -> tuple:
     """优先 parsed，回落到 list/detail JSON（含京东嵌套毫秒时间）。"""
     detail = _json_dict(raw.detail_json)
@@ -120,8 +134,8 @@ def _resolve_times(raw: NoticeRaw, parsed: NoticeParsed | None) -> tuple:
     nested = _json_dict(detail.get("detail"))
     base = _json_dict(nested.get("auctionNoticeBaseInfo"))
 
-    start = parsed.start_time if parsed and parsed.start_time else None
-    end = parsed.end_time if parsed and parsed.end_time else None
+    start = _from_notice_db(parsed.start_time) if parsed and parsed.start_time else None
+    end = _from_notice_db(parsed.end_time) if parsed and parsed.end_time else None
 
     if not start:
         start = _parse_dt(
@@ -320,9 +334,13 @@ def _dec(value) -> float | None:
 
 
 def _dt(value) -> str | None:
+    """格式化为上海本地字符串；ORM 字段需先经 _from_notice_db。"""
     if not value:
         return None
-    local = timezone.localtime(value) if timezone.is_aware(value) else value
+    if timezone.is_aware(value):
+        local = timezone.localtime(value, timezone.get_default_timezone())
+    else:
+        local = value
     return local.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -336,6 +354,7 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
         "unknown": "未知",
     }.get(progress, "未知")
     kind = _resolve_kind(raw, parsed) or (parsed.notice_kind if parsed else None)
+    publish = (parsed.publish_time if parsed and parsed.publish_time else None) or raw.publish_time
     return {
         "id": raw.id,
         "siteId": raw.site_id,
@@ -351,7 +370,7 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
         "noticeKind": kind,
         "procurementMode": parsed.procurement_mode if parsed else None,
         "regionName": (parsed.region_name if parsed and parsed.region_name else None) or raw.region_name,
-        "publishTime": _dt((parsed.publish_time if parsed and parsed.publish_time else None) or raw.publish_time),
+        "publishTime": _dt(_from_notice_db(publish)),
         "startTime": _dt(start),
         "endTime": _dt(end),
         "progressStatus": progress,
@@ -359,7 +378,7 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
         "crawlStatus": raw.crawl_status,
         "parseStatus": raw.parse_status,
         "sourceUrl": raw.source_url,
-        "crawledAt": _dt(raw.crawled_at),
+        "crawledAt": _dt(_from_notice_db(raw.crawled_at)),
     }
 
 
