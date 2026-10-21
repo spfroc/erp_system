@@ -15270,7 +15270,8 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
     setEditForm({
       name: user.name,
       phone: user.phone ?? "",
-      password: user.password ?? "",
+      // 留空表示不改密码（接口会剥离 password，勿把旧值回填）。
+      password: "",
       roleIds: user.roleIds,
       status: user.status,
     });
@@ -15488,7 +15489,13 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
             <div className="user-edit-form">
               <input value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} placeholder="姓名" />
               <input value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="手机号" />
-              <input value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} placeholder="登录密码" />
+              <input
+                type="password"
+                value={editForm.password}
+                onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                placeholder="重置密码（留空则不改）"
+                autoComplete="new-password"
+              />
               <select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as User["status"] })}>
                 <option>启用</option>
                 <option>停用</option>
