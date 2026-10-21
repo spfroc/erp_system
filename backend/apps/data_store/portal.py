@@ -71,8 +71,8 @@ def account_defaults(payload: dict) -> dict:
 def _password_matches(stored_password: str, raw_password: str) -> bool:
     if not stored_password:
         return False
-    if is_password_usable(stored_password) and check_password(raw_password, stored_password):
-        return True
+    if is_password_usable(stored_password):
+        return check_password(raw_password, stored_password)
     return stored_password == raw_password
 
 

@@ -694,8 +694,9 @@ def _customer_account_conflict(data: dict, existing) -> JsonResponse | None:
 def _password_matches(stored_password: str, raw_password: str) -> bool:
     if not stored_password:
         return raw_password == "123456"
-    if is_password_usable(stored_password) and check_password(raw_password, stored_password):
-        return True
+    # Hash 存储只走 check_password；失败不得再回退明文比对。
+    if is_password_usable(stored_password):
+        return check_password(raw_password, stored_password)
     return stored_password == raw_password
 
 
@@ -703,25 +704,38 @@ def _active_user_queryset():
     return UserRecord.objects.filter(is_deleted=False)
 
 
+def _user_login_candidates(data: dict, phone: str = "", name: str = "") -> set[str]:
+    return {
+        str((data or {}).get("phone", "")).strip(),
+        str((data or {}).get("name", "")).strip(),
+        str(phone or "").strip(),
+        str(name or "").strip(),
+    } - {""}
+
+
 def _find_login_user(identifier: str, password: str) -> UserRecord | dict | None:
+    """优先以 users 表为准。已落表用户不得再用 AppState 快照里的旧密码登录。"""
     identifier = identifier.strip()
     for user in _active_user_queryset():
-        data = user.data
+        data = user.data if isinstance(user.data, dict) else {}
+        if identifier not in _user_login_candidates(data, user.phone, user.name):
+            continue
         status = data.get("status") or user.status
         if status != "启用":
-            continue
-        candidates = {str(data.get("phone", "")).strip(), str(data.get("name", "")).strip(), user.phone.strip(), user.name.strip()}
-        if identifier not in candidates:
-            continue
+            return None
         if _password_matches(str(data.get("password", "")), password):
             return user
+        return None
     for data in _legacy_state_data().get("users", []):
-        status = data.get("status")
-        if status != "启用":
+        if not isinstance(data, dict):
             continue
-        candidates = {str(data.get("phone", "")).strip(), str(data.get("name", "")).strip()}
-        if identifier in candidates and _password_matches(str(data.get("password", "")), password):
+        if identifier not in _user_login_candidates(data):
+            continue
+        if data.get("status") != "启用":
+            return None
+        if _password_matches(str(data.get("password", "")), password):
             return data
+        return None
     return None
 
 
@@ -1232,6 +1246,9 @@ def save_app_data(data: dict, partial: bool = False, delete_ids: dict | None = N
             )
     if not partial:
         _sync_app_state_snapshot()
+    elif "users" in data or "users" in delete_ids:
+        # 部分保存也会改登录密码；同步快照，避免遗留明文/旧哈希。
+        _patch_app_state_collections(["users"])
 
 
 @csrf_exempt
@@ -2252,6 +2269,8 @@ def collection_items(request, collection):
         id=data["id"],
         defaults={**_record_defaults(model, data), "is_deleted": False, "deleted_at": None, "deleted_by": ""},
     )
+    if collection == "users":
+        _patch_app_state_snapshot(collection, record.id, record.data)
     can_view_sensitive = _can_view_sensitive(user_data)
     return JsonResponse({"data": _sanitize_record_data(collection, record.data, can_view_sensitive)}, status=201 if created else 200)
 
@@ -2328,6 +2347,8 @@ def collection_item(request, collection, record_id):
     record.deleted_at = None
     record.deleted_by = ""
     record.save()
+    if collection == "users":
+        _patch_app_state_snapshot(collection, record.id, record.data)
     can_view_sensitive = _can_view_sensitive(user_data)
     return JsonResponse({"data": _sanitize_record_data(collection, record.data, can_view_sensitive)})
 
