@@ -382,8 +382,142 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
     }
 
 
+# 同项目关联公告展示顺序：采购/竞价 → 结果类
+_RELATED_KIND_ORDER = (
+    "竞价公告",
+    "询比公告",
+    "采购公告",
+    "成交公告",
+    "成交结果公告",
+    "失败公告",
+    "终止公告",
+    "废标公告",
+    "公示公告",
+)
+
+
+def _related_kind_sort_key(kind: str | None) -> tuple[int, str]:
+    label = (kind or "").strip()
+    try:
+        return (_RELATED_KIND_ORDER.index(label), label)
+    except ValueError:
+        return (len(_RELATED_KIND_ORDER), label)
+
+
+def _project_code_of(parsed: NoticeParsed | None) -> str:
+    if not parsed:
+        return ""
+    return (parsed.project_code or "").strip()
+
+
+def _load_related_by_project_code(
+    *,
+    project_code: str,
+    site_id: str | None,
+    exclude_raw_id: int | None = None,
+    now=None,
+) -> list[dict]:
+    """同一项目编号下的其他公告（竞价/成交/失败/终止等）。"""
+    code = (project_code or "").strip()
+    if not code:
+        return []
+    parsed_qs = NoticeParsed.objects.filter(project_code=code)
+    if site_id:
+        parsed_qs = parsed_qs.filter(site_id=site_id)
+    raw_ids = list(parsed_qs.values_list("notice_raw_id", flat=True)[:80])
+    if exclude_raw_id is not None:
+        raw_ids = [rid for rid in raw_ids if rid != exclude_raw_id]
+    if not raw_ids:
+        return []
+    raw_map = {row.id: row for row in NoticeRaw.objects.filter(id__in=raw_ids)}
+    parsed_map = {
+        item.notice_raw_id: item
+        for item in NoticeParsed.objects.filter(notice_raw_id__in=raw_ids)
+    }
+    items = [
+        _serialize_list_item(raw_map[rid], parsed_map.get(rid), now=now)
+        for rid in raw_ids
+        if rid in raw_map
+    ]
+    items.sort(
+        key=lambda item: (
+            _related_kind_sort_key(item.get("noticeKind")),
+            item.get("publishTime") or "",
+            item.get("id") or 0,
+        )
+    )
+    return items
+
+
+def _sibling_kinds_by_project(
+    *,
+    project_codes: list[str],
+    site_ids: list[str] | None = None,
+) -> dict[tuple[str, str], list[str]]:
+    """(site_id, project_code) -> 去重后的公告种类列表（含当前条）。"""
+    codes = sorted({(c or "").strip() for c in project_codes if (c or "").strip()})
+    if not codes:
+        return {}
+    qs = NoticeParsed.objects.filter(project_code__in=codes).exclude(project_code="")
+    if site_ids:
+        qs = qs.filter(site_id__in=site_ids)
+    raw_ids = list(qs.values_list("notice_raw_id", flat=True)[:4000])
+    if not raw_ids:
+        return {}
+    raw_rows = list(NoticeRaw.objects.filter(id__in=raw_ids).only("id", "site_id", "notice_type"))
+    parsed_rows = list(
+        NoticeParsed.objects.filter(notice_raw_id__in=raw_ids).only(
+            "notice_raw_id", "site_id", "project_code", "notice_kind"
+        )
+    )
+    parsed_map = {p.notice_raw_id: p for p in parsed_rows}
+    buckets: dict[tuple[str, str], set[str]] = {}
+    for raw in raw_rows:
+        parsed = parsed_map.get(raw.id)
+        code = _project_code_of(parsed)
+        if not code:
+            continue
+        kind = _resolve_kind(raw, parsed)
+        if not kind:
+            continue
+        key = (raw.site_id or "", code)
+        buckets.setdefault(key, set()).add(kind)
+    return {
+        key: sorted(kinds, key=_related_kind_sort_key)
+        for key, kinds in buckets.items()
+    }
+
+
+def _attach_sibling_kinds(items: list[dict]) -> list[dict]:
+    codes = [str(item.get("projectCode") or "").strip() for item in items]
+    site_ids = sorted({str(item.get("siteId") or "") for item in items if item.get("siteId")})
+    sibling_map = _sibling_kinds_by_project(project_codes=codes, site_ids=site_ids or None)
+    for item in items:
+        code = str(item.get("projectCode") or "").strip()
+        site = str(item.get("siteId") or "")
+        kinds = sibling_map.get((site, code), [])
+        current = (item.get("noticeKind") or "").strip()
+        others = [k for k in kinds if k != current]
+        item["siblingKinds"] = others
+        item["projectNoticeKinds"] = kinds
+    return items
+
+
 def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[NoticeGoods]) -> dict:
     base = _serialize_list_item(raw, parsed)
+    related = _load_related_by_project_code(
+        project_code=_project_code_of(parsed),
+        site_id=raw.site_id,
+        exclude_raw_id=raw.id,
+    )
+    sibling_kinds = sorted(
+        {
+            k
+            for k in [base.get("noticeKind"), *[r.get("noticeKind") for r in related]]
+            if k
+        },
+        key=_related_kind_sort_key,
+    )
     base.update(
         {
             "buyerContactName": parsed.buyer_contact_name if parsed else None,
@@ -415,6 +549,9 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
                 }
                 for g in goods
             ],
+            "relatedNotices": related,
+            "siblingKinds": [k for k in sibling_kinds if k != base.get("noticeKind")],
+            "projectNoticeKinds": sibling_kinds,
         }
     )
     return base
@@ -622,9 +759,12 @@ def notice_list(request):
             total = len(rows)
             offset = (page - 1) * page_size
             page_rows = rows[offset : offset + page_size]
-            items = [
-                _serialize_list_item(r, parsed_map.get(r.id), now=now) for r in page_rows
-            ]
+            items = _attach_sibling_kinds(
+                [
+                    _serialize_list_item(r, parsed_map.get(r.id), now=now)
+                    for r in page_rows
+                ]
+            )
         else:
             total = qs.count()
             offset = (page - 1) * page_size
@@ -635,9 +775,12 @@ def notice_list(request):
                     notice_raw_id__in=[r.id for r in page_rows]
                 )
             }
-            items = [
-                _serialize_list_item(r, parsed_map.get(r.id), now=now) for r in page_rows
-            ]
+            items = _attach_sibling_kinds(
+                [
+                    _serialize_list_item(r, parsed_map.get(r.id), now=now)
+                    for r in page_rows
+                ]
+            )
 
         notice_kinds = _notice_kind_options(site_id)
 
