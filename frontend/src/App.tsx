@@ -13571,7 +13571,7 @@ function InvoiceReadonlyDetail({ data, invoice }: { data: AppData; invoice: Invo
               return (
                 <span key={`${item.productId || item.productName}-${index}`}>
                   {item.productName}
-                  <em>{item.specification || "无规格"} / {item.quantity ?? "-"}{item.unit || ""} / 不含税 {money(item.amount ?? 0)} / 价税合计 {money(invoiceLineGrossAmount(item))}</em>
+                  <em>{item.specification || "无规格"} / {item.quantity ?? "-"}{item.unit || ""} / 不含税 {money(item.amount ?? 0)} / 税额 {money(item.taxAmount ?? 0)} / 价税合计 {money(invoiceLineGrossAmount(item))}</em>
                   <em>{linkedOrder ? `已关联 ${linkedOrder.orderNo}` : "未关联订单"}</em>
                 </span>
               );

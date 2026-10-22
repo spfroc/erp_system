@@ -1,14 +1,19 @@
+from datetime import date, timedelta
+from decimal import Decimal
+
 from django.contrib.auth.hashers import check_password, is_password_usable
 from django.core import signing
+from django.db import OperationalError, ProgrammingError
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncDate, TruncMonth
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from django.db import ProgrammingError
-
 from .models import CustomerAccountRecord
-from .notice_models import NoticeRaw
-from .notice_views import query_crawled_notices
+from .notice_models import NoticeParsed, NoticeRaw
+from .notice_views import NOTICE_TYPE_LABELS, SITE_LABELS, _raw_ids_for_kind, query_crawled_notices
 from .notices import list_public_notices
 
 PORTAL_COOKIE = "portal_session"
@@ -130,6 +135,142 @@ def require_portal(request, permission: str | None = None):
     return record, None
 
 
+PORTAL_NOTICE_KINDS = ["采购公告", "竞价公告", "询比公告", "成交公告", "终止公告", "失败公告", "废标公告"]
+
+
+def _money(value) -> float:
+    if value in (None, ""):
+        return 0.0
+    return float(Decimal(str(value)).quantize(Decimal("0.01")))
+
+
+def _previous_month_range(today: date) -> tuple[date, date]:
+    first_this_month = today.replace(day=1)
+    first_last_month = (first_this_month - timedelta(days=1)).replace(day=1)
+    return first_last_month, first_this_month
+
+
+def _recent_month_keys(today: date, count: int = 6) -> list[str]:
+    keys: list[str] = []
+    year, month = today.year, today.month
+    for _ in range(count):
+        keys.append(f"{year:04d}-{month:02d}")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    keys.reverse()
+    return keys
+
+
+def _kind_amount(kind: str, field: str, start: date, end: date) -> float:
+    raw_ids = NoticeRaw.objects.filter(
+        _raw_ids_for_kind(kind, ""),
+        publish_time__date__gte=start,
+        publish_time__date__lt=end,
+    ).values("id")
+    total = NoticeParsed.objects.filter(notice_raw_id__in=raw_ids).aggregate(total=Sum(field))["total"]
+    return _money(total)
+
+
+def _monthly_deal_amounts(today: date) -> list[dict]:
+    keys = _recent_month_keys(today, 6)
+    start = date.fromisoformat(keys[0] + "-01")
+    raw_ids = NoticeRaw.objects.filter(
+        _raw_ids_for_kind("成交公告", ""),
+        publish_time__date__gte=start,
+    ).values("id")
+    rows = (
+        NoticeParsed.objects.filter(notice_raw_id__in=raw_ids, publish_time__date__gte=start)
+        .annotate(month=TruncMonth("publish_time"))
+        .values("month")
+        .annotate(total=Sum("deal_amount"))
+    )
+    totals: dict[str, float] = {}
+    for row in rows:
+        month = row["month"]
+        if not month:
+            continue
+        key = month.strftime("%Y-%m") if hasattr(month, "strftime") else str(month)[:7]
+        totals[key] = _money(row["total"])
+    return [{"month": key, "amount": totals.get(key, 0)} for key in keys]
+
+
+def _empty_notice_stats() -> dict:
+    today = timezone.localdate()
+    daily = [{"date": (today - timedelta(days=offset)).isoformat(), "count": 0} for offset in range(13, -1, -1)]
+    return {
+        "publicNoticeTotal": 0,
+        "todayCount": 0,
+        "weekCount": 0,
+        "lastMonthPurchaseAmount": 0,
+        "lastMonthDealAmount": 0,
+        "bySite": [],
+        "byKind": [],
+        "daily": daily,
+        "monthlyDeal": [{"month": key, "amount": 0} for key in _recent_month_keys(today, 6)],
+        "sites": [{"id": key, "label": label} for key, label in SITE_LABELS.items()],
+        "noticeKinds": PORTAL_NOTICE_KINDS,
+    }
+
+
+def _kind_label(site_id: str | None, notice_type) -> str:
+    code = str(notice_type).strip() if notice_type not in (None, "") else ""
+    if not code:
+        return "其他"
+    return NOTICE_TYPE_LABELS.get(site_id or "", {}).get(code) or "其他"
+
+
+def build_notice_stats() -> dict:
+    """公告库汇总。表不存在时返回空结构，避免门户整页失败。"""
+    stats = _empty_notice_stats()
+    try:
+        today = timezone.localdate()
+        week_start = today - timedelta(days=6)
+        trend_start = today - timedelta(days=13)
+        stats["publicNoticeTotal"] = NoticeRaw.objects.count()
+        stats["todayCount"] = NoticeRaw.objects.filter(publish_time__date=today).count()
+        stats["weekCount"] = NoticeRaw.objects.filter(publish_time__date__gte=week_start).count()
+        last_start, last_end = _previous_month_range(today)
+        stats["lastMonthPurchaseAmount"] = _kind_amount("采购公告", "budget_amount", last_start, last_end)
+        stats["lastMonthDealAmount"] = _kind_amount("成交公告", "deal_amount", last_start, last_end)
+        stats["monthlyDeal"] = _monthly_deal_amounts(today)
+        stats["bySite"] = [
+            {
+                "siteId": row["site_id"] or "",
+                "label": SITE_LABELS.get(row["site_id"] or "", row["site_id"] or "未标注"),
+                "count": row["count"],
+            }
+            for row in NoticeRaw.objects.values("site_id").annotate(count=Count("id")).order_by("-count")
+        ]
+        kind_counts: dict[str, int] = {}
+        for row in NoticeRaw.objects.values("site_id", "notice_type").annotate(count=Count("id")):
+            label = _kind_label(row["site_id"], row["notice_type"])
+            kind_counts[label] = kind_counts.get(label, 0) + row["count"]
+        stats["byKind"] = [
+            {"kind": kind, "count": count}
+            for kind, count in sorted(kind_counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        daily_map = {item["date"]: 0 for item in stats["daily"]}
+        rows = (
+            NoticeRaw.objects.filter(publish_time__date__gte=trend_start)
+            .annotate(day=TruncDate("publish_time"))
+            .values("day")
+            .annotate(count=Count("id"))
+        )
+        for row in rows:
+            day = row["day"]
+            if not day:
+                continue
+            key = day.isoformat() if hasattr(day, "isoformat") else str(day)[:10]
+            if key in daily_map:
+                daily_map[key] = row["count"]
+        stats["daily"] = [{"date": key, "count": daily_map[key]} for key in daily_map]
+    except (ProgrammingError, OperationalError):
+        return _empty_notice_stats()
+    return stats
+
+
 @require_http_methods(["GET"])
 def portal_notices(request):
     record, error = require_portal(request, "portal.notice.view")
@@ -145,8 +286,10 @@ def portal_notices(request):
             site_id=(request.GET.get("siteId") or "").strip(),
             notice_kind=(request.GET.get("noticeKind") or "").strip(),
         )
-    except ProgrammingError:
+    except (ProgrammingError, OperationalError):
         payload = {"items": [], "total": 0, "page": page, "page_size": page_size}
+    payload["sites"] = [{"id": key, "label": label} for key, label in SITE_LABELS.items()]
+    payload["noticeKinds"] = PORTAL_NOTICE_KINDS
     return JsonResponse(payload)
 
 
@@ -223,16 +366,17 @@ def portal_stats(request):
     if error:
         return error
     account = public_account(record)
-    try:
-        notice_total = NoticeRaw.objects.count()
-    except ProgrammingError:
-        notice_total = list_public_notices(page=1, page_size=1, search="", notice_kind="").get("total", 0)
+    stats = build_notice_stats()
+    if stats["publicNoticeTotal"] == 0:
+        legacy_total = list_public_notices(page=1, page_size=1, search="", notice_kind="").get("total", 0)
+        if legacy_total and not stats["bySite"]:
+            stats["publicNoticeTotal"] = legacy_total
     return JsonResponse(
         {
             "data": {
                 "customerName": account["customerName"] or account["name"],
-                "publicNoticeTotal": notice_total,
                 "subscriptionEnabled": account["subscription"]["enabled"],
+                **stats,
             }
         }
     )
