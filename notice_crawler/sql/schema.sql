@@ -26,7 +26,11 @@ CREATE TABLE IF NOT EXISTS notice_raw (
   UNIQUE KEY uk_site_notice (site_id, notice_key),
   KEY idx_site_type (site_id, auction_type, notice_type),
   KEY idx_parse_status (parse_status),
-  KEY idx_publish_time (publish_time)
+  KEY idx_publish_time (publish_time),
+  KEY idx_raw_site_id (site_id, id),
+  KEY idx_raw_site_notice_type (site_id, notice_type),
+  KEY idx_raw_region (region_name),
+  KEY idx_raw_parse_site (parse_status, site_id, id)
 ) ENGINE=InnoDB COMMENT='公告原始数据';
 
 -- 模型解析后的关键字段
@@ -69,6 +73,12 @@ CREATE TABLE IF NOT EXISTS notice_parsed (
   KEY idx_project_code (project_code),
   KEY idx_buyer (buyer_name),
   KEY idx_deal_supplier (deal_supplier),
+  KEY idx_parsed_site_kind (site_id, notice_kind),
+  KEY idx_parsed_region (region_name),
+  KEY idx_parsed_project_name (project_name(191)),
+  KEY idx_parsed_end_time (end_time),
+  KEY idx_parsed_start_time (start_time),
+  KEY idx_parsed_site_project (site_id, project_code),
   CONSTRAINT fk_parsed_raw FOREIGN KEY (notice_raw_id) REFERENCES notice_raw(id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='公告关键字段（模型解析）';
 

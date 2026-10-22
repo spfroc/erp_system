@@ -6,12 +6,19 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Optional  # noqa: F401
 
 import requests
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from tqdm import tqdm
 
 from clients.jd_quan import is_jd_site
 from config import settings
 from db import NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
+from utils import (
+    END_TIME_KEYS,
+    START_TIME_KEYS,
+    extract_time_window,
+    normalize_region_name,
+    pick_time_value,
+)
 from utils import now as now_shanghai
 from utils import parse_dt
 
@@ -308,6 +315,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             (list_item or {}).get("regionFullName"),
             (list_item or {}).get("regionName"),
         )
+    parsed["region_name"] = normalize_region_name(raw.site_id, parsed.get("region_name"))
     if not parsed.get("publish_time"):
         parsed["publish_time"] = _pick(
             raw.publish_time,
@@ -319,29 +327,38 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             (list_item or {}).get("createTime"),
         )
 
-    # 时间：启发式坏串可被结构化字段覆盖
+    # 时间：结构化字段 + 正文「报价时间：A至B」补洞
+    nested_demand = (
+        nested.get("auctionDemandInfo")
+        if isinstance(nested.get("auctionDemandInfo"), dict)
+        else {}
+    )
     if not _to_dt(parsed.get("end_time")):
-        picked = _pick(
-            (detail or {}).get("endTime"),
-            (detail or {}).get("closeTime"),
-            (list_item or {}).get("endTime"),
-            (list_item or {}).get("closeTime"),
-            jd_base.get("endTime"),
-            jd_base.get("closeTime"),
+        picked = pick_time_value(
+            detail,
+            list_item,
+            jd_base,
+            nested_demand,
+            keys=END_TIME_KEYS,
         )
         if picked is not None:
             parsed["end_time"] = picked
     if not _to_dt(parsed.get("start_time")):
-        picked = _pick(
-            (detail or {}).get("startTime"),
-            (detail or {}).get("beginTime"),
-            (list_item or {}).get("startTime"),
-            (list_item or {}).get("beginTime"),
-            jd_base.get("startTime"),
-            jd_base.get("beginTime"),
+        picked = pick_time_value(
+            detail,
+            list_item,
+            jd_base,
+            nested_demand,
+            keys=START_TIME_KEYS,
         )
         if picked is not None:
             parsed["start_time"] = picked
+    if not _to_dt(parsed.get("start_time")) or not _to_dt(parsed.get("end_time")):
+        t_start, t_end = extract_time_window(raw.content_text, raw.content_html)
+        if t_start and not _to_dt(parsed.get("start_time")):
+            parsed["start_time"] = t_start
+        if t_end and not _to_dt(parsed.get("end_time")):
+            parsed["end_time"] = t_end
 
     # 采购单位 / 预算
     if not parsed.get("buyer_name"):
@@ -352,6 +369,60 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             (list_item or {}).get("purchaseUnitName"),
             (list_item or {}).get("buyerName"),
             jd_base.get("purchaseUnitName"),
+        )
+    # 京东泉E采/青慧采：项目名称规则优先；空/平台服务商名再本地模型短抽
+    if is_jd_site(raw.site_id):
+        from pipeline.extractors.jd_buyer import _clean_api_buyer, resolve_jd_buyer_name
+
+        project = parsed.get("project_name") or parsed.get("notice_title") or raw.title
+        need_model = not _clean_api_buyer(parsed.get("buyer_name"))
+        buyer, buyer_source = resolve_jd_buyer_name(
+            project,
+            parsed.get("buyer_name"),
+            use_local_model=need_model,
+        )
+        if buyer:
+            parsed["buyer_name"] = buyer
+        if buyer_source:
+            if not isinstance(parsed.get("extra"), dict):
+                parsed["extra"] = {}
+            parsed["extra"]["buyer_source"] = buyer_source
+    # 项目联系人 / 电话（商城正文常有，旧规则易漏）
+    if not parsed.get("buyer_contact_name"):
+        parsed["buyer_contact_name"] = _pick(
+            (detail or {}).get("contactName"),
+            (detail or {}).get("linkMan"),
+            (detail or {}).get("buyerContactName"),
+            (list_item or {}).get("contactName"),
+            (list_item or {}).get("linkMan"),
+        )
+    if not parsed.get("buyer_phone"):
+        parsed["buyer_phone"] = _pick(
+            (detail or {}).get("contactPhone"),
+            (detail or {}).get("linkPhone"),
+            (detail or {}).get("buyerPhone"),
+            (detail or {}).get("mobile"),
+            (list_item or {}).get("contactPhone"),
+            (list_item or {}).get("linkPhone"),
+        )
+    if (
+        raw.site_id == "sd-ggzyjyzx"
+        and (not parsed.get("buyer_contact_name") or not parsed.get("buyer_phone"))
+    ):
+        from pipeline.extractors.sd_mall_html import _extract_buyer_contact_from_text
+
+        c_name, c_phone = _extract_buyer_contact_from_text(
+            "\n".join(x for x in (raw.content_text, raw.content_html) if x)
+        )
+        if c_name and not parsed.get("buyer_contact_name"):
+            parsed["buyer_contact_name"] = c_name
+        if c_phone and not parsed.get("buyer_phone"):
+            parsed["buyer_phone"] = c_phone
+    if not parsed.get("buyer_contact") and (
+        parsed.get("buyer_contact_name") or parsed.get("buyer_phone")
+    ):
+        parsed["buyer_contact"] = " ".join(
+            x for x in (parsed.get("buyer_contact_name"), parsed.get("buyer_phone")) if x
         )
     if parsed.get("budget_amount") in (None, "", []):
         picked = _pick(
@@ -541,16 +612,61 @@ def parsed_row_to_dict(row: NoticeParsed, goods_rows: Optional[list] = None) -> 
     }
 
 
-def reenrich_parsed(*, limit: int = 500, site_id: Optional[str] = None) -> int:
-    """不跑模型：用 list/detail JSON 把已解析但缺字段的公告补全。"""
+def reenrich_parsed(
+    *,
+    limit: int = 500,
+    site_id: Optional[str] = None,
+    missing_start: bool = False,
+    missing_phone: bool = False,
+) -> int:
+    """不跑模型：用 list/detail JSON / 正文报价时间把已解析但缺字段的公告补全。"""
     session = get_session()
     ok = 0
     try:
         stmt = select(NoticeRaw).where(NoticeRaw.crawl_status == "detail_ok")
         if site_id:
             stmt = stmt.where(NoticeRaw.site_id == site_id)
-        stmt = stmt.order_by(NoticeRaw.id.asc()).limit(limit)
-        rows = session.execute(stmt).scalars().all()
+        if missing_start:
+            # 优先补「报价开始时间为空」的公告
+            missing_ids = [
+                rid
+                for (rid,) in session.execute(
+                    select(NoticeParsed.notice_raw_id).where(NoticeParsed.start_time.is_(None))
+                ).all()
+            ]
+            if missing_ids:
+                stmt = stmt.where(NoticeRaw.id.in_(missing_ids))
+        if missing_phone:
+            # 优先补「项目联系电话为空」的公告（含姓名已有但电话漏抽）
+            # 采购公告先跑，便于成交/终止按同项目编号继承
+            phone_missing_ids = [
+                rid
+                for (rid,) in session.execute(
+                    select(NoticeParsed.notice_raw_id).where(
+                        (NoticeParsed.buyer_phone.is_(None)) | (NoticeParsed.buyer_phone == "")
+                    )
+                ).all()
+            ]
+            if not phone_missing_ids:
+                return 0
+            stmt = (
+                select(NoticeRaw)
+                .join(NoticeParsed, NoticeParsed.notice_raw_id == NoticeRaw.id)
+                .where(
+                    NoticeRaw.crawl_status == "detail_ok",
+                    NoticeRaw.id.in_(phone_missing_ids),
+                )
+            )
+            if site_id:
+                stmt = stmt.where(NoticeRaw.site_id == site_id)
+            stmt = stmt.order_by(
+                case((NoticeParsed.notice_kind == "采购公告", 0), else_=1),
+                NoticeRaw.id.desc(),
+            ).limit(limit)
+            rows = session.execute(stmt).scalars().unique().all()
+        else:
+            stmt = stmt.order_by(NoticeRaw.id.desc()).limit(limit)
+            rows = session.execute(stmt).scalars().all()
         for raw in tqdm(rows, desc="enrich"):
             parsed_row = session.execute(
                 select(NoticeParsed).where(NoticeParsed.notice_raw_id == raw.id)
@@ -572,19 +688,99 @@ def reenrich_parsed(*, limit: int = 500, site_id: Optional[str] = None) -> int:
                     "confidence": 0.0,
                 }
             before = (
+                parsed.get("start_time"),
                 parsed.get("end_time"),
                 parsed.get("budget_amount"),
                 parsed.get("buyer_name"),
                 parsed.get("deal_supplier"),
+                parsed.get("buyer_contact_name"),
+                parsed.get("buyer_phone"),
                 len(parsed.get("goods") or []),
                 parsed.get("notice_kind"),
             )
+            # 京东：项目名称规则优先；空/平台服务商名再本地模型短抽
+            if is_jd_site(raw.site_id):
+                from pipeline.extractors.jd_buyer import _clean_api_buyer, resolve_jd_buyer_name
+
+                project = parsed.get("project_name") or parsed.get("notice_title") or raw.title
+                need_model = not _clean_api_buyer(parsed.get("buyer_name"))
+                buyer, buyer_source = resolve_jd_buyer_name(
+                    project,
+                    parsed.get("buyer_name"),
+                    use_local_model=need_model,
+                )
+                if buyer:
+                    parsed["buyer_name"] = buyer
+                if buyer_source:
+                    if not isinstance(parsed.get("extra"), dict):
+                        parsed["extra"] = {}
+                    parsed["extra"]["buyer_source"] = buyer_source
+
+            # 商城：缺开始时间/联系人时重跑 HTML 规则补洞
+            need_sd_refresh = raw.site_id == "sd-ggzyjyzx" and (
+                not _to_dt(parsed.get("start_time"))
+                or not parsed.get("buyer_contact_name")
+                or not parsed.get("buyer_phone")
+            )
+            if need_sd_refresh:
+                html, detail, list_item = _raw_html_and_meta(raw)
+                if html or raw.content_text:
+                    from pipeline.extractors.sd_mall_html import extract_sd_mall_html
+
+                    fresh = extract_sd_mall_html(
+                        html or "",
+                        title=raw.title or "",
+                        text=raw.content_text or "",
+                        detail=detail,
+                        list_item=list_item,
+                    )
+                    for key in ("buyer_contact_name", "buyer_phone", "buyer_contact"):
+                        if not parsed.get(key) and fresh.get(key) not in (None, ""):
+                            parsed[key] = fresh.get(key)
+                    for key in ("start_time", "end_time"):
+                        if not _to_dt(parsed.get(key)) and fresh.get(key) not in (None, ""):
+                            parsed[key] = fresh.get(key)
             parsed = enrich_from_raw(parsed, raw)
+            # 成交/终止等正文常无联系方式：同项目编号有电话的公告（优先采购公告）回填
+            code = (parsed.get("project_code") or "").strip()
+            if code and (not parsed.get("buyer_phone") or not parsed.get("buyer_contact_name")):
+                siblings = session.execute(
+                    select(NoticeParsed)
+                    .where(
+                        NoticeParsed.site_id == raw.site_id,
+                        NoticeParsed.project_code == code,
+                        NoticeParsed.notice_raw_id != raw.id,
+                        NoticeParsed.buyer_phone.isnot(None),
+                        NoticeParsed.buyer_phone != "",
+                    )
+                    .limit(20)
+                ).scalars().all()
+                siblings = sorted(
+                    siblings,
+                    key=lambda s: (0 if (s.notice_kind or "") == "采购公告" else 1, -(s.notice_raw_id or 0)),
+                )
+                if siblings:
+                    sib = siblings[0]
+                    if not parsed.get("buyer_phone") and sib.buyer_phone:
+                        parsed["buyer_phone"] = sib.buyer_phone
+                    if not parsed.get("buyer_contact_name") and sib.buyer_contact_name:
+                        parsed["buyer_contact_name"] = sib.buyer_contact_name
+                    if not parsed.get("buyer_contact") and (
+                        parsed.get("buyer_contact_name") or parsed.get("buyer_phone")
+                    ):
+                        parsed["buyer_contact"] = " ".join(
+                            x
+                            for x in (parsed.get("buyer_contact_name"), parsed.get("buyer_phone"))
+                            if x
+                        )
             after = (
+                parsed.get("start_time"),
                 parsed.get("end_time"),
                 parsed.get("budget_amount"),
                 parsed.get("buyer_name"),
                 parsed.get("deal_supplier"),
+                parsed.get("buyer_contact_name"),
+                parsed.get("buyer_phone"),
                 len(parsed.get("goods") or []),
                 parsed.get("notice_kind"),
             )
@@ -622,7 +818,9 @@ def save_parsed(session, raw: NoticeRaw, parsed: Dict[str, Any]) -> NoticeParsed
     row.buyer_phone = buyer_phone
     row.buyer_address = buyer_address
     row.buyer_contact = buyer_contact
-    row.region_name = parsed.get("region_name") or raw.region_name
+    row.region_name = normalize_region_name(
+        raw.site_id, parsed.get("region_name") or raw.region_name
+    )
     row.budget_amount = _to_decimal(parsed.get("budget_amount"))
     row.deal_amount = _to_decimal(parsed.get("deal_amount"))
     row.deal_supplier = parsed.get("deal_supplier")
