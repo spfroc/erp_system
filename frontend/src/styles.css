@@ -1703,6 +1703,42 @@ nav button:hover {
   min-width: 0;
 }
 
+.portal-permission-fieldset {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px 14px 8px;
+  border: 1px solid var(--line, #d7e3dc);
+  border-radius: 10px;
+}
+
+.portal-permission-fieldset legend {
+  padding: 0 6px;
+  font-size: 13px;
+}
+
+.portal-permission-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 8px 0;
+}
+
+.portal-permission-option input {
+  margin-top: 4px;
+}
+
+.portal-permission-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portal-permission-option em {
+  color: #5d6b64;
+  font-style: normal;
+  font-size: 12px;
+}
+
 .notice-field-filters .orders-filter-field {
   flex: 1 1 180px;
 }
@@ -5781,6 +5817,13 @@ nav button:hover {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 9px 10px;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.invoice-items > span:hover {
+  background: #e7f6ee;
+  border-color: #1f7a4d;
+  box-shadow: inset 4px 0 0 #1f7a4d;
 }
 
 .invoice-items .linked-invoice-chip {

@@ -9,9 +9,9 @@ type CanAccess = (permission: PermissionKey) => boolean;
 const PAGE_SIZE = 20;
 
 export const PORTAL_PERMISSION_OPTIONS = [
-  { id: "portal.notice.view", label: "查看公告" },
-  { id: "portal.notice.subscribe", label: "接收订阅消息" },
-  { id: "portal.stats.view", label: "查看数据统计" },
+  { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
+  { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、公告类型和近两周趋势" },
+  { id: "portal.notice.subscribe", label: "订阅消息", hint: "按关键词保存订阅（短信发送后续开通）" },
 ] as const;
 
 export type PortalPermission = (typeof PORTAL_PERMISSION_OPTIONS)[number]["id"];
@@ -156,7 +156,7 @@ export function CustomerAccountsPanel({
         <div className="panel-title action-title">
           <div>
             <h2>登录账号管理</h2>
-            <p>官网客户控制台登录账号。与员工账号分开，权限只控制公告、订阅和统计。</p>
+            <p>统计平台（portal.qlyc.co）客户账号。勾选的模块登录后才会出现，未勾选的接口也会拒绝。</p>
           </div>
           <div className="panel-title-buttons">
             {canManage && (
@@ -242,16 +242,19 @@ export function CustomerAccountsPanel({
                   <option value="停用">停用</option>
                 </select>
               </label>
-              <fieldset>
-                <legend>门户权限</legend>
+              <fieldset className="portal-permission-fieldset">
+                <legend>统计平台权限</legend>
                 {PORTAL_PERMISSION_OPTIONS.map((option) => (
-                  <label key={option.id}>
+                  <label key={option.id} className="portal-permission-option">
                     <input
                       type="checkbox"
                       checked={form.permissions.includes(option.id)}
                       onChange={() => togglePermission(option.id)}
                     />
-                    {option.label}
+                    <span>
+                      <strong>{option.label}</strong>
+                      <em>{option.hint}</em>
+                    </span>
                   </label>
                 ))}
               </fieldset>

@@ -138,6 +138,7 @@ INVOICE_ITEM_UNITS = (
     "包",
     "桶",
     "瓶",
+    "盆",
     "支",
     "组",
     "对",
@@ -169,8 +170,13 @@ INVOICE_ITEM_TAIL_COMPACT_RE = re.compile(
 INVOICE_ITEM_START_RE = re.compile(r"\*[^*]+\*")
 
 
+_DETAIL_BLOCK_RE = re.compile(r"项目名称(.*?)(?:小\s*计|合\s*计)", re.S)
+_MONEY_ONLY_RE = re.compile(r"[¥￥0-9.,\s]+")
+
+
 def _invoice_detail_lines(text: str) -> list[str]:
-    match = re.search(r"项目名称(.*?)合\s*计", text, re.S)
+    """明细区截止到本页小计或合计，避免多页发票停在第一页合计。"""
+    match = _DETAIL_BLOCK_RE.search(text)
     if not match:
         return []
     lines: list[str] = []
@@ -178,7 +184,10 @@ def _invoice_detail_lines(text: str) -> list[str]:
         line = compact(raw_line)
         if not line or line in {"的"}:
             continue
-        if "项目名称" in line and ("规格" in line or "单价" in line):
+        squeezed_line = squeeze_invoice_text(line)
+        if "单价" in squeezed_line and ("规格" in squeezed_line or "项目名称" in squeezed_line):
+            continue
+        if _MONEY_ONLY_RE.fullmatch(line):
             continue
         lines.append(line)
     return lines
@@ -205,9 +214,38 @@ def _merge_invoice_item_lines(lines: list[str]) -> list[str]:
     return merged
 
 
+def _append_item_continuation(previous: str, extra: str) -> str:
+    extra = compact(extra)
+    if not extra:
+        return previous
+    tail = _match_invoice_item_tail(previous)
+    if tail:
+        return f"{previous[: tail.start()].rstrip()} {extra} {previous[tail.start() :].lstrip()}".strip()
+    return f"{previous} {extra}".strip()
+
+
+def _merged_item_lines(text: str) -> list[str]:
+    """按页收集明细。下一页开头、新项目之前的文字并入上一页最后一行。"""
+    pages = text.split("\f") if "\f" in text else [text]
+    merged_lines: list[str] = []
+    for page in pages:
+        lines = _invoice_detail_lines(page)
+        if not lines:
+            continue
+        split_at = next((index for index, line in enumerate(lines) if INVOICE_ITEM_START_RE.search(line)), None)
+        if split_at is None:
+            if merged_lines:
+                merged_lines[-1] = _append_item_continuation(merged_lines[-1], " ".join(lines))
+            continue
+        if split_at and merged_lines:
+            merged_lines[-1] = _append_item_continuation(merged_lines[-1], " ".join(lines[:split_at]))
+        merged_lines.extend(_merge_invoice_item_lines(lines[split_at:]))
+    return merged_lines
+
+
 def parse_invoice_line_items(text: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for line in _merge_invoice_item_lines(_invoice_detail_lines(text)):
+    for line in _merged_item_lines(text):
         tail = _match_invoice_item_tail(line)
         start = INVOICE_ITEM_START_RE.search(line)
         if not tail or not start:
@@ -423,6 +461,8 @@ def parse_invoice_text(text: str) -> dict[str, Any]:
 
 
 def prepare_line_item_text(text: str) -> str:
+    if "\f" in text:
+        return "\f".join(prepare_line_item_text(part) for part in text.split("\f"))
     if not invoice_text_is_doubled(squeeze_invoice_text(text)):
         return text
     lines = []
@@ -444,15 +484,15 @@ def _ocr_invoice_text(content: bytes) -> str:
 
     from app.services.business_license_parser import _ocr_engine, _payload_lines
 
-    lines: list[str] = []
+    page_texts: list[str] = []
     with fitz.open(stream=content, filetype="pdf") as document:
-        for page_number in range(min(2, len(document))):
+        for page_number in range(len(document)):
             page = document[page_number]
             pixmap = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
             image = Image.open(io.BytesIO(pixmap.tobytes("png")))
             page_lines, _scores = _payload_lines(_ocr_engine()(np.asarray(image)))
-            lines.extend(page_lines)
-    return "\n".join(lines)
+            page_texts.append("\n".join(page_lines))
+    return "\f".join(page_texts)
 
 
 def _invoice_missing_core(parsed: dict[str, Any] | None) -> bool:
@@ -476,7 +516,7 @@ def parse_invoice_pdf_bytes(content: bytes) -> dict[str, Any]:
                 page_text = page.extract_text() or ""
                 texts.append(page_text)
                 image_count += len(page.images)
-        text = "\n".join(texts).strip()
+        text = "\f".join(texts).strip("\n")
         parsed = parse_invoice_text(text) if text else None
         source = "pdf_text"
         message = "发票识别完成（PDF 文本层）。"

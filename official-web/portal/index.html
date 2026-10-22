@@ -3,136 +3,549 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>客户控制台</title>
+  <title>公告统计平台</title>
+  <script src="echarts.min.js"></script>
   <style>
-    :root { color-scheme: light; --green: #0f7a4a; --ink: #1c2b24; --muted: #5d6b64; --line: #d7e3dc; }
+    :root {
+      --green: #157a45;
+      --green-dark: #0d5a32;
+      --gold: #d7a441;
+      --ink: #241c14;
+      --muted: #74685a;
+      --line: #eadfce;
+      --card: #fffdf8;
+      --shadow: 0 12px 28px rgba(62, 42, 16, .08);
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", "PingFang SC", sans-serif; background: #f4f7f5; color: var(--ink); }
-    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--line); }
-    main { max-width: 880px; margin: 32px auto; padding: 0 16px; }
-    h1 { font-size: 20px; margin: 0; }
-    .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-    label { display: block; margin-bottom: 12px; font-size: 14px; }
-    input { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
-    button { background: var(--green); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
-    button.ghost { background: transparent; color: var(--green); border: 1px solid var(--green); }
-    .error { color: #a12626; min-height: 1.2em; }
-    .tabs { display: flex; gap: 8px; margin: 16px 0; }
-    .tabs button.active { outline: 2px solid var(--green); }
-    article { padding: 12px 0; border-bottom: 1px solid var(--line); }
-    article h2 { font-size: 16px; margin: 0 0 4px; }
-    article p { margin: 0; color: var(--muted); font-size: 14px; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body { color: var(--ink); background: #f4efe4; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .login { height: 100%; display: grid; grid-template-columns: 1.15fr 0.85fr; overflow: hidden; }
+    .login-visual { min-height: 0; overflow: hidden; background: #12382c; }
+    .login-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .login-panel {
+      display: flex; align-items: center; justify-content: center; padding: 40px 24px;
+      background:
+        radial-gradient(circle at 85% 8%, rgba(215,164,65,.34), transparent 34%),
+        radial-gradient(circle at 8% 92%, rgba(21,122,69,.18), transparent 38%),
+        #f6f0e4;
+    }
+    .login-card {
+      width: min(400px, 100%);
+      padding: 36px 32px 28px;
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.8);
+      border-radius: 28px;
+      box-shadow: 0 24px 60px rgba(48, 32, 12, .14);
+    }
+    .login-mark, .brand-mark {
+      width: 46px; height: 46px; border-radius: 16px;
+      display: grid; place-items: center; font-weight: 750;
+      background: linear-gradient(145deg, #1f8f58, #0d4e30);
+      color: #f6dc9a;
+      box-shadow: 0 10px 18px rgba(13, 78, 48, .28);
+    }
+    .login-mark { margin-bottom: 16px; }
+    .login-card h1 { margin: 0 0 22px; font-size: 28px; font-weight: 700; letter-spacing: 0.03em; }
+    label { display: block; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
+    input, select { width: 100%; margin-top: 6px; padding: 11px 12px; border: 1px solid #e4d5be; border-radius: 12px; background: #fff; color: var(--ink); }
+    input:focus, select:focus { outline: 2px solid rgba(215,164,65,.35); border-color: #c8922e; }
+    .primary {
+      width: 100%; margin-top: 6px; color: #fff; border: 0; border-radius: 12px; padding: 12px 16px;
+      background: linear-gradient(180deg, #1e9658, #0f6b3d);
+      box-shadow: 0 10px 18px rgba(15, 107, 61, .24);
+    }
+    .primary:hover { background: linear-gradient(180deg, #187d49, #0c5832); }
+    .error { color: #a33b2b; min-height: 1.2em; font-size: 13px; }
+
+    .app { height: 100%; display: grid; grid-template-columns: 228px 1fr; overflow: hidden; }
+    .side {
+      color: #f4ecdf;
+      padding: 22px 14px;
+      display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(215,164,65,.28), transparent 34%),
+        linear-gradient(180deg, #1b5340 0%, #10261e 100%);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px 20px; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; }
+    .brand-mark { width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(145deg, #f3d48a, #c9963a); color: #173226; box-shadow: none; }
+    .nav { display: flex; flex-direction: column; gap: 6px; }
+    .nav button { display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; color: #d9cbb6; border: 0; border-radius: 12px; padding: 11px 12px; }
+    .nav button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .45; }
+    .nav button:hover { background: rgba(255,255,255,.07); color: #fff; }
+    .nav button.active { background: linear-gradient(90deg, rgba(215,164,65,.28), rgba(255,255,255,.05)); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
+    .nav button.active::before { background: var(--gold); opacity: 1; }
+    .workspace {
+      min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(215,164,65,.16), transparent 28%),
+        radial-gradient(circle at 0% 100%, rgba(21,122,69,.08), transparent 32%),
+        #f3eee4;
+    }
+    .topbar { height: 64px; flex: 0 0 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; background: rgba(255,250,242,.78); border-bottom: 1px solid rgba(80, 56, 24, .08); backdrop-filter: blur(12px); }
+    .topbar h2 { margin: 0; font-size: 18px; font-weight: 750; }
+    .user-menu { position: relative; }
+    .user-trigger { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 5px; color: var(--ink); box-shadow: 0 6px 16px rgba(62, 42, 16, .06); }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(145deg, #1f8f58, #0d4e30); color: #f6dc9a; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+    .caret { font-size: 10px; color: var(--muted); }
+    .dropdown { position: absolute; right: 0; top: calc(100% + 8px); width: 168px; background: #fffdf8; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 36px rgba(48, 32, 12, .14); padding: 6px; z-index: 5; }
+    .dropdown button { width: 100%; text-align: left; background: transparent; border: 0; border-radius: 10px; padding: 9px 10px; color: var(--ink); }
+    .dropdown button:hover { background: #f6efe2; }
+    .dropdown button.danger { color: #a33b2b; }
+    .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 20px; }
+    .metrics { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .metric, .card { background: var(--card); border: 1px solid rgba(234, 223, 206, .9); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); }
+    .metric { position: relative; overflow: hidden; padding-left: 18px; }
+    .metric::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+    .metric.tone-jade::before { background: #1f8a56; }
+    .metric.tone-gold::before { background: #d7a441; }
+    .metric.tone-coral::before { background: #d86a45; }
+    .metric.tone-teal::before { background: #2a9d8f; }
+    .metric.tone-ink::before { background: #3d6b8a; }
+    .metric span { color: var(--muted); font-size: 13px; }
+    .metric strong { display: block; margin-top: 8px; font-size: 24px; font-weight: 750; }
+    .metric.amount strong { font-size: 18px; }
+    .metric.tone-jade strong { color: #0f6b40; }
+    .metric.tone-gold strong { color: #8d6412; }
+    .metric.tone-coral strong { color: #b24b2c; }
+    .metric.tone-teal strong { color: #1d756c; }
+    .metric.tone-ink strong { color: #2d5570; }
+    .charts { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .charts > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .chart { flex: 1; width: 100%; min-height: 0; height: auto; }
+    .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
+    .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, #1f8a56, #d7a441); }
+    .toolbar { flex: none; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
+    .toolbar label { margin: 0; min-width: 160px; flex: 1; }
+    .list-card { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 4px 16px; }
+    .notice { flex: 1 1 0; min-height: 0; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0e6d6; }
+    .notice:last-child { border-bottom: 0; }
+    .notice-main { min-width: 0; flex: 1; }
+    .notice h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .notice p { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kind { flex: none; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #e7f6ee; color: #0f6b40; }
+    .kind.gold { background: #fbf3df; color: #8a6414; }
+    .kind.coral { background: #fde8e1; color: #a3472c; }
+    .kind.teal { background: #e5f6f4; color: #1d756c; }
+    .kind.ink { background: #e7eef5; color: #2d5570; }
+    .pager { flex: none; display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .pager div { display: flex; gap: 8px; }
+    .ghost { background: #fffdf8; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+    .ghost:hover { border-color: #d7a441; color: #8d6412; }
+    .profile { display: grid; grid-template-columns: 120px 1fr; gap: 0; max-width: 640px; }
+    .profile dt, .profile dd { margin: 0; padding: 12px 0; border-bottom: 1px solid #f0e6d6; }
+    .profile dt { color: var(--muted); }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { background: #fbf3df; color: #8a6414; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+    .empty { color: var(--muted); padding: 28px 0; }
+    #panel > .card:not(.list-card) { max-width: 720px; }
+    @media (max-width: 960px) {
+      .login, .app, .metrics, .charts { grid-template-columns: 1fr; }
+      .login-visual { height: 220px; }
+      .login-visual img { height: 220px; }
+      html, body { overflow: auto; }
+      .login, .app { height: auto; min-height: 100%; overflow: visible; }
+      .side { flex-direction: row; align-items: center; gap: 8px; padding: 12px; }
+      .brand { padding: 0 8px; }
+      .nav { flex-direction: row; }
+      .app { display: block; }
+      .content { overflow: visible; display: block; }
+      .list-card, .charts > .card { overflow: visible; display: block; }
+      .notice { display: flex; padding: 12px 0; }
+      .notice h3, .notice p { white-space: normal; }
+      .chart { height: 280px; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>客户控制台</h1>
-    <button id="logout" class="ghost" type="button" hidden>退出</button>
-  </header>
-  <main>
-    <section id="login" class="card">
-      <h2>登录</h2>
-      <p>使用管理员发放的客户账号。这里与员工后台无关。</p>
-      <form id="login-form">
-        <label>手机号<input name="phone" autocomplete="username" required /></label>
+  <section id="login" class="login">
+    <div class="login-visual">
+      <img src="login-visual.jpg" alt="" />
+    </div>
+    <div class="login-panel">
+      <form id="login-form" class="login-card">
+        <div class="login-mark">告</div>
+        <h1>公告统计平台</h1>
+        <label>手机号<input name="phone" autocomplete="username" inputmode="tel" required /></label>
         <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
         <p class="error" id="login-error"></p>
-        <button type="submit">登录</button>
+        <button class="primary" type="submit">登录</button>
       </form>
-    </section>
-    <section id="home" hidden>
-      <p id="welcome"></p>
-      <div class="tabs" id="tabs"></div>
-      <div id="panel" class="card"></div>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <section id="app" class="app" hidden>
+    <aside class="side">
+      <div class="brand"><span class="brand-mark">告</span><span>公告统计</span></div>
+      <nav class="nav" id="nav"></nav>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <h2 id="title">公告列表</h2>
+        <div class="user-menu">
+          <button id="user-trigger" class="user-trigger" type="button">
+            <span class="avatar" id="avatar">客</span>
+            <span id="who">客户</span>
+            <span class="caret">▼</span>
+          </button>
+          <div id="dropdown" class="dropdown" hidden>
+            <button type="button" data-go="account">用户中心</button>
+            <button id="logout" class="danger" type="button">退出登录</button>
+          </div>
+        </div>
+      </header>
+      <div class="content" id="panel"></div>
+    </div>
+  </section>
+
   <script>
-    const loginBox = document.getElementById("login");
-    const home = document.getElementById("home");
-    const logout = document.getElementById("logout");
+    const loginView = document.getElementById("login");
+    const appView = document.getElementById("app");
+    const dropdown = document.getElementById("dropdown");
     let me = null;
+    let tab = "notices";
+    let noticeQuery = { page: 1, search: "", siteId: "", noticeKind: "" };
+    let noticeRequest = 0;
+    let noticeSearchTimer = 0;
+    let charts = [];
+
+    const MENUS = [
+      ["notices", "公告列表", "portal.notice.view"],
+      ["stats", "数据统计", "portal.stats.view"],
+      ["subscription", "订阅", "portal.notice.subscribe"],
+    ];
+    const PERMISSION_LABELS = {
+      "portal.notice.view": "公告列表",
+      "portal.stats.view": "数据统计",
+      "portal.notice.subscribe": "订阅",
+    };
 
     async function api(path, options) {
-      const response = await fetch(path, { credentials: "include", headers: { "Content-Type": "application/json" }, ...options });
+      const response = await fetch(path, {
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        ...options,
+      });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || "请求失败");
       return body;
     }
 
-    function showHome(account) {
+    function disposeCharts() {
+      charts.forEach((chart) => chart.dispose());
+      charts = [];
+    }
+
+    function showApp(account) {
       me = account;
-      loginBox.hidden = true;
-      home.hidden = false;
-      logout.hidden = false;
-      document.getElementById("welcome").textContent = (account.customerName || account.name) + " · " + account.phone;
-      const tabs = [];
-      if (account.permissions.includes("portal.notice.view")) tabs.push(["notices", "公告"]);
-      if (account.permissions.includes("portal.notice.subscribe")) tabs.push(["subscription", "订阅"]);
-      if (account.permissions.includes("portal.stats.view")) tabs.push(["stats", "数据统计"]);
-      const tabBar = document.getElementById("tabs");
-      tabBar.innerHTML = "";
-      if (!tabs.length) {
-        document.getElementById("panel").textContent = "当前账号还没有可查看的内容，请联系管理员开通权限。";
-        return;
-      }
-      tabs.forEach(([id, label], index) => {
+      loginView.hidden = true;
+      appView.hidden = false;
+      const name = account.customerName || account.name || "客户";
+      document.getElementById("who").textContent = name;
+      document.getElementById("avatar").textContent = name.slice(0, 1);
+      const allowed = MENUS.filter((item) => (account.permissions || []).includes(item[2]));
+      const nav = document.getElementById("nav");
+      nav.innerHTML = "";
+      allowed.forEach((item) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = label;
-        button.className = index === 0 ? "active" : "";
-        button.onclick = () => {
-          tabBar.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
-          button.classList.add("active");
-          openTab(id);
-        };
-        tabBar.appendChild(button);
+        button.textContent = item[1];
+        button.dataset.tab = item[0];
+        button.onclick = () => openTab(item[0]);
+        nav.appendChild(button);
       });
-      openTab(tabs[0][0]);
+      const next = allowed.some((item) => item[0] === tab) ? tab : (allowed[0] ? allowed[0][0] : "account");
+      openTab(next);
+    }
+
+    function markNav() {
+      document.querySelectorAll("#nav button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.tab === tab);
+      });
     }
 
     async function openTab(id) {
+      dropdown.hidden = true;
+      tab = id;
+      markNav();
+      disposeCharts();
+      const titles = { notices: "公告列表", stats: "数据统计", subscription: "订阅", account: "用户中心" };
+      document.getElementById("title").textContent = titles[id] || "";
       const panel = document.getElementById("panel");
-      panel.textContent = "加载中…";
-      if (id === "notices") {
-        const body = await api("/api/portal/notices/?page=1&page_size=20");
-        panel.innerHTML = "";
-        if (!body.items.length) panel.textContent = "暂无已公开公告。";
-        body.items.forEach((item) => {
-          const article = document.createElement("article");
-          article.innerHTML = "<h2></h2><p></p>";
-          article.querySelector("h2").textContent = item.title || "未命名公告";
-          article.querySelector("p").textContent = [item.siteLabel, item.noticeKind, item.progressLabel, item.publishTime].filter(Boolean).join(" · ");
-          panel.appendChild(article);
-        });
-        return;
+      panel.innerHTML = '<p class="empty">加载中…</p>';
+      try {
+        if (id === "stats") await renderStats(panel);
+        else if (id === "notices") await renderNotices(panel);
+        else if (id === "subscription") renderSubscription(panel);
+        else renderAccount(panel);
+      } catch (error) {
+        panel.innerHTML = '<p class="error"></p>';
+        panel.querySelector(".error").textContent = error.message;
       }
-      if (id === "stats") {
-        const body = await api("/api/portal/stats/");
-        panel.innerHTML = "";
-        const text = document.createElement("p");
-        text.textContent = "已抓取公告 " + body.data.publicNoticeTotal + " 条。订阅" + (body.data.subscriptionEnabled ? "已开启" : "未开启") + "。";
-        panel.appendChild(text);
-        return;
+    }
+
+    function mountChart(el, option) {
+      const chart = echarts.init(el);
+      chart.setOption(option);
+      charts.push(chart);
+      return chart;
+    }
+
+    function fitCharts() {
+      requestAnimationFrame(() => charts.forEach((chart) => chart.resize()));
+    }
+
+    function formatMoney(value) {
+      const amount = Number(value || 0);
+      if (Math.abs(amount) >= 10000) {
+        return (amount / 10000).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " 万";
       }
+      return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " 元";
+    }
+
+    async function renderStats(panel) {
+      const data = (await api("/api/portal/stats/")).data;
       panel.innerHTML = "";
-      const form = document.createElement("form");
-      form.innerHTML = '<label>关键词<input name="keywords" /></label><label><input name="enabled" type="checkbox" /> 接收订阅消息</label><button type="submit">保存</button><p class="error"></p>';
-      form.keywords.value = me.subscription?.keywords || "";
-      form.enabled.checked = Boolean(me.subscription?.enabled);
-      form.onsubmit = async (event) => {
+      const metrics = document.createElement("div");
+      metrics.className = "metrics";
+      [
+        ["公告总量", String(data.publicNoticeTotal ?? 0), false, "jade"],
+        ["上月采购公告总额", formatMoney(data.lastMonthPurchaseAmount), true, "gold"],
+        ["上月成交公告总额", formatMoney(data.lastMonthDealAmount), true, "coral"],
+        ["今日发布", String(data.todayCount ?? 0), false, "teal"],
+        ["近 7 日", String(data.weekCount ?? 0), false, "ink"],
+      ].forEach(([label, value, amount, tone]) => {
+        const card = document.createElement("div");
+        card.className = "metric tone-" + tone + (amount ? " amount" : "");
+        card.innerHTML = "<span></span><strong></strong>";
+        card.querySelector("span").textContent = label;
+        card.querySelector("strong").textContent = value;
+        metrics.appendChild(card);
+      });
+      panel.appendChild(metrics);
+
+      const grid = document.createElement("div");
+      grid.className = "charts";
+      const siteCard = document.createElement("section");
+      siteCard.className = "card";
+      siteCard.innerHTML = '<h3>平台分布</h3><div class="chart" id="chart-site"></div>';
+      const kindCard = document.createElement("section");
+      kindCard.className = "card";
+      kindCard.innerHTML = '<h3>公告类型</h3><div class="chart" id="chart-kind"></div>';
+      grid.appendChild(siteCard);
+      grid.appendChild(kindCard);
+      panel.appendChild(grid);
+
+      const lower = document.createElement("div");
+      lower.className = "charts";
+      const dealCard = document.createElement("section");
+      dealCard.className = "card";
+      dealCard.innerHTML = '<h3>月成交金额</h3><div class="chart" id="chart-deal"></div>';
+      const trendCard = document.createElement("section");
+      trendCard.className = "card";
+      trendCard.innerHTML = '<h3>发布量</h3><div class="chart" id="chart-daily"></div>';
+      lower.appendChild(dealCard);
+      lower.appendChild(trendCard);
+      panel.appendChild(lower);
+
+      const axis = { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
+      const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
+      mountChart(document.getElementById("chart-site"), {
+        color: ["#1f8a56"],
+        grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
+        tooltip: { trigger: "axis" },
+        xAxis: { type: "value", ...axis },
+        yAxis: { type: "category", data: (data.bySite || []).map((row) => row.label).reverse(), ...axis },
+        series: [{ type: "bar", barWidth: 14, data: (data.bySite || []).map((row) => row.count).reverse(), itemStyle: { borderRadius: [0, 6, 6, 0], color: bar } }],
+      });
+      mountChart(document.getElementById("chart-kind"), {
+        color: ["#1f8a56", "#e0b15a", "#2a9d8f", "#e07a4c", "#3d6b8a", "#c45c6a", "#8d9a84"],
+        tooltip: { trigger: "item" },
+        legend: { bottom: 0, type: "scroll" },
+        series: [{
+          type: "pie",
+          radius: ["42%", "68%"],
+          center: ["50%", "44%"],
+          data: (data.byKind || []).map((row) => ({ name: row.kind, value: row.count })),
+        }],
+      });
+      const dealRows = data.monthlyDeal || [];
+      mountChart(document.getElementById("chart-deal"), {
+        color: ["#d7a441"],
+        grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
+        tooltip: { trigger: "axis", valueFormatter: (value) => formatMoney(value) },
+        xAxis: { type: "category", data: dealRows.map((row) => String(row.month).slice(2).replace("-", "/")), ...axis },
+        yAxis: { type: "value", ...axis, axisLabel: { color: "#74685a", formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
+        series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: new echarts.graphic.LinearGradient(0, 1, 0, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]) } }],
+      });
+      mountChart(document.getElementById("chart-daily"), {
+        color: ["#1f8a56"],
+        grid: { left: 24, right: 16, top: 24, bottom: 8, containLabel: true },
+        tooltip: { trigger: "axis" },
+        xAxis: { type: "category", data: (data.daily || []).map((row) => String(row.date).slice(5)), ...axis },
+        yAxis: { type: "value", ...axis },
+        series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(31,138,86,.28)" }, { offset: 1, color: "rgba(224,177,90,.05)" }]) }, data: (data.daily || []).map((row) => row.count) }],
+      });
+      fitCharts();
+    }
+
+    function kindTone(kind) {
+      if (kind === "成交公告") return "gold";
+      if (kind === "失败公告" || kind === "废标公告" || kind === "终止公告") return "coral";
+      if (kind === "询比公告" || kind === "竞价公告") return "teal";
+      if (kind && kind !== "采购公告") return "ink";
+      return "";
+    }
+
+    function fillNoticeList(list, body) {
+      list.innerHTML = "";
+      if (!body.items.length) {
+        list.innerHTML = '<p class="empty">没有符合条件的公告。</p>';
+        return;
+      }
+      body.items.forEach((item) => {
+        const article = document.createElement("article");
+        article.className = "notice";
+        article.innerHTML = '<div class="notice-main"><h3></h3><p></p></div><span class="kind"></span>';
+        article.querySelector("h3").textContent = item.title || "未命名公告";
+        article.querySelector("p").textContent = [item.siteLabel, item.regionName, item.progressLabel, item.publishTime].filter(Boolean).join(" · ");
+        const badge = article.querySelector(".kind");
+        badge.textContent = item.noticeKind || "公告";
+        const tone = kindTone(item.noticeKind);
+        if (tone) badge.classList.add(tone);
+        list.appendChild(article);
+      });
+    }
+
+    function fillNoticePager(pager, panel, body) {
+      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 10)));
+      pager.innerHTML = "<span></span><div><button class='ghost' type='button' data-dir='-1'>上一页</button><button class='ghost' type='button' data-dir='1'>下一页</button></div>";
+      pager.querySelector("span").textContent = "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页";
+      pager.querySelectorAll("button").forEach((button) => {
+        button.onclick = () => {
+          const next = noticeQuery.page + Number(button.dataset.dir);
+          if (next < 1 || next > totalPages) return;
+          noticeQuery.page = next;
+          renderNotices(panel);
+        };
+      });
+    }
+
+    async function renderNotices(panel) {
+      const requestId = ++noticeRequest;
+      const params = new URLSearchParams({
+        page: String(noticeQuery.page),
+        page_size: "10",
+        search: noticeQuery.search,
+        siteId: noticeQuery.siteId,
+        noticeKind: noticeQuery.noticeKind,
+      });
+      const body = await api("/api/portal/notices/?" + params.toString());
+      if (requestId !== noticeRequest) return;
+
+      let toolbar = panel.querySelector(".toolbar");
+      let list = panel.querySelector(".list-card");
+      let pager = panel.querySelector(".pager");
+      if (!toolbar || !list || !pager) {
+        panel.innerHTML = "";
+        toolbar = document.createElement("div");
+        toolbar.className = "toolbar";
+        toolbar.innerHTML = '<label>搜索<input name="search" placeholder="标题、项目、采购人" /></label><label>平台<select name="siteId"><option value="">全部</option></select></label><label>类型<select name="noticeKind"><option value="">全部</option></select></label>';
+        const searchInput = toolbar.querySelector("[name=search]");
+        searchInput.value = noticeQuery.search;
+        searchInput.oninput = (event) => {
+          window.clearTimeout(noticeSearchTimer);
+          const value = event.target.value.trim();
+          noticeSearchTimer = window.setTimeout(() => {
+            if (noticeQuery.search === value) return;
+            noticeQuery.search = value;
+            noticeQuery.page = 1;
+            renderNotices(panel);
+          }, 300);
+        };
+        const siteSelect = toolbar.querySelector("[name=siteId]");
+        (body.sites || []).forEach((site) => {
+          const option = document.createElement("option");
+          option.value = site.id;
+          option.textContent = site.label;
+          siteSelect.appendChild(option);
+        });
+        siteSelect.value = noticeQuery.siteId;
+        siteSelect.onchange = () => {
+          noticeQuery.siteId = siteSelect.value;
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
+        const kindSelect = toolbar.querySelector("[name=noticeKind]");
+        (body.noticeKinds || []).forEach((kind) => {
+          const option = document.createElement("option");
+          option.value = kind;
+          option.textContent = kind;
+          kindSelect.appendChild(option);
+        });
+        kindSelect.value = noticeQuery.noticeKind;
+        kindSelect.onchange = () => {
+          noticeQuery.noticeKind = kindSelect.value;
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
+        list = document.createElement("div");
+        list.className = "card list-card";
+        pager = document.createElement("div");
+        pager.className = "pager";
+        panel.appendChild(toolbar);
+        panel.appendChild(list);
+        panel.appendChild(pager);
+      }
+      fillNoticeList(list, body);
+      fillNoticePager(pager, panel, body);
+    }
+
+    function renderSubscription(panel) {
+      panel.innerHTML = "";
+      const card = document.createElement("form");
+      card.className = "card";
+      card.innerHTML = '<label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔" /></label><label><input name="enabled" type="checkbox" style="width:auto;margin-right:8px" /> 开启订阅</label><button class="primary" type="submit" style="width:auto">保存</button><p class="error"></p>';
+      card.keywords.value = me.subscription?.keywords || "";
+      card.enabled.checked = Boolean(me.subscription?.enabled);
+      card.onsubmit = async (event) => {
         event.preventDefault();
         try {
           const body = await api("/api/portal/subscription/", {
             method: "PUT",
-            body: JSON.stringify({ keywords: form.keywords.value, enabled: form.enabled.checked }),
+            body: JSON.stringify({ keywords: card.keywords.value, enabled: card.enabled.checked }),
           });
           me = body.data;
-          form.querySelector(".error").textContent = "已保存。短信发送后续开通。";
+          card.querySelector(".error").textContent = "已保存。";
         } catch (error) {
-          form.querySelector(".error").textContent = error.message;
+          card.querySelector(".error").textContent = error.message;
         }
       };
-      panel.appendChild(form);
+      panel.appendChild(card);
+    }
+
+    function renderAccount(panel) {
+      panel.innerHTML = "";
+      const card = document.createElement("section");
+      card.className = "card";
+      const tags = (me.permissions || []).map((id) => PERMISSION_LABELS[id] || id);
+      card.innerHTML = '<dl class="profile"><dt>名称</dt><dd id="acc-name"></dd><dt>手机号</dt><dd id="acc-phone"></dd><dt>客户</dt><dd id="acc-customer"></dd><dt>状态</dt><dd id="acc-status"></dd><dt>权限</dt><dd><div class="tags" id="acc-tags"></div></dd></dl>';
+      card.querySelector("#acc-name").textContent = me.name || "—";
+      card.querySelector("#acc-phone").textContent = me.phone || "—";
+      card.querySelector("#acc-customer").textContent = me.customerName || "—";
+      card.querySelector("#acc-status").textContent = me.status || "—";
+      const tagBox = card.querySelector("#acc-tags");
+      if (!tags.length) tagBox.textContent = "未开通";
+      tags.forEach((label) => {
+        const span = document.createElement("span");
+        span.className = "tag";
+        span.textContent = label;
+        tagBox.appendChild(span);
+      });
+      panel.appendChild(card);
     }
 
     document.getElementById("login-form").onsubmit = async (event) => {
@@ -143,18 +556,27 @@
       try {
         const body = await api("/api/portal/login/", {
           method: "POST",
-          body: JSON.stringify({ phone: form.phone.value, password: form.password.value }),
+          body: JSON.stringify({ phone: form.phone.value.trim(), password: form.password.value }),
         });
-        showHome(body.data);
+        showApp(body.data);
       } catch (err) {
         error.textContent = err.message;
       }
     };
-    logout.onclick = async () => {
-      await api("/api/portal/logout/", { method: "POST", body: "{}" });
+
+    document.getElementById("user-trigger").onclick = (event) => {
+      event.stopPropagation();
+      dropdown.hidden = !dropdown.hidden;
+    };
+    dropdown.querySelector("[data-go=account]").onclick = () => openTab("account");
+    document.getElementById("logout").onclick = async () => {
+      await api("/api/portal/logout/", { method: "POST", body: "{}" }).catch(() => {});
       location.reload();
     };
-    api("/api/portal/me/").then((body) => showHome(body.data)).catch(() => {});
+    document.addEventListener("click", () => { dropdown.hidden = true; });
+    window.addEventListener("resize", () => charts.forEach((chart) => chart.resize()));
+
+    api("/api/portal/me/").then((body) => showApp(body.data)).catch(() => {});
   </script>
 </body>
 </html>

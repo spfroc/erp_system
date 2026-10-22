@@ -253,4 +253,45 @@ def test_parse_invoice_text_reads_ream_unit_line_items():
     assert round(sum(item["amount"] for item in result["line_items"]), 2) == 59061.15
 
 
+def test_parse_invoice_text_keeps_items_after_first_page_total():
+    """多页发票每页都有合计，下一页开头是上一行的换行续写。"""
+    text = """
+电子发票（增值税专用发票）
+发票号码：26372000005185906171
+开票日期：2026年10月21日
+共2页 第1页
+购 名称：青岛国易采购服务有限公司 销 名称：山东壹知产数字科技有限公司
+项目名称 规格型号 单 位 数 量 单 价 金 额 税率/征收率 税 额
+*计算机外部设备*闪迪 3.0 U盘 CZ410 个 6 46.0176991150442 276.11 13% 35.89
+64GB USB3.0 U盘 CZ410 酷邃 读速
+小 计 ¥10273.82 ¥1335.58
+合 计
+¥15011.37 ¥1910.43
+""" + "\f" + """
+电子发票（增值税专用发票）
+发票号码：26372000005185906171
+共2页 第2页
+项目名称 规格型号 单 位 数 量 单 价 金 额 税率/征收率 税 额
+酷邃 读速100MB/s 小巧便携
+*计算机外部设备*闪迪 3.0 U盘 CZ410 个 3 46.0176991150442 138.05 13% 17.95
+*园艺产品*绿植发财树 定制一盆4棵 盆 1 1025.6880733945 1025.69 9% 92.31
+*计算机外部设备*爱普生 LQ-1600KIVH 台 1 1769.91150442478 1769.91 13% 230.09
+LQ-1600KIVH针式打印机
+¥4737.55 ¥574.85
+小 计
+合 计 ¥15011.37 ¥1910.43
+价税合计（大写） 壹万陆仟玖佰贰拾壹圆捌角整 （小写） ¥16921.80
+"""
+    result = parse_invoice_text(text)
+    assert result["total_amount"] == 16921.80
+    assert len(result["line_items"]) == 4
+    assert result["line_items"][0]["quantity"] == 6
+    assert "100MB/s" in result["line_items"][0]["product_name"] or "100MB/s" in (result["line_items"][0]["specification"] or "")
+    assert result["line_items"][1]["amount"] == 138.05
+    assert result["line_items"][2]["product_name"].startswith("绿植发财树")
+    assert result["line_items"][2]["tax_rate"] == "9%"
+    assert "针式打印机" in result["line_items"][3]["product_name"] or "针式打印机" in (result["line_items"][3]["specification"] or "")
+    assert "4737.55" not in (result["line_items"][3]["raw"] or "")
+
+
 
