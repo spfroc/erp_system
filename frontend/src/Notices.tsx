@@ -27,6 +27,10 @@ export type NoticeListItem = {
   parseStatus?: string | null;
   sourceUrl?: string | null;
   crawledAt?: string | null;
+  /** 同项目编号下除当前外的其他公告类型，如成交/失败/终止 */
+  siblingKinds?: string[];
+  /** 同项目编号下全部公告类型（含当前） */
+  projectNoticeKinds?: string[];
 };
 
 export type NoticeGoodsItem = {
@@ -58,6 +62,8 @@ export type NoticeDetail = NoticeListItem & {
   confidence?: number | null;
   contentText?: string | null;
   goods?: NoticeGoodsItem[];
+  /** 同一项目编号下的其他公告（竞价/成交/失败/终止等） */
+  relatedNotices?: NoticeListItem[];
 };
 
 type SiteOption = { id: string; label: string };
@@ -85,6 +91,69 @@ function money(value: number | null | undefined) {
 function text(value: string | number | null | undefined) {
   if (value == null || value === "") return "—";
   return String(value);
+}
+
+const NOTICE_FLOW_KIND_ORDER = [
+  "竞价公告",
+  "询比公告",
+  "采购公告",
+  "成交公告",
+  "成交结果公告",
+  "失败公告",
+  "终止公告",
+  "废标公告",
+  "公示公告",
+];
+
+function noticeFlowKindRank(kind: string | null | undefined) {
+  const label = (kind || "").trim();
+  const index = NOTICE_FLOW_KIND_ORDER.indexOf(label);
+  return index >= 0 ? index : NOTICE_FLOW_KIND_ORDER.length;
+}
+
+function noticeFlowTone(kind: string | null | undefined): "open" | "deal" | "fail" | "stop" | "other" {
+  const label = kind || "";
+  if (label.includes("成交")) return "deal";
+  if (label.includes("失败") || label.includes("废标")) return "fail";
+  if (label.includes("终止")) return "stop";
+  if (label.includes("竞价") || label.includes("询比") || label.includes("采购")) return "open";
+  return "other";
+}
+
+function buildProjectFlow(detail: NoticeDetail): NoticeListItem[] {
+  const nodes: NoticeListItem[] = [
+    {
+      id: detail.id,
+      siteId: detail.siteId,
+      siteLabel: detail.siteLabel,
+      noticeKey: detail.noticeKey,
+      title: detail.title,
+      projectCode: detail.projectCode,
+      projectName: detail.projectName,
+      buyerName: detail.buyerName,
+      dealSupplier: detail.dealSupplier,
+      dealAmount: detail.dealAmount,
+      budgetAmount: detail.budgetAmount,
+      noticeKind: detail.noticeKind,
+      procurementMode: detail.procurementMode,
+      publishTime: detail.publishTime,
+      progressStatus: detail.progressStatus,
+      progressLabel: detail.progressLabel,
+    },
+    ...(detail.relatedNotices || []),
+  ];
+  const seen = new Set<number>();
+  return nodes
+    .filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    })
+    .sort((a, b) => {
+      const kindDiff = noticeFlowKindRank(a.noticeKind) - noticeFlowKindRank(b.noticeKind);
+      if (kindDiff !== 0) return kindDiff;
+      return String(a.publishTime || "").localeCompare(String(b.publishTime || ""));
+    });
 }
 
 async function fetchNotices(params: URLSearchParams): Promise<NoticeListResponse> {
@@ -377,7 +446,24 @@ export function Notices({
             <div className="table-row notice-table" key={item.id}>
               <span>
                 <strong>{text(item.title)}</strong>
-                <em>{text(item.projectCode || item.noticeKey)}</em>
+                {item.projectCode ? (
+                  <em>
+                    <button
+                      type="button"
+                      className="copy-link notice-project-code"
+                      title="按此项目编号筛选，查看竞价/成交/失败/终止等"
+                      onClick={() => {
+                        setPage(1);
+                        setProjectCode(item.projectCode || "");
+                        setNoticeKind("");
+                      }}
+                    >
+                      {item.projectCode}
+                    </button>
+                  </em>
+                ) : (
+                  <em>{text(item.noticeKey)}</em>
+                )}
               </span>
               <span>{text(item.siteLabel)}</span>
               <span>{text(item.buyerName)}</span>
@@ -389,6 +475,11 @@ export function Notices({
               <span>
                 {text(item.noticeKind)}
                 <em>{text(item.procurementMode)}</em>
+                {(item.siblingKinds || []).length > 0 && (
+                  <em className="notice-sibling-kinds">
+                    另有 {(item.siblingKinds || []).join("、")}
+                  </em>
+                )}
               </span>
               <span className="notice-times">
                 <em>发布 {text(item.publishTime)}</em>
@@ -447,6 +538,13 @@ export function Notices({
                 <X size={18} />
               </button>
             </div>
+
+            <ProjectNoticeFlow
+              detail={detail}
+              loading={detailLoading}
+              onSelect={(id) => void openDetail(id)}
+            />
+
             <div className="info-grid">
               <Info label="项目名称" value={detail.projectName} />
               <Info label="采购单位" value={detail.buyerName} />
@@ -528,6 +626,61 @@ function Info({ label, value }: { label: string; value?: string | number | null 
     <div className="info">
       <span>{label}</span>
       <strong>{text(value)}</strong>
+    </div>
+  );
+}
+
+function ProjectNoticeFlow({
+  detail,
+  loading,
+  onSelect,
+}: {
+  detail: NoticeDetail;
+  loading: boolean;
+  onSelect: (id: number) => void;
+}) {
+  const flow = buildProjectFlow(detail);
+  if (flow.length < 2) return null;
+
+  return (
+    <div className="notice-flow">
+      <div className="notice-flow-head">
+        <h4>项目公告流程</h4>
+        <span>
+          {detail.projectCode ? `编号 ${detail.projectCode} · ` : ""}
+          按竞价 → 成交 / 失败 / 终止串联，点击节点切换详情
+        </span>
+      </div>
+      <ol className="notice-flow-track">
+        {flow.map((node, index) => {
+          const current = node.id === detail.id;
+          const tone = noticeFlowTone(node.noticeKind);
+          return (
+            <li
+              key={node.id}
+              className={`notice-flow-step notice-flow-${tone}${current ? " is-current" : ""}`}
+            >
+              {index > 0 && <span className="notice-flow-line" aria-hidden="true" />}
+              <button
+                type="button"
+                className="notice-flow-node"
+                disabled={current || loading}
+                onClick={() => {
+                  if (!current) onSelect(node.id);
+                }}
+                title={current ? "当前公告" : `查看${node.noticeKind || "公告"}`}
+              >
+                <span className="notice-flow-dot" />
+                <strong>{text(node.noticeKind)}</strong>
+                <em>{text(node.publishTime).slice(0, 16)}</em>
+                {node.dealSupplier ? <em>{node.dealSupplier}</em> : null}
+                {node.dealAmount != null ? <em>{money(node.dealAmount)}</em> : null}
+                {current ? <span className="notice-flow-badge">当前</span> : null}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
