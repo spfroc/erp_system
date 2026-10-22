@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Optional  # noqa: F401
 
@@ -13,6 +12,8 @@ from tqdm import tqdm
 from clients.jd_quan import is_jd_site
 from config import settings
 from db import NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
+from utils import now as now_shanghai
+from utils import parse_dt
 
 PARSE_SCHEMA_HINT = {
     "project_code": "项目编号/公告编号/订单号",
@@ -85,26 +86,9 @@ def _to_decimal(v: Any) -> Optional[Decimal]:
         return None
 
 
-def _to_dt(v: Any) -> Optional[datetime]:
-    if not v:
-        return None
-    if isinstance(v, datetime):
-        return v
-    if isinstance(v, (int, float)) or (isinstance(v, str) and str(v).strip().isdigit()):
-        num = float(v)
-        if num > 1e12:  # 毫秒时间戳
-            num = num / 1000.0
-        try:
-            return datetime.fromtimestamp(num)
-        except (OverflowError, OSError, ValueError):
-            return None
-    s = str(v).strip().replace("T", " ")
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(s[:19] if fmt.endswith("%S") else s[:10], fmt)
-        except ValueError:
-            continue
-    return None
+def _to_dt(v: Any):
+    """兼容旧调用；统一走上海墙钟解析。"""
+    return parse_dt(v)
 
 
 def normalize_goods(goods: Any) -> list:
@@ -668,7 +652,7 @@ def save_parsed(session, raw: NoticeRaw, parsed: Dict[str, Any]) -> NoticeParsed
         row.confidence = Decimal(str(conf)) if conf is not None else None
     except (InvalidOperation, ValueError):
         row.confidence = None
-    row.parsed_at = datetime.now()
+    row.parsed_at = now_shanghai()
     raw.parse_status = "parsed"
     session.flush()
     replace_goods(session, raw=raw, parsed_row=row, goods=goods)

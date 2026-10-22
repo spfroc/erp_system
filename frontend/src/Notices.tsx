@@ -391,10 +391,9 @@ export function Notices({
                 <em>{text(item.procurementMode)}</em>
               </span>
               <span className="notice-times">
-                <em>采集 {text(item.crawledAt)}</em>
                 <em>发布 {text(item.publishTime)}</em>
-                <em>报价开始 {text(item.startTime)}</em>
                 <em>结束 {text(item.endTime)}</em>
+                <em>采集 {text(item.crawledAt)}</em>
               </span>
               <span>
                 <strong className={`notice-progress notice-progress-${item.progressStatus || "unknown"}`}>

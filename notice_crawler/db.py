@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
@@ -22,7 +21,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from datetime import datetime
+
 from config import settings
+from utils import now as now_shanghai
 
 
 class Base(DeclarativeBase):
@@ -70,10 +72,10 @@ class NoticeRaw(Base):
         comment="解析状态：pending/parsed/parse_fail/skipped",
     )
     error_message = Column(String(1000), comment="抓取/解析错误信息")
-    crawled_at = Column(DateTime, default=datetime.now, comment="列表抓取时间")
+    crawled_at = Column(DateTime, default=now_shanghai, comment="列表抓取时间")
     detail_at = Column(DateTime, comment="详情抓取时间")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -112,9 +114,9 @@ class NoticeParsed(Base):
     model_name = Column(String(128), comment="解析所用模型/后端")
     model_raw_json = Column(JSON, comment="模型原始输出")
     confidence = Column(Numeric(5, 4), comment="置信度 0~1")
-    parsed_at = Column(DateTime, default=datetime.now, comment="解析时间")
+    parsed_at = Column(DateTime, default=now_shanghai, comment="解析时间")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -139,9 +141,9 @@ class NoticeGoods(Base):
     unit_price = Column(Numeric(18, 4), comment="单价")
     spec = Column(String(2000), comment="参数/规格")
     amount = Column(Numeric(18, 2), comment="金额小计")
-    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    created_at = Column(DateTime, default=now_shanghai, comment="创建时间")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -186,9 +188,9 @@ class NoticeAttachment(Base):
     error_message = Column(String(1000), comment="下载/解析错误信息")
     downloaded_at = Column(DateTime, comment="下载完成时间")
     parsed_at = Column(DateTime, comment="解析完成时间")
-    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    created_at = Column(DateTime, default=now_shanghai, comment="创建时间")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -209,7 +211,7 @@ class CrawlCursor(Base):
     last_success_at = Column(DateTime, comment="上次成功抓取时间")
     extra_json = Column(JSON, comment="扩展状态 JSON")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -241,9 +243,9 @@ class MallCustomer(Base):
     agent_shop_product_number = Column(Integer, comment="店铺商品数量")
     list_json = Column(JSON, comment="列表原始条目")
     store_json = Column(JSON, comment="店铺详情")
-    crawled_at = Column(DateTime, default=datetime.now, comment="首次抓取时间")
+    crawled_at = Column(DateTime, default=now_shanghai, comment="首次抓取时间")
     updated_at = Column(
-        DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间"
+        DateTime, default=now_shanghai, onupdate=now_shanghai, comment="更新时间"
     )
 
 
@@ -366,7 +368,7 @@ def upsert_raw(
         row.list_json = dumps(list_json)
     if detail_json is not None:
         row.detail_json = dumps(detail_json)
-        row.detail_at = datetime.now()
+        row.detail_at = now_shanghai()
     if content_html is not None:
         row.content_html = content_html
     if content_text is not None:
@@ -377,7 +379,7 @@ def upsert_raw(
         row.crawl_status = crawl_status
     if error_message is not None:
         row.error_message = error_message[:1000]
-    row.updated_at = datetime.now()
+    row.updated_at = now_shanghai()
     session.flush()
     return row
 
@@ -398,7 +400,7 @@ def save_cursor(
         session.add(row)
     row.last_page = last_page
     row.last_total = last_total
-    row.last_success_at = datetime.now()
+    row.last_success_at = now_shanghai()
     if extra is not None:
         row.extra_json = dumps(extra)
     session.flush()
@@ -418,7 +420,7 @@ def upsert_mall_customer(session: Session, data: dict) -> MallCustomer:
     if not name:
         raise ValueError("缺少公司名称")
     row = session.execute(select(MallCustomer).where(MallCustomer.name == name)).scalar_one_or_none()
-    now = datetime.now()
+    now = now_shanghai()
     if row is None:
         row = MallCustomer(name=name, crawled_at=now)
         session.add(row)

@@ -347,19 +347,13 @@ def _crawl_jd_site(
 def json_detail_to_text(detail: dict) -> str:
     """把京东结构化详情压成可读文本，便于 LLM 抽取。"""
     import json
-    from datetime import datetime
 
     def _fmt_ts(v):
         if v in (None, ""):
             return ""
-        try:
-            num = float(v)
-            if num > 1e12:
-                num /= 1000.0
-            if num > 1e9:
-                return datetime.fromtimestamp(num).strftime("%Y-%m-%d %H:%M:%S")
-        except (TypeError, ValueError, OSError, OverflowError):
-            pass
+        parsed = parse_dt(v)
+        if parsed is not None:
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
         return str(v)
 
     nested = detail.get("detail") or {}

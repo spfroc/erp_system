@@ -272,19 +272,38 @@ def extract_sd_mall_html(
                     out["buyer_contact_name"] = name
 
     goods, quotes = _parse_contract_tables(soup)
+    # 去掉「未报价供应商」等空行误入的商品
+    goods = [
+        g
+        for g in goods
+        if g.get("name") or g.get("amount") is not None or g.get("brand") or g.get("model")
+    ]
     out["goods"] = goods
     if quotes:
         out["quotes"] = quotes
         out["suppliers"] = [q["supplier_name"] for q in quotes if q.get("supplier_name")]
         out["quote_count"] = len(quotes)
-        if not out.get("deal_supplier"):
-            winner = next((q for q in quotes if q.get("is_winner")), None) or (
-                quotes[0] if quotes else None
+        # 定点竞价成交公告正文常有「成交供应商」但无「成交金额」，金额在报价表
+        winner = next((q for q in quotes if q.get("is_winner")), None)
+        if not winner and out.get("deal_supplier"):
+            ds = str(out["deal_supplier"]).strip()
+            winner = next(
+                (q for q in quotes if (q.get("supplier_name") or "").strip() == ds),
+                None,
             )
-            if winner:
+        if not winner:
+            # 表通常已按价格从低到高排序，第一条为成交
+            winner = quotes[0]
+        if winner:
+            if not out.get("deal_supplier"):
                 out["deal_supplier"] = winner.get("supplier_name")
-                if out.get("deal_amount") is None:
-                    out["deal_amount"] = winner.get("quote_amount")
+            if out.get("deal_amount") is None and winner.get("quote_amount") is not None:
+                out["deal_amount"] = winner.get("quote_amount")
+    # 成交金额仍空时：用中标商品小计合计
+    if out.get("deal_amount") is None and goods:
+        amounts = [g.get("amount") for g in goods if g.get("amount") is not None]
+        if amounts:
+            out["deal_amount"] = round(sum(float(a) for a in amounts), 2)
 
     # 详情/列表结构化补洞
     if not out.get("region_name"):
