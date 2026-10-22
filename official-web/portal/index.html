@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>公告统计平台</title>
+  <title>壹采科技数据服务平台</title>
   <script src="echarts.min.js"></script>
   <style>
     :root {
-      --green: #157a45;
-      --green-dark: #0d5a32;
-      --gold: #d7a441;
+      --green: #1b6844;
+      --green-dark: #124a30;
+      --gold: #c4a15a;
       --ink: #241c14;
       --muted: #74685a;
       --line: #eadfce;
@@ -19,7 +19,7 @@
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { height: 100%; margin: 0; overflow: hidden; }
-    body { color: var(--ink); background: #f4efe4; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    body { color: var(--ink); background: #e9efe9; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
     button, input, select { font: inherit; }
     button { cursor: pointer; }
 
@@ -29,9 +29,9 @@
     .login-panel {
       display: flex; align-items: center; justify-content: center; padding: 40px 24px;
       background:
-        radial-gradient(circle at 85% 8%, rgba(215,164,65,.34), transparent 34%),
-        radial-gradient(circle at 8% 92%, rgba(21,122,69,.18), transparent 38%),
-        #f6f0e4;
+        radial-gradient(circle at 85% 8%, rgba(196,161,90,.18), transparent 34%),
+        radial-gradient(circle at 8% 92%, rgba(27,104,68,.16), transparent 40%),
+        linear-gradient(165deg, #f4f7f3 0%, #e5eee6 100%);
     }
     .login-card {
       width: min(400px, 100%);
@@ -44,21 +44,21 @@
     .login-mark, .brand-mark {
       width: 46px; height: 46px; border-radius: 16px;
       display: grid; place-items: center; font-weight: 750;
-      background: linear-gradient(145deg, #1f8f58, #0d4e30);
-      color: #f6dc9a;
-      box-shadow: 0 10px 18px rgba(13, 78, 48, .28);
+      background: linear-gradient(145deg, #2c7a50, #164a32);
+      color: #f4e6c4;
+      box-shadow: 0 10px 18px rgba(22, 58, 40, .18);
     }
     .login-mark { margin-bottom: 16px; }
-    .login-card h1 { margin: 0 0 22px; font-size: 28px; font-weight: 700; letter-spacing: 0.03em; }
+    .login-card h1 { margin: 0 0 22px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.35; }
     label { display: block; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
     input, select { width: 100%; margin-top: 6px; padding: 11px 12px; border: 1px solid #e4d5be; border-radius: 12px; background: #fff; color: var(--ink); }
-    input:focus, select:focus { outline: 2px solid rgba(215,164,65,.35); border-color: #c8922e; }
+    input:focus, select:focus { outline: 2px solid rgba(27,104,68,.22); border-color: #1b6844; }
     .primary {
-      width: 100%; margin-top: 6px; color: #fff; border: 0; border-radius: 12px; padding: 12px 16px;
-      background: linear-gradient(180deg, #1e9658, #0f6b3d);
-      box-shadow: 0 10px 18px rgba(15, 107, 61, .24);
+      width: 100%; margin-top: 6px; color: #f7f4ec; border: 0; border-radius: 12px; padding: 12px 16px;
+      background: linear-gradient(180deg, #2f7d52, #1b5c3b);
+      box-shadow: 0 8px 16px rgba(36, 48, 38, .12);
     }
-    .primary:hover { background: linear-gradient(180deg, #187d49, #0c5832); }
+    .primary:hover { background: linear-gradient(180deg, #286b47, #164c31); }
     .error { color: #a33b2b; min-height: 1.2em; font-size: 13px; }
 
     .app { height: 100%; display: grid; grid-template-columns: 228px 1fr; overflow: hidden; }
@@ -167,8 +167,8 @@
     </div>
     <div class="login-panel">
       <form id="login-form" class="login-card">
-        <div class="login-mark">告</div>
-        <h1>公告统计平台</h1>
+        <div class="login-mark">壹</div>
+        <h1>壹采科技数据服务平台</h1>
         <label>手机号<input name="phone" autocomplete="username" inputmode="tel" required /></label>
         <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
         <p class="error" id="login-error"></p>
@@ -179,7 +179,7 @@
 
   <section id="app" class="app" hidden>
     <aside class="side">
-      <div class="brand"><span class="brand-mark">告</span><span>公告统计</span></div>
+      <div class="brand"><span class="brand-mark">壹</span><span>壹采科技</span></div>
       <nav class="nav" id="nav"></nav>
     </aside>
     <div class="workspace">

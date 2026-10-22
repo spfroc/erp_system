@@ -116,7 +116,6 @@ export function Notices({
 }: {
   onNotice: (notice: { type: "success" | "error"; message: string }) => void;
 }) {
-  const [search, setSearch] = useState("");
   const [projectCode, setProjectCode] = useState("");
   const [projectName, setProjectName] = useState("");
   const [buyerName, setBuyerName] = useState("");
@@ -143,7 +142,6 @@ export function Notices({
         page: String(page),
         pageSize: String(pageSize),
       });
-      if (search.trim()) params.set("search", search.trim());
       if (projectCode.trim()) params.set("projectCode", projectCode.trim());
       if (projectName.trim()) params.set("projectName", projectName.trim());
       if (buyerName.trim()) params.set("buyerName", buyerName.trim());
@@ -185,7 +183,6 @@ export function Notices({
     progress,
     projectCode,
     projectName,
-    search,
     siteId,
     supplierName,
   ]);
@@ -242,14 +239,6 @@ export function Notices({
           ))}
         </div>
         <div className="orders-toolbar">
-          <input
-            value={search}
-            onChange={(event) => {
-              setPage(1);
-              setSearch(event.target.value);
-            }}
-            placeholder="搜索标题、项目编号、采购单位、供应商"
-          />
           <select
             className="toolbar-select"
             value={siteId}
