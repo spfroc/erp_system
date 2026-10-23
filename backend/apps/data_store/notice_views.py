@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any
@@ -404,41 +405,33 @@ def _related_kind_sort_key(kind: str | None) -> tuple[int, str]:
         return (len(_RELATED_KIND_ORDER), label)
 
 
+_PROJECT_CODE_SUFFIX_RE = re.compile(r"[，,]\d+$")
+
+
+def _normalize_project_code(code: str | None) -> str:
+    """去掉成交公告常见的「，1」包号后缀，让同一项目能对上。"""
+    text = (code or "").strip().replace("－", "-").replace("，", ",")
+    text = _PROJECT_CODE_SUFFIX_RE.sub("", text)
+    return text.strip(" ,，")
+
+
+def _auction_no(site_id: str | None, notice_key: str | None) -> str:
+    """京东公告键是「项目编号:类型」，项目编号才是同一采购的关联键。"""
+    if site_id not in JD_SITE_IDS:
+        return ""
+    head, sep, tail = (notice_key or "").strip().partition(":")
+    if sep and head and tail.isdigit():
+        return head
+    return ""
+
+
 def _project_code_of(parsed: NoticeParsed | None) -> str:
     if not parsed:
         return ""
-    return (parsed.project_code or "").strip()
+    return _normalize_project_code(parsed.project_code)
 
 
-def _load_related_by_project_code(
-    *,
-    project_code: str,
-    site_id: str | None,
-    exclude_raw_id: int | None = None,
-    now=None,
-) -> list[dict]:
-    """同一项目编号下的其他公告（竞价/成交/失败/终止等）。"""
-    code = (project_code or "").strip()
-    if not code:
-        return []
-    parsed_qs = NoticeParsed.objects.filter(project_code=code)
-    if site_id:
-        parsed_qs = parsed_qs.filter(site_id=site_id)
-    raw_ids = list(parsed_qs.values_list("notice_raw_id", flat=True)[:80])
-    if exclude_raw_id is not None:
-        raw_ids = [rid for rid in raw_ids if rid != exclude_raw_id]
-    if not raw_ids:
-        return []
-    raw_map = {row.id: row for row in NoticeRaw.objects.filter(id__in=raw_ids)}
-    parsed_map = {
-        item.notice_raw_id: item
-        for item in NoticeParsed.objects.filter(notice_raw_id__in=raw_ids)
-    }
-    items = [
-        _serialize_list_item(raw_map[rid], parsed_map.get(rid), now=now)
-        for rid in raw_ids
-        if rid in raw_map
-    ]
+def _sort_related_items(items: list[dict]) -> list[dict]:
     items.sort(
         key=lambda item: (
             _related_kind_sort_key(item.get("noticeKind")),
@@ -449,16 +442,55 @@ def _load_related_by_project_code(
     return items
 
 
+def _related_from_raws(raws: list[NoticeRaw], *, exclude_raw_id: int | None, now=None) -> list[dict]:
+    raws = [row for row in raws if exclude_raw_id is None or row.id != exclude_raw_id]
+    if not raws:
+        return []
+    parsed_map = {
+        item.notice_raw_id: item
+        for item in NoticeParsed.objects.filter(notice_raw_id__in=[row.id for row in raws])
+    }
+    return _sort_related_items(
+        [_serialize_list_item(row, parsed_map.get(row.id), now=now) for row in raws]
+    )
+
+
+def _load_related_notices(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) -> list[dict]:
+    """同一项目下的其他公告。京东按竞价单号，其余站点按规范化项目编号。"""
+    auction = _auction_no(raw.site_id, raw.notice_key)
+    if auction:
+        siblings = list(
+            NoticeRaw.objects.filter(site_id=raw.site_id, notice_key__startswith=f"{auction}:").exclude(id=raw.id)[:80]
+        )
+        return _related_from_raws(siblings, exclude_raw_id=None, now=now)
+
+    code = _project_code_of(parsed)
+    if not code:
+        return []
+    raw_ids = list(
+        NoticeParsed.objects.filter(site_id=raw.site_id)
+        .filter(Q(project_code=code) | Q(project_code__startswith=code + "，") | Q(project_code__startswith=code + ","))
+        .exclude(notice_raw_id=raw.id)
+        .values_list("notice_raw_id", flat=True)[:80]
+    )
+    if not raw_ids:
+        return []
+    return _related_from_raws(list(NoticeRaw.objects.filter(id__in=raw_ids)), exclude_raw_id=None, now=now)
+
+
 def _sibling_kinds_by_project(
     *,
     project_codes: list[str],
     site_ids: list[str] | None = None,
 ) -> dict[tuple[str, str], list[str]]:
     """(site_id, project_code) -> 去重后的公告种类列表（含当前条）。"""
-    codes = sorted({(c or "").strip() for c in project_codes if (c or "").strip()})
+    codes = sorted({_normalize_project_code(c) for c in project_codes if _normalize_project_code(c)})
     if not codes:
         return {}
-    qs = NoticeParsed.objects.filter(project_code__in=codes).exclude(project_code="")
+    code_query = Q()
+    for code in codes:
+        code_query |= Q(project_code=code) | Q(project_code__startswith=code + "，") | Q(project_code__startswith=code + ",")
+    qs = NoticeParsed.objects.filter(code_query)
     if site_ids:
         qs = qs.filter(site_id__in=site_ids)
     raw_ids = list(qs.values_list("notice_raw_id", flat=True)[:4000])
@@ -488,14 +520,55 @@ def _sibling_kinds_by_project(
     }
 
 
+def _sibling_kinds_by_auction(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], list[str]]:
+    """(site_id, auction_no) -> 该竞价单下的公告种类。"""
+    unique = sorted({(site, auction) for site, auction in pairs if site and auction})
+    if not unique:
+        return {}
+    query = Q()
+    for site, auction in unique:
+        query |= Q(site_id=site, notice_key__startswith=f"{auction}:")
+    raw_rows = list(NoticeRaw.objects.filter(query).only("id", "site_id", "notice_key", "notice_type", "title")[:400])
+    parsed_map = {
+        item.notice_raw_id: item
+        for item in NoticeParsed.objects.filter(notice_raw_id__in=[row.id for row in raw_rows])
+    }
+    buckets: dict[tuple[str, str], set[str]] = {}
+    for raw in raw_rows:
+        auction = _auction_no(raw.site_id, raw.notice_key)
+        if not auction:
+            continue
+        kind = _resolve_kind(raw, parsed_map.get(raw.id))
+        if not kind:
+            continue
+        buckets.setdefault((raw.site_id or "", auction), set()).add(kind)
+    return {key: sorted(kinds, key=_related_kind_sort_key) for key, kinds in buckets.items()}
+
+
 def _attach_sibling_kinds(items: list[dict]) -> list[dict]:
-    codes = [str(item.get("projectCode") or "").strip() for item in items]
-    site_ids = sorted({str(item.get("siteId") or "") for item in items if item.get("siteId")})
-    sibling_map = _sibling_kinds_by_project(project_codes=codes, site_ids=site_ids or None)
+    auctions: list[tuple[str, str]] = []
+    codes: list[str] = []
+    code_sites: set[str] = set()
     for item in items:
-        code = str(item.get("projectCode") or "").strip()
         site = str(item.get("siteId") or "")
-        kinds = sibling_map.get((site, code), [])
+        auction = _auction_no(site, str(item.get("noticeKey") or ""))
+        if auction:
+            auctions.append((site, auction))
+            continue
+        code = _normalize_project_code(str(item.get("projectCode") or ""))
+        if code:
+            codes.append(code)
+            if site:
+                code_sites.add(site)
+    auction_map = _sibling_kinds_by_auction(auctions)
+    code_map = _sibling_kinds_by_project(project_codes=codes, site_ids=sorted(code_sites) or None)
+    for item in items:
+        site = str(item.get("siteId") or "")
+        auction = _auction_no(site, str(item.get("noticeKey") or ""))
+        if auction:
+            kinds = auction_map.get((site, auction), [])
+        else:
+            kinds = code_map.get((site, _normalize_project_code(str(item.get("projectCode") or ""))), [])
         current = (item.get("noticeKind") or "").strip()
         others = [k for k in kinds if k != current]
         item["siblingKinds"] = others
@@ -505,11 +578,7 @@ def _attach_sibling_kinds(items: list[dict]) -> list[dict]:
 
 def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[NoticeGoods]) -> dict:
     base = _serialize_list_item(raw, parsed)
-    related = _load_related_by_project_code(
-        project_code=_project_code_of(parsed),
-        site_id=raw.site_id,
-        exclude_raw_id=raw.id,
-    )
+    related = _load_related_notices(raw, parsed)
     sibling_kinds = sorted(
         {
             k
