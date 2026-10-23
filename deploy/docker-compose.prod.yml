@@ -36,7 +36,8 @@ services:
     container_name: yzc-erp-backend-prod
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile - --error-logfile -
     env_file:
-      - ../.env.prod
+      - path: ../.env.prod
+        format: raw
     environment:
       <<: *default-tz
     restart: unless-stopped
@@ -72,7 +73,8 @@ services:
     # 宿主机网络：才能访问内网 SOCKS（192.168.0.19），绕过公网对山东商城的封锁
     network_mode: host
     env_file:
-      - ../.env.prod
+      - path: ../.env.prod
+        format: raw
     environment:
       <<: *default-tz
       NOTICE_HTTP_PROXY: socks5h://192.168.0.19:19081
@@ -91,7 +93,8 @@ services:
     working_dir: /app
     command: node server.mjs
     env_file:
-      - ../.env.official
+      - path: ../.env.official
+        format: raw
     environment:
       <<: *default-tz
     restart: unless-stopped
