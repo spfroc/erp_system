@@ -1703,6 +1703,12 @@ nav button:hover {
   min-width: 0;
 }
 
+.panel-title-buttons .notice-title-search {
+  width: min(360px, 100%);
+  min-width: min(240px, 100%);
+  margin-bottom: 0;
+}
+
 .notice-field-filters .orders-filter-field {
   flex: 1 1 180px;
 }

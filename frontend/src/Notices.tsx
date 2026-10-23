@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FileText, RefreshCw, X } from "lucide-react";
 import { backendApiUrl } from "./apiConfig";
 import { AuthExpiredError } from "./db";
-import { CopyableLine } from "./listUi";
+import { CopyableLine, SearchField } from "./listUi";
 
 export type NoticeListItem = {
   id: number;
@@ -299,10 +299,21 @@ export function Notices({
             <h2>公告管理</h2>
             <p>展示抓取并解析后的政府采购公告，可按项目编号、项目名称、采购单位、供应商和商品名称筛选。</p>
           </div>
-          <button className="ghost" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} />
-            刷新
-          </button>
+          <div className="panel-title-buttons">
+            <SearchField
+              value={search}
+              onChange={(value) => {
+                setPage(1);
+                setSearch(value);
+              }}
+              placeholder="搜索标题、项目编号、采购单位、供应商"
+              className="notice-title-search"
+            />
+            <button className="ghost" onClick={() => void load()} disabled={loading}>
+              <RefreshCw size={16} />
+              刷新
+            </button>
+          </div>
         </div>
         <div className="segmented">
           {[
@@ -324,14 +335,6 @@ export function Notices({
           ))}
         </div>
         <div className="orders-toolbar">
-          <input
-            value={search}
-            onChange={(event) => {
-              setPage(1);
-              setSearch(event.target.value);
-            }}
-            placeholder="搜索标题、项目编号、采购单位、供应商"
-          />
           <select
             className="toolbar-select"
             value={siteId}
