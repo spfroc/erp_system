@@ -12,6 +12,13 @@ from typing import Any, Dict, List, Optional
 from bs4 import BeautifulSoup
 
 from pipeline.extractors.base import EXTRACT_SCHEMA
+from utils import (
+    END_TIME_KEYS,
+    START_TIME_KEYS,
+    extract_time_window,
+    normalize_region_name,
+    pick_time_value,
+)
 
 
 def _remove_all_letters(text: str) -> str:
@@ -83,6 +90,266 @@ def _qty(value: Any) -> Optional[float]:
         return float(s)
     except ValueError:
         return None
+
+
+_FW_DIGIT_TRANS = str.maketrans(
+    {
+        "０": "0",
+        "１": "1",
+        "２": "2",
+        "３": "3",
+        "４": "4",
+        "５": "5",
+        "６": "6",
+        "７": "7",
+        "８": "8",
+        "９": "9",
+        "－": "-",
+        "—": "-",
+        "–": "-",
+        "　": " ",
+        "（": "(",
+        "）": ")",
+    }
+)
+# 手机优先；固话次之。允许中间空格：150 6637 5463
+_MOBILE_RE = re.compile(r"(?:\+?86[-\s]*)?(1[3-9](?:[\s-]?\d){9})")
+_LANDLINE_RE = re.compile(r"(0\d{2,3}[-\s]?\d{7,8}|\(\d{3,4}\)\s*\d{7,8})")
+_PHONE_RE = re.compile(
+    r"(?:\+?86[-\s]*)?(1[3-9](?:[\s-]?\d){9})|(0\d{2,3}[-\s]?\d{7,8}|\(\d{3,4}\)\s*\d{7,8})"
+)
+_CONTACT_NAME_RE = re.compile(
+    r"(?:项目|采购人|采购单位)?联系人\s*[:：]\s*([^\n\r，,；;。/｜|<>{}]{1,20})"
+)
+_CONTACT_PHONE_LABEL_RE = re.compile(
+    r"(?:项目|采购人|采购单位)?(?:联系方式|联系电话|联系号码|电话|手机号?|Tel|TEL|手机)"
+)
+# 标签与号码可跨空白/换行
+_CONTACT_PHONE_NEAR_RE = re.compile(
+    r"(?:项目|采购人|采购单位)?(?:联系方式|联系电话|联系号码|电话|手机号?|Tel|TEL|手机)"
+    r"\s*[:：]?\s*"
+    r"(?:\n|\r|<br\s*/?>|\s)*"
+    r"((?:\+?86[-\s]*)?1[3-9](?:[\s-]?\d){9}|0\d{2,3}[-\s]?\d{7,8}|\(\d{3,4}\)\s*\d{7,8}|[0-9\-\s]{7,20})",
+    re.I,
+)
+_COMBINED_CONTACT_RE = re.compile(
+    r"(?:项目|采购人)?联系人\s*[:：]\s*([^\n\r，,；;：:<>{}]{1,16}?)\s*"
+    r"(?:联系方式|联系电话|电话|手机)\s*[:：]?\s*"
+    r"((?:\+?86[-\s]*)?1[3-9](?:[\s-]?\d){9}|0\d{2,3}[-\s]?\d{7,8}|[0-9\-\s]{7,20})"
+)
+_PHONE_LABEL_ONLY_RE = re.compile(
+    r"^(?:项目|采购人|采购单位)?(?:联系方式|联系电话|联系号码|电话|手机号?)\s*[:：]?\s*$",
+    re.I,
+)
+# 「四、项目联系方式」这类章节标题，不能当联系人或电话标签行抽姓名
+_SECTION_HEADER_RE = re.compile(
+    r"^[（(]?[一二三四五六七八九十百千零\d]+[、.．)）]"
+    r"|^(?:项目|采购人|采购单位)?联系方式\s*$"
+)
+_SUPPLIER_CONTACT_HINT = ("供应商联系", "成交供应商联系", "中标供应商联系", "报价供应商")
+_BAD_NAME_TOKENS = frozenset(
+    {"联系", "方式", "电话", "手机", "号码", "项目", "采购人", "采购单位", "供应商", "联系人"}
+)
+
+
+def _is_supplier_contact_line(text: str) -> bool:
+    t = text or ""
+    return any(h in t for h in _SUPPLIER_CONTACT_HINT) or (
+        "供应商" in t and ("联系人" in t or "联系方式" in t or "电话" in t or "手机" in t)
+    )
+
+
+def _is_section_header_line(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    # 「四、…」「（三）…」或纯「项目联系方式」章节标题
+    if _SECTION_HEADER_RE.match(t):
+        return True
+    return bool(re.fullmatch(r".{0,8}项目联系方式\s*", t))
+
+
+def _normalize_phone(raw: str | None) -> Optional[str]:
+    if not raw:
+        return None
+    text = str(raw).translate(_FW_DIGIT_TRANS)
+    text = text.replace(" ", "").replace("　", "")
+    text = re.sub(r"^\+?86", "", text)
+    # 优先完整手机号
+    m = re.search(r"(1[3-9]\d{9})", text)
+    if m:
+        return m.group(1)
+    m = re.search(r"(0\d{2,3}-?\d{7,8})", text)
+    if m:
+        return m.group(1)
+    digits = re.sub(r"\D", "", text)
+    if re.fullmatch(r"1[3-9]\d{9}", digits or ""):
+        return digits
+    if 7 <= len(digits or "") <= 12 and digits.startswith("0"):
+        return digits
+    return None
+
+
+def _find_phone_in(text: str) -> Optional[str]:
+    blob = (text or "").translate(_FW_DIGIT_TRANS)
+    m = _MOBILE_RE.search(blob)
+    if m:
+        return _normalize_phone(m.group(1))
+    m = _LANDLINE_RE.search(blob)
+    if m:
+        return _normalize_phone(m.group(1))
+    return None
+
+
+def _clean_contact_name(raw: str | None) -> Optional[str]:
+    if not raw:
+        return None
+    name = str(raw).translate(_FW_DIGIT_TRANS).strip()
+    name = re.sub(
+        r"(?:项目|采购人|采购单位)?(?:联系人|联系方式|联系电话|联系号码|电话|手机号?|Tel|TEL)\s*[:：]?",
+        "",
+        name,
+        flags=re.I,
+    )
+    name = re.sub(r"<[^>]*>", "", name)
+    name = re.sub(r"[：:\s]+$", "", name).strip(" ，,；;|/｜<>")
+    name = _PHONE_RE.sub("", name).strip(" ，,；;|/｜<>")
+    if not name or len(name) > 20:
+        return None
+    if re.fullmatch(r"[\d\-\s]+", name):
+        return None
+    if "、" in name or "。" in name or "<" in name or ">" in name:
+        return None
+    if _SECTION_HEADER_RE.match(name):
+        return None
+    if name in _BAD_NAME_TOKENS or all(ch in "联系方式电话手机号码项目" for ch in name):
+        return None
+    return name
+
+
+def _extract_buyer_contact_from_text(blob: str) -> tuple[Optional[str], Optional[str]]:
+    """从正文抽项目联系人/电话，避开供应商联系信息。
+
+    兼容：
+    - 同行「联系人：张三 联系方式：138…」
+    - 标签与号码分行「联系方式：\\n150…」/「电话：0631-7567118」
+    - 「四、项目联系方式」章节标题下的分行联系人
+    - 全角数字、手机号中间空格
+    """
+    text = (blob or "").translate(_FW_DIGIT_TRANS)
+    # 统一 br
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    if not text.strip():
+        return None, None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+    lines = [ln.strip() for ln in re.split(r"[\n\r]+", text) if ln.strip()]
+    for i, line in enumerate(lines):
+        if _is_supplier_contact_line(line):
+            continue
+        # 章节标题本身不抽姓名；但其后若干行常是联系人/电话
+        if _is_section_header_line(line):
+            if not phone:
+                for nxt in lines[i + 1 : i + 5]:
+                    if _is_supplier_contact_line(nxt) or _is_section_header_line(nxt):
+                        break
+                    if not name:
+                        m = _CONTACT_NAME_RE.search(nxt)
+                        if m:
+                            name = _clean_contact_name(m.group(1)) or name
+                    found = _find_phone_in(nxt)
+                    if not found:
+                        m = _CONTACT_PHONE_NEAR_RE.search(nxt)
+                        if m:
+                            found = _normalize_phone(m.group(1))
+                    if found:
+                        phone = found
+                        break
+            continue
+        m = _COMBINED_CONTACT_RE.search(line)
+        if m:
+            name = _clean_contact_name(m.group(1)) or name
+            phone = phone or _normalize_phone(m.group(2))
+            continue
+        # 显式「联系人：」优先，可覆盖误抽姓名
+        m = _CONTACT_NAME_RE.search(line)
+        if m and "供应商" not in line:
+            cleaned = _clean_contact_name(m.group(1))
+            if cleaned:
+                name = cleaned
+        if not phone:
+            m = _CONTACT_PHONE_NEAR_RE.search(line)
+            if m and "供应商" not in line:
+                phone = _normalize_phone(m.group(1))
+        # 标签独占一行，号码在后续 1~3 行
+        if not phone and _PHONE_LABEL_ONLY_RE.match(line) and "供应商" not in line:
+            for nxt in lines[i + 1 : i + 4]:
+                if _is_supplier_contact_line(nxt) or _is_section_header_line(nxt):
+                    break
+                found = _find_phone_in(nxt)
+                if found:
+                    phone = found
+                    if not name:
+                        maybe = _PHONE_RE.sub("", nxt).strip(" ：:，,；;")
+                        name = _clean_contact_name(maybe) or name
+                    break
+        # 「联系方式：张三 150xxxx」——跳过章节标题行
+        if (
+            _CONTACT_PHONE_LABEL_RE.search(line)
+            and (not name or not phone)
+            and "供应商" not in line
+            and not _is_section_header_line(line)
+        ):
+            found = _find_phone_in(line)
+            if found and not phone:
+                phone = found
+            if not name:
+                maybe = re.sub(
+                    r"(?:项目|采购人|采购单位)?(?:联系方式|联系电话|联系号码|电话|手机号?|Tel)\s*[:：]?",
+                    "",
+                    line,
+                    flags=re.I,
+                )
+                maybe = _PHONE_RE.sub("", maybe).strip(" ，,；;")
+                name = _clean_contact_name(maybe) or name
+
+    # 全文：标签后允许跨行空白再跟号码
+    if not name or not phone:
+        safe = text
+        for bad in _SUPPLIER_CONTACT_HINT:
+            safe = re.sub(rf".{{0,40}}{re.escape(bad)}.{{0,120}}", " ", safe)
+        if not name:
+            m = _CONTACT_NAME_RE.search(safe)
+            if m:
+                name = _clean_contact_name(m.group(1))
+        if not phone:
+            m = _CONTACT_PHONE_NEAR_RE.search(safe) or _COMBINED_CONTACT_RE.search(safe)
+            if m:
+                # COMBINED: g1 name g2 phone; NEAR: g1 phone
+                if m.re is _COMBINED_CONTACT_RE:
+                    phone = _normalize_phone(m.group(2))
+                    name = name or _clean_contact_name(m.group(1))
+                else:
+                    phone = _normalize_phone(m.group(1))
+        # 联系人附近的手机/固话
+        if not phone:
+            m = re.search(
+                r"(?:项目|采购人)?联系人\s*[:：]\s*[^\n]{0,30}?"
+                r"((?:\+?86[-\s]*)?1[3-9](?:[\s-]?\d){9}|0\d{2,3}[-\s]?\d{7,8})",
+                safe,
+            )
+            if m:
+                phone = _normalize_phone(m.group(1))
+        if not phone:
+            m = re.search(
+                r"(?:电话|手机|联系电话)\s*[:：]\s*"
+                r"((?:\+?86[-\s]*)?1[3-9](?:[\s-]?\d){9}|0\d{2,3}[-\s]?\d{7,8})",
+                safe,
+            )
+            if m:
+                phone = _normalize_phone(m.group(1))
+    return name, phone
 
 
 def _cell_money(td_text: str) -> Optional[float]:
@@ -258,18 +525,59 @@ def extract_sd_mall_html(
             m = re.search(r"预算金额\s*[:：]?\s*([0-9,.]+)", p_text)
             if m:
                 out["budget_amount"] = _money(m.group(1))
-        if "联系人" in p_text and "联系方式" not in p_text:
-            out["buyer_contact_name"] = _remove_ignore_character(p_text) or None
-        if "联系方式" in p_text:
-            phone = _remove_ignore_character(p_text)
-            # 「田野 15066375463」或纯电话
-            m = re.search(r"(1[3-9]\d{9}|[0-9\-]{7,20})", p_text)
-            if m:
-                out["buyer_phone"] = m.group(1)
-            if phone and not out.get("buyer_contact_name"):
-                name = re.sub(r"(1[3-9]\d{9}|[0-9\-]{7,20})", "", phone).strip()
-                if name:
-                    out["buyer_contact_name"] = name
+        # 段落内「报价时间：A至B」或开始/结束时间
+        if any(k in p_text for k in ("报价时间", "竞价时间", "开始时间", "结束时间", "截止时间")):
+            p_start, p_end = extract_time_window(p_text)
+            if p_start and not out.get("start_time"):
+                out["start_time"] = p_start
+            if p_end and not out.get("end_time"):
+                out["end_time"] = p_end
+
+    # 项目联系人/电话：优先整页文本（保留换行，兼容「联系方式：」与号码分行）
+    contact_blob = "\n".join(
+        part
+        for part in (
+            text,
+            soup.get_text("\n", strip=True),
+            html,
+        )
+        if part
+    )
+    c_name, c_phone = _extract_buyer_contact_from_text(contact_blob)
+    if c_name:
+        out["buyer_contact_name"] = c_name
+    if c_phone:
+        out["buyer_phone"] = c_phone
+    # JSON 兜底（字段名因接口版本不一）
+    if not out.get("buyer_contact_name"):
+        out["buyer_contact_name"] = (
+            detail.get("contactName")
+            or detail.get("linkMan")
+            or detail.get("linkman")
+            or detail.get("buyerContactName")
+            or detail.get("projectContactName")
+            or list_item.get("contactName")
+            or list_item.get("linkMan")
+            or list_item.get("linkman")
+        )
+    if not out.get("buyer_phone"):
+        raw_phone = (
+            detail.get("contactPhone")
+            or detail.get("linkPhone")
+            or detail.get("linkTel")
+            or detail.get("buyerPhone")
+            or detail.get("mobile")
+            or detail.get("tel")
+            or detail.get("phone")
+            or detail.get("projectContactPhone")
+            or list_item.get("contactPhone")
+            or list_item.get("linkPhone")
+            or list_item.get("linkTel")
+            or list_item.get("mobile")
+            or list_item.get("tel")
+            or list_item.get("phone")
+        )
+        out["buyer_phone"] = _normalize_phone(raw_phone) if raw_phone else None
 
     goods, quotes = _parse_contract_tables(soup)
     # 去掉「未报价供应商」等空行误入的商品
@@ -305,11 +613,23 @@ def extract_sd_mall_html(
         if amounts:
             out["deal_amount"] = round(sum(float(a) for a in amounts), 2)
 
-    # 详情/列表结构化补洞
+    # 详情/列表结构化补洞；区域统一为地级市短名
     if not out.get("region_name"):
         out["region_name"] = detail.get("regionName") or list_item.get("regionName")
+    out["region_name"] = normalize_region_name(
+        "sd-ggzyjyzx", out.get("region_name")
+    )
+    # 报价开始/结束：JSON 字段 + 全文「报价时间：A至B」
+    if not out.get("start_time"):
+        out["start_time"] = pick_time_value(detail, list_item, keys=START_TIME_KEYS)
     if not out.get("end_time"):
-        out["end_time"] = detail.get("endTime") or list_item.get("endTime")
+        out["end_time"] = pick_time_value(detail, list_item, keys=END_TIME_KEYS)
+    if not out.get("start_time") or not out.get("end_time"):
+        t_start, t_end = extract_time_window(text, html)
+        if t_start and not out.get("start_time"):
+            out["start_time"] = t_start
+        if t_end and not out.get("end_time"):
+            out["end_time"] = t_end
     if not out.get("publish_time"):
         out["publish_time"] = (
             detail.get("publishTime")

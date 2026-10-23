@@ -307,10 +307,64 @@ def _apply_table_comments() -> None:
                 continue
 
 
+# 列表/筛选加速索引：(表名, 索引名, 列定义)
+LIST_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("notice_raw", "idx_raw_site_id", "site_id, id"),
+    ("notice_raw", "idx_raw_site_notice_type", "site_id, notice_type"),
+    ("notice_raw", "idx_raw_region", "region_name"),
+    ("notice_raw", "idx_raw_parse_site", "parse_status, site_id, id"),
+    ("notice_parsed", "idx_parsed_site_kind", "site_id, notice_kind"),
+    ("notice_parsed", "idx_parsed_region", "region_name"),
+    ("notice_parsed", "idx_parsed_project_name", "project_name(191)"),
+    ("notice_parsed", "idx_parsed_end_time", "end_time"),
+    ("notice_parsed", "idx_parsed_start_time", "start_time"),
+    ("notice_parsed", "idx_parsed_site_project", "site_id, project_code"),
+)
+
+
+def ensure_list_indexes(*, dry_run: bool = False) -> list[str]:
+    """为公告列表查询补索引；已存在则跳过。返回本次新建的索引名。"""
+    created: list[str] = []
+    with engine.begin() as conn:
+        existing = {
+            (row[0], row[1])
+            for row in conn.execute(
+                text(
+                    "SELECT TABLE_NAME, INDEX_NAME FROM information_schema.STATISTICS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed')"
+                )
+            )
+        }
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT TABLE_NAME FROM information_schema.TABLES "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed')"
+                )
+            )
+        }
+        for table, index_name, cols in LIST_INDEXES:
+            if table not in tables:
+                continue
+            if (table, index_name) in existing:
+                continue
+            label = f"{table}.{index_name}"
+            if dry_run:
+                created.append(label)
+                continue
+            conn.execute(text(f"ALTER TABLE `{table}` ADD INDEX `{index_name}` ({cols})"))
+            created.append(label)
+    return created
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_parsed_columns()
     _apply_table_comments()
+    ensure_list_indexes()
 
 
 def get_session() -> Session:

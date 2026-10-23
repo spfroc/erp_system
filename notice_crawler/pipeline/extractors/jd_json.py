@@ -1,7 +1,8 @@
 """京东泉易采 / 青慧采结构化解析（对齐 xiaoyihuicai JdBusinessOpportunityService）。
 
-字段来自详情 JSON，不走模型：
-- auctionNoticeBaseInfo：预算、起止时间、采购单位
+字段来自详情 JSON：
+- auctionNoticeBaseInfo：预算、起止时间
+- 采购单位：项目名称规则优先，失败再本地模型短抽（只看名称）
 - skuGroupList：商品
 - auctionNoticeDealResult / auctionNoticeDealDetailList：成交供应商与成交价
 - auctionAddressGoodsList：询比收货地址与商品
@@ -13,6 +14,12 @@ import copy
 from typing import Any, Dict, List, Optional
 
 from pipeline.extractors.base import EXTRACT_SCHEMA
+from pipeline.extractors.jd_buyer import resolve_jd_buyer_name
+from utils import (
+    END_TIME_KEYS,
+    START_TIME_KEYS,
+    pick_time_value,
+)
 
 # 与京东公告页 tab 一致（竞价页叫「竞价公告」，询比页叫「询比公告」）
 NOTICE_KIND = {
@@ -157,16 +164,29 @@ def extract_jd_json(
         or list_item.get("auctionNo")
         or base.get("auctionNo")
     )
-    out["buyer_name"] = (
+    # 泉E采/青慧采：采购单位 = 项目名称规则优先，失败再本地模型（只看名称）
+    api_buyer = (
         base.get("purchaseUnitName")
         or detail.get("purchaseUnitName")
         or list_item.get("purchaseUnitName")
     )
+    buyer, buyer_source = resolve_jd_buyer_name(
+        out.get("project_name") or out.get("notice_title"),
+        api_buyer,
+        use_local_model=True,
+    )
+    out["buyer_name"] = buyer
+    if buyer_source:
+        out["extra"]["buyer_source"] = buyer_source
     out["budget_amount"] = _num(
         base.get("budgetPrice") or detail.get("budgetPrice") or list_item.get("budgetPrice")
     )
-    out["start_time"] = _ms(base.get("startTime") or detail.get("startTime") or list_item.get("startTime"))
-    out["end_time"] = _ms(base.get("endTime") or detail.get("endTime") or list_item.get("endTime"))
+    out["start_time"] = _ms(
+        pick_time_value(base, demand, detail, list_item, keys=START_TIME_KEYS)
+    )
+    out["end_time"] = _ms(
+        pick_time_value(base, demand, detail, list_item, keys=END_TIME_KEYS)
+    )
     out["publish_time"] = _ms(
         detail.get("createTime") or list_item.get("createTime") or detail.get("publishTime")
     )

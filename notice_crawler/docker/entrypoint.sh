@@ -30,7 +30,12 @@ PAGE_SIZE="${CRAWL_PAGE_SIZE:-20}"
 LOOKBACK_DAYS="${CRAWL_LOOKBACK_DAYS:-2}"
 ATT_LIMIT="${CRAWL_ATT_LIMIT:-100}"
 
+echo "=== $(date -Is) init-db ==="
 python cli.py init-db
+
+echo "=== $(date -Is) migrate-list-indexes ==="
+python cli.py migrate-list-indexes
+
 python cli.py ping >/dev/null
 
 while true; do

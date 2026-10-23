@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from db import init_db, ping
+from db import ensure_list_indexes, init_db, ping
 from pipeline.attachments import download_pending, parse_attachments
 from pipeline.crawl import crawl_jd, crawl_sd_mall
 from clients.qlyc_login import ensure_access_token
@@ -16,6 +16,11 @@ def main() -> None:
 
     sub.add_parser("init-db", help="创建表结构")
     sub.add_parser("ping", help="测试数据库连接")
+    p_idx = sub.add_parser(
+        "migrate-list-indexes",
+        help="补齐公告列表/筛选加速索引（已存在则跳过）",
+    )
+    p_idx.add_argument("--dry-run", action="store_true", help="只打印将要新建的索引")
 
     p_crawl = sub.add_parser("crawl", help="抓取列表+详情到 notice_raw")
     p_crawl.add_argument(
@@ -66,10 +71,20 @@ def main() -> None:
 
     p_en = sub.add_parser(
         "enrich",
-        help="不跑模型：用 list/detail JSON 补结构化字段（时间/预算等）",
+        help="不跑模型：用 list/detail JSON / 正文报价时间补结构化字段",
     )
     p_en.add_argument("--limit", type=int, default=500)
     p_en.add_argument("--site", default=None)
+    p_en.add_argument(
+        "--missing-start",
+        action="store_true",
+        help="只处理报价开始时间为空的公告（优先回填）",
+    )
+    p_en.add_argument(
+        "--missing-phone",
+        action="store_true",
+        help="只处理项目联系电话为空的公告（优先回填）",
+    )
 
     p_rp = sub.add_parser(
         "reparse",
@@ -124,10 +139,20 @@ def main() -> None:
 
     if args.cmd == "init-db":
         init_db()
-        print("tables created")
+        print("tables created (columns/comments/list indexes ensured)")
         return
     if args.cmd == "ping":
         print("db ok:", ping())
+        return
+    if args.cmd == "migrate-list-indexes":
+        created = ensure_list_indexes(dry_run=args.dry_run)
+        if not created:
+            print("indexes already up to date")
+        else:
+            prefix = "would create" if args.dry_run else "created"
+            print(f"{prefix} {len(created)} indexes:")
+            for name in created:
+                print(f"  - {name}")
         return
     if args.cmd == "crawl":
         with_detail = not args.list_only
@@ -158,7 +183,12 @@ def main() -> None:
         print(f"attachment parsed: {n}")
         return
     if args.cmd == "enrich":
-        n = reenrich_parsed(limit=args.limit, site_id=args.site)
+        n = reenrich_parsed(
+            limit=args.limit,
+            site_id=args.site,
+            missing_start=args.missing_start,
+            missing_phone=args.missing_phone,
+        )
         print(f"enriched: {n}")
         return
     if args.cmd == "reparse":

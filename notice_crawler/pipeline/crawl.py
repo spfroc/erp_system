@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from db import NoticeAttachment, NoticeRaw, get_session, raw_exists, save_cursor, upsert_raw
 from pipeline.parse_llm import enrich_from_raw, extract_fields, save_parsed
-from utils import html_to_text, parse_dt
+from utils import html_to_text, normalize_region_name, parse_dt
 
 
 def _as_day(value: Optional[str]) -> Optional[date]:
@@ -130,7 +130,7 @@ def crawl_sd_mall(
                         auction_type=str(project_type),
                         notice_type=str(notice_type),
                         title=item.get("title"),
-                        region_name=item.get("regionName"),
+                        region_name=normalize_region_name(MALL_SITE, item.get("regionName")),
                         publish_time=parse_dt(item.get("publishTime") or item.get("createDate")),
                         list_json=item,
                         source_url=(
@@ -268,7 +268,7 @@ def _crawl_jd_site(
                         auction_type=str(item.get("auctionType") or auction_type),
                         notice_type=str(item_notice_type if item_notice_type is not None else notice_type),
                         title=item.get("noticeTitle") or item.get("auctionName"),
-                        region_name=None,
+                        region_name=normalize_region_name(site_id, item.get("regionName")),
                         publish_time=parse_dt(item.get("createTime")),
                         list_json=item,
                         source_url=client.notice_detail_url(

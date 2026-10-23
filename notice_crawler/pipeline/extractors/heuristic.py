@@ -489,7 +489,10 @@ class HeuristicExtractor(BaseExtractor):
             full,
             flags=re.M,
         )
-        out["start_time"] = _first(
+        from utils import extract_time_window
+
+        t_start, t_end = extract_time_window(full)
+        out["start_time"] = t_start or _first(
             [
                 r"(?:竞价|报价|报名|采购)?开始时间[:：]\s*([0-9\-/: ：]+)",
                 r"开始时间[:：]\s*([0-9\-/: ：]+)",
@@ -497,7 +500,7 @@ class HeuristicExtractor(BaseExtractor):
             full,
             flags=re.M,
         )
-        out["end_time"] = _first(
+        out["end_time"] = t_end or _first(
             [
                 r"(?:竞价|报价|报名)?截止时间[:：]\s*([0-9\-/: ：]+)",
                 r"结束时间[:：]\s*([0-9\-/: ：]+)",
