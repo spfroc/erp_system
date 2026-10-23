@@ -3493,12 +3493,7 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [orderFocus, setOrderFocus] = useState<OrderFocus>({});
   const [currentUserId, setCurrentUserId] = useState(() => window.localStorage.getItem(SESSION_USER_KEY) ?? "");
-  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({
-    projects: true,
-    orders: true,
-    customers: true,
-    official: true,
-  });
+  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({});
   const [showHelp, setShowHelp] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
@@ -3773,8 +3768,8 @@ export default function App() {
               })}
               {groups.map(({ group, items }) => {
                 const GroupIcon = resolveNavIcon(group.iconKey);
-                const isOpen = openNavGroups[group.key] !== false;
                 const groupActive = items.some((item) => item.id === view);
+                const isOpen = openNavGroups[group.key] === true;
                 return (
                   <div className="nav-group" key={group.id || group.key}>
                     <button
