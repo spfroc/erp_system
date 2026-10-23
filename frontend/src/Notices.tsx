@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FileText, RefreshCw, X } from "lucide-react";
 import { backendApiUrl } from "./apiConfig";
 import { AuthExpiredError } from "./db";
+import { CopyableLine, SearchField } from "./listUi";
 
 export type NoticeListItem = {
   id: number;
@@ -75,6 +76,7 @@ type NoticeListResponse = {
   pageSize: number;
   sites?: SiteOption[];
   noticeKinds?: string[];
+  regionNames?: string[];
   detail?: string;
 };
 
@@ -193,6 +195,7 @@ export function Notices({
   const [goodsName, setGoodsName] = useState("");
   const [siteId, setSiteId] = useState("");
   const [noticeKind, setNoticeKind] = useState("");
+  const [regionName, setRegionName] = useState("");
   const [parseStatus, setParseStatus] = useState("");
   const [progress, setProgress] = useState("");
   const [page, setPage] = useState(1);
@@ -201,6 +204,7 @@ export function Notices({
   const [items, setItems] = useState<NoticeListItem[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [noticeKinds, setNoticeKinds] = useState<string[]>([]);
+  const [regionNames, setRegionNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<NoticeDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -220,6 +224,7 @@ export function Notices({
       if (goodsName.trim()) params.set("goodsName", goodsName.trim());
       if (siteId) params.set("siteId", siteId);
       if (noticeKind) params.set("noticeKind", noticeKind);
+      if (regionName) params.set("regionName", regionName);
       if (parseStatus) params.set("parseStatus", parseStatus);
       if (progress) params.set("progress", progress);
       const data = await fetchNotices(params);
@@ -228,11 +233,18 @@ export function Notices({
       if (data.sites?.length) setSites(data.sites);
       const kinds = data.noticeKinds || [];
       setNoticeKinds(kinds);
-      // 切换站点后，当前类型若不在该站选项里则清空，避免筛空
+      const regions = data.regionNames || [];
+      setRegionNames(regions);
+      // 切换站点后，当前类型/区域若不在该站选项里则清空，避免筛空
       if (noticeKind && kinds.length > 0 && !kinds.includes(noticeKind)) {
         setNoticeKind("");
       } else if (noticeKind && kinds.length === 0) {
         setNoticeKind("");
+      }
+      if (regionName && regions.length > 0 && !regions.includes(regionName)) {
+        setRegionName("");
+      } else if (regionName && regions.length === 0) {
+        setRegionName("");
       }
       if (data.detail && data.total === 0) {
         onNotice({ type: "error", message: data.detail });
@@ -254,6 +266,7 @@ export function Notices({
     progress,
     projectCode,
     projectName,
+    regionName,
     search,
     siteId,
     supplierName,
@@ -286,10 +299,21 @@ export function Notices({
             <h2>公告管理</h2>
             <p>展示抓取并解析后的政府采购公告，可按项目编号、项目名称、采购单位、供应商和商品名称筛选。</p>
           </div>
-          <button className="ghost" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} />
-            刷新
-          </button>
+          <div className="panel-title-buttons">
+            <SearchField
+              value={search}
+              onChange={(value) => {
+                setPage(1);
+                setSearch(value);
+              }}
+              placeholder="搜索标题、项目编号、采购单位、供应商"
+              className="notice-title-search"
+            />
+            <button className="ghost" onClick={() => void load()} disabled={loading}>
+              <RefreshCw size={16} />
+              刷新
+            </button>
+          </div>
         </div>
         <div className="segmented">
           {[
@@ -311,20 +335,13 @@ export function Notices({
           ))}
         </div>
         <div className="orders-toolbar">
-          <input
-            value={search}
-            onChange={(event) => {
-              setPage(1);
-              setSearch(event.target.value);
-            }}
-            placeholder="搜索标题、项目编号、采购单位、供应商"
-          />
           <select
             className="toolbar-select"
             value={siteId}
             onChange={(event) => {
               setPage(1);
               setNoticeKind("");
+              setRegionName("");
               setSiteId(event.target.value);
             }}
           >
@@ -332,6 +349,21 @@ export function Notices({
             {sites.map((site) => (
               <option key={site.id} value={site.id}>
                 {site.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="toolbar-select"
+            value={regionName}
+            onChange={(event) => {
+              setPage(1);
+              setRegionName(event.target.value);
+            }}
+          >
+            <option value="">全部区域</option>
+            {regionNames.map((region) => (
+              <option key={region} value={region}>
+                {region}
               </option>
             ))}
           </select>
@@ -426,8 +458,8 @@ export function Notices({
         </div>
         <div className="table">
           <div className="table-row notice-table head">
-            <span>标题/编号</span>
-            <span>站点</span>
+            <span>名称/编号</span>
+            <span>站点/区域</span>
             <span>采购单位</span>
             <span>成交供应商</span>
             <span>金额</span>
@@ -442,64 +474,76 @@ export function Notices({
           {!loading && items.length === 0 && (
             <div className="empty-hint">暂无公告数据，请先运行 notice_crawler 抓取。</div>
           )}
-          {items.map((item) => (
-            <div className="table-row notice-table" key={item.id}>
-              <span>
-                <strong>{text(item.title)}</strong>
-                {item.projectCode ? (
-                  <em>
-                    <button
-                      type="button"
-                      className="copy-link notice-project-code"
-                      title="按此项目编号筛选，查看竞价/成交/失败/终止等"
-                      onClick={() => {
-                        setPage(1);
-                        setProjectCode(item.projectCode || "");
-                        setNoticeKind("");
-                      }}
+          {items.map((item) => {
+            const displayName = item.projectName || item.title || "";
+            const displayCode = item.projectCode || item.noticeKey || "";
+            return (
+              <div className="table-row notice-table" key={item.id}>
+                <span className="notice-main-cell">
+                  <CopyableLine text={displayName} label="项目名称">
+                    <strong>{text(displayName)}</strong>
+                  </CopyableLine>
+                  {displayCode ? (
+                    <CopyableLine
+                      text={displayCode}
+                      label="项目编号"
+                      className="is-secondary"
+                      onOpen={
+                        item.projectCode
+                          ? () => {
+                              setPage(1);
+                              setProjectCode(item.projectCode || "");
+                              setNoticeKind("");
+                            }
+                          : undefined
+                      }
                     >
-                      {item.projectCode}
-                    </button>
-                  </em>
-                ) : (
-                  <em>{text(item.noticeKey)}</em>
-                )}
-              </span>
-              <span>{text(item.siteLabel)}</span>
-              <span>{text(item.buyerName)}</span>
-              <span>{text(item.dealSupplier)}</span>
-              <span>
-                <strong>{money(item.dealAmount)}</strong>
-                <em>预算 {money(item.budgetAmount)}</em>
-              </span>
-              <span>
-                {text(item.noticeKind)}
-                <em>{text(item.procurementMode)}</em>
-                {(item.siblingKinds || []).length > 0 && (
-                  <em className="notice-sibling-kinds">
-                    另有 {(item.siblingKinds || []).join("、")}
-                  </em>
-                )}
-              </span>
-              <span className="notice-times">
-                <em>发布 {text(item.publishTime)}</em>
-                <em>结束 {text(item.endTime)}</em>
-                <em>采集 {text(item.crawledAt)}</em>
-              </span>
-              <span>
-                <strong className={`notice-progress notice-progress-${item.progressStatus || "unknown"}`}>
-                  {text(item.progressLabel || "未知")}
-                </strong>
-                <em>{text(item.parseStatus)}</em>
-              </span>
-              <span>
-                <button className="copy-link" onClick={() => void openDetail(item.id)} disabled={detailLoading}>
-                  <FileText size={14} />
-                  详情
-                </button>
-              </span>
-            </div>
-          ))}
+                      <em>{displayCode}</em>
+                    </CopyableLine>
+                  ) : (
+                    <em>—</em>
+                  )}
+                </span>
+                <span>
+                  {text(item.siteLabel)}
+                  <em>{text(item.regionName)}</em>
+                </span>
+                <span>{text(item.buyerName)}</span>
+                <span>{text(item.dealSupplier)}</span>
+                <span>
+                  <strong>{money(item.dealAmount)}</strong>
+                  <em>预算 {money(item.budgetAmount)}</em>
+                </span>
+                <span>
+                  {text(item.noticeKind)}
+                  <em>{text(item.procurementMode)}</em>
+                  {(item.siblingKinds || []).length > 0 && (
+                    <em className="notice-sibling-kinds">
+                      另有 {(item.siblingKinds || []).join("、")}
+                    </em>
+                  )}
+                </span>
+                <span className="notice-times">
+                  <em>发布 {text(item.publishTime)}</em>
+                  <em>开始 {text(item.startTime)}</em>
+                  <em>结束 {text(item.endTime)}</em>
+                  <em>采集 {text(item.crawledAt)}</em>
+                </span>
+                <span>
+                  <strong className={`notice-progress notice-progress-${item.progressStatus || "unknown"}`}>
+                    {text(item.progressLabel || "未知")}
+                  </strong>
+                  <em>{text(item.parseStatus)}</em>
+                </span>
+                <span>
+                  <button className="copy-link" onClick={() => void openDetail(item.id)} disabled={detailLoading}>
+                    <FileText size={14} />
+                    详情
+                  </button>
+                </span>
+              </div>
+            );
+          })}
         </div>
         <div className="pager">
           <button className="ghost" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
