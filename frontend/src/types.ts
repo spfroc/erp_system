@@ -816,6 +816,13 @@ export type PermissionKey =
   | "trademarkCertificate.manage"
   | "notice.view"
   | "notice.manage"
+  | "notice.stats.view"
+  | "notice.tag.view"
+  | "notice.tag.manage"
+  | "notice.orgType.view"
+  | "notice.orgType.manage"
+  | "notice.nature.view"
+  | "notice.nature.manage"
   | "site.view"
   | "site.manage"
   | "library.view"
@@ -829,6 +836,8 @@ export type PermissionKey =
   | "lead.manage"
   | "sensitive.view"
   | "profit.view"
+  | "dev.ops.view"
+  | "dev.ops.manage"
   | "user.manage";
 
 export interface NavCategory {

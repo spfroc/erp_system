@@ -23,6 +23,15 @@ from .views import (
     public_official_site,
     run_notice_collection,
 )
+from .dev_ops_views import (
+    dev_ops_job_detail,
+    dev_ops_job_run,
+    dev_ops_jobs,
+    dev_ops_runs,
+    dev_ops_scripts,
+)
+from .notice_dict_views import notice_dict_detail, notice_dict_list, notice_dict_options
+from .notice_tag_views import notice_result_stats, notice_tag_batch, notice_tag_detail, notice_tag_identify, notice_tag_list
 from .notice_views import notice_detail as crawled_notice_detail
 from .notice_views import notice_list as crawled_notice_list
 from .views import (
@@ -71,6 +80,19 @@ urlpatterns = [
     path("public/notices/<str:notice_id>", public_notice_detail, name="public-notice-detail-no-slash"),
     path("official-site-inquiry/", official_site_inquiry, name="official-site-inquiry"),
     path("official-site-inquiry", official_site_inquiry, name="official-site-inquiry-no-slash"),
+    path("dev-ops/scripts/", dev_ops_scripts, name="dev-ops-scripts"),
+    path("dev-ops/jobs/", dev_ops_jobs, name="dev-ops-jobs"),
+    path("dev-ops/jobs/<int:job_id>/", dev_ops_job_detail, name="dev-ops-job-detail"),
+    path("dev-ops/jobs/<int:job_id>/run/", dev_ops_job_run, name="dev-ops-job-run"),
+    path("dev-ops/runs/", dev_ops_runs, name="dev-ops-runs"),
+    path("notices/tags/", notice_tag_list, name="notice-tag-list"),
+    path("notices/tags/batch/", notice_tag_batch, name="notice-tag-batch"),
+    path("notices/tags/<int:notice_id>/", notice_tag_detail, name="notice-tag-detail"),
+    path("notices/tags/<int:notice_id>/identify/", notice_tag_identify, name="notice-tag-identify"),
+    path("notices/dict/", notice_dict_list, name="notice-dict-list"),
+    path("notices/dict/<int:item_id>/", notice_dict_detail, name="notice-dict-detail"),
+    path("notices/dict/options/", notice_dict_options, name="notice-dict-options"),
+    path("notices/stats/", notice_result_stats, name="notice-result-stats"),
     path("notices/", crawled_notice_list, name="notice-list"),
     path("notices/<int:notice_id>/", crawled_notice_detail, name="notice-detail"),
     path("notices/crawled/", crawled_notice_list, name="crawled-notice-list"),

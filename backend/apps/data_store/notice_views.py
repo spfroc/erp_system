@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timezone as dt_timezone
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any
 
@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
+from .notice_tag_models import NoticeResultTag
 from .views import _require_permission
 
 # 列表查询只取展示所需列，避免拖出 MEDIUMTEXT / 大 JSON
@@ -630,6 +631,29 @@ def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
     return q if q else Q(pk__in=[])
 
 
+def _parse_notice_kinds(*values: str) -> list[str]:
+    kinds: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for part in str(value or "").replace("，", ",").split(","):
+            kind = part.strip()
+            if kind and kind not in seen:
+                seen.add(kind)
+                kinds.append(kind)
+    return kinds
+
+
+def _raw_ids_for_kinds(notice_kinds: list[str], site_id: str) -> Q:
+    """多选公告类型：任一命中即可。空列表表示不按类型限制。"""
+    kinds = [kind for kind in notice_kinds if kind and kind != "全部"]
+    if not kinds:
+        return Q()
+    combined = Q()
+    for kind in kinds:
+        combined |= _raw_ids_for_kind(kind, site_id)
+    return combined if combined else Q(pk__in=[])
+
+
 def _notice_kind_options(site_id: str) -> list[str]:
     def build() -> list[str]:
         labels: set[str] = set()
@@ -958,6 +982,44 @@ def _attach_sibling_kinds(items: list[dict]) -> list[dict]:
     return items
 
 
+def _attach_result_tags(items: list[dict]) -> list[dict]:
+    """批量挂上结果公告采购人标签，供列表首列展示。"""
+    if not items:
+        return items
+    raw_ids = [int(item["id"]) for item in items if item.get("id") is not None]
+    if not raw_ids:
+        return items
+    try:
+        tags = {
+            tag.notice_raw_id: tag
+            for tag in NoticeResultTag.objects.select_related("buyer_profile").filter(notice_raw_id__in=raw_ids)
+        }
+    except Exception:
+        tags = {}
+    for item in items:
+        tag = tags.get(int(item["id"]))
+        profile = tag.buyer_profile if tag and tag.buyer_profile_id else None
+        item["tagDealKind"] = ((tag.deal_kind if tag else "") or "").strip()
+        if not profile:
+            item["tagOrgType"] = ""
+            item["tagNature"] = ""
+            item["tagProvince"] = ""
+            item["tagCity"] = ""
+            item["tagDistrict"] = ""
+            item["tagRegion"] = ""
+            continue
+        province = (profile.province or "").strip()
+        city = (profile.city or "").strip()
+        district = (profile.district or "").strip()
+        item["tagOrgType"] = (profile.org_type or "").strip()
+        item["tagNature"] = (profile.nature or "").strip()
+        item["tagProvince"] = province
+        item["tagCity"] = city
+        item["tagDistrict"] = district
+        item["tagRegion"] = " ".join(part for part in (province, city, district) if part)
+    return items
+
+
 def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[NoticeGoods]) -> dict:
     base = _serialize_list_item(raw, parsed)
     related = _load_related_notices(raw, parsed)
@@ -1045,6 +1107,70 @@ def _region_options(site_id: str = "") -> list[str]:
         return sorted(labels)
 
     return _cached_options(f"notice_regions:{site_id or '*'}", build)
+
+
+def _parse_filter_ymd(value: str) -> date | None:
+    text = (value or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _range_bound_strings(from_day: date | None, to_day: date | None) -> tuple[str | None, str | None]:
+    """公告时间为上海墙钟 naive DATETIME；返回 [lo, hi) 字符串，缺省端为 None。"""
+    if from_day and to_day and to_day < from_day:
+        from_day, to_day = to_day, from_day
+    lo = from_day.strftime("%Y-%m-%d 00:00:00") if from_day else None
+    hi = (to_day + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00") if to_day else None
+    return lo, hi
+
+
+def _parsed_time_range_q(field: str, lo: str | None, hi: str | None) -> Q:
+    filters: dict[str, str] = {}
+    if lo:
+        filters[f"{field}__gte"] = lo
+    if hi:
+        filters[f"{field}__lt"] = hi
+    return Q(id__in=NoticeParsed.objects.filter(**filters).values("notice_raw_id"))
+
+
+def _notice_day_filter_q(
+    *,
+    publish_from: str = "",
+    publish_to: str = "",
+    start_from: str = "",
+    start_to: str = "",
+    end_from: str = "",
+    end_to: str = "",
+) -> Q | None:
+    """发布 / 开始 / 结束各一对起止日期（yyyy-mm-dd），闭区间按自然日筛选。"""
+    q = Q()
+    applied = False
+
+    publish_lo, publish_hi = _range_bound_strings(_parse_filter_ymd(publish_from), _parse_filter_ymd(publish_to))
+    if publish_lo or publish_hi:
+        applied = True
+        raw_filters: dict[str, str] = {}
+        if publish_lo:
+            raw_filters["publish_time__gte"] = publish_lo
+        if publish_hi:
+            raw_filters["publish_time__lt"] = publish_hi
+        q &= Q(**raw_filters) | _parsed_time_range_q("publish_time", publish_lo, publish_hi)
+
+    start_lo, start_hi = _range_bound_strings(_parse_filter_ymd(start_from), _parse_filter_ymd(start_to))
+    if start_lo or start_hi:
+        applied = True
+        q &= _parsed_time_range_q("start_time", start_lo, start_hi)
+
+    end_lo, end_hi = _range_bound_strings(_parse_filter_ymd(end_from), _parse_filter_ymd(end_to))
+    if end_lo or end_hi:
+        applied = True
+        q &= _parsed_time_range_q("end_time", end_lo, end_hi)
+
+    return q if applied else None
 
 
 def _notice_field_filter_q(
@@ -1185,15 +1311,36 @@ def _load_parsed_map(raw_ids: list[int]) -> dict[int, NoticeParsed]:
     }
 
 
-def query_crawled_notices(*, page: int = 1, page_size: int = 20, search: str = "", site_id: str = "", notice_kind: str = "") -> dict:
-    """客户控制台和后台列表共用的抓取公告查询。"""
+def query_crawled_notices(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    search: str = "",
+    site_id: str = "",
+    notice_kind: str = "",
+    site_ids: list[str] | None = None,
+) -> dict:
+    """客户控制台和后台列表共用的抓取公告查询。
+
+    site_ids:
+      - None：不按站点白名单限制
+      - []：无可见站点
+      - [id, ...]：仅这些站点
+    """
     page = max(int(page or 1), 1)
     page_size = min(max(int(page_size or 20), 1), 100)
+    if site_ids is not None and not site_ids:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    if site_ids is not None and site_id and site_id not in site_ids:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
     qs = _list_raw_qs().order_by("-publish_time", "-id")
+    if site_ids is not None:
+        qs = qs.filter(site_id__in=site_ids)
     if site_id:
         qs = qs.filter(site_id=site_id)
-    if notice_kind and notice_kind != "全部":
-        qs = qs.filter(_raw_ids_for_kind(notice_kind, site_id))
+    kinds = _parse_notice_kinds(notice_kind)
+    if kinds:
+        qs = qs.filter(_raw_ids_for_kinds(kinds, site_id))
     keyword = (search or "").strip()
     if keyword:
         qs = qs.filter(
@@ -1211,8 +1358,11 @@ def query_crawled_notices(*, page: int = 1, page_size: int = 20, search: str = "
     total = qs.count()
     rows = list(qs[(page - 1) * page_size : page * page_size])
     parsed_map = _load_parsed_map([row.id for row in rows])
+    items = _attach_result_tags(
+        [_serialize_list_item(row, parsed_map.get(row.id)) for row in rows]
+    )
     return {
-        "items": [_serialize_list_item(row, parsed_map.get(row.id)) for row in rows],
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -1237,7 +1387,10 @@ def notice_list(request):
 
     site_id = (request.GET.get("siteId") or "").strip()
     parse_status = (request.GET.get("parseStatus") or "").strip()
-    notice_kind = (request.GET.get("noticeKind") or "").strip()
+    notice_kinds = _parse_notice_kinds(
+        request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "",
+        request.GET.get("noticeKind") or "",
+    )
     progress = (request.GET.get("progress") or "").strip().lower()
     search = (request.GET.get("search") or "").strip()
     project_code = (request.GET.get("projectCode") or "").strip()
@@ -1246,6 +1399,12 @@ def notice_list(request):
     supplier_name = (request.GET.get("supplierName") or "").strip()
     goods_name = (request.GET.get("goodsName") or "").strip()
     region_name = (request.GET.get("regionName") or request.GET.get("region") or "").strip()
+    publish_from = (request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip()
+    publish_to = (request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip()
+    start_from = (request.GET.get("startDateFrom") or request.GET.get("start_date_from") or "").strip()
+    start_to = (request.GET.get("startDateTo") or request.GET.get("start_date_to") or "").strip()
+    end_from = (request.GET.get("endDateFrom") or request.GET.get("end_date_from") or "").strip()
+    end_to = (request.GET.get("endDateTo") or request.GET.get("end_date_to") or "").strip()
     now = timezone.now()
 
     try:
@@ -1271,8 +1430,8 @@ def notice_list(request):
                     ).values("notice_raw_id")
                 )
             )
-        if notice_kind:
-            qs = qs.filter(_raw_ids_for_kind(notice_kind, site_id))
+        if notice_kinds:
+            qs = qs.filter(_raw_ids_for_kinds(notice_kinds, site_id))
         field_q = _notice_field_filter_q(
             project_code=project_code,
             project_name=project_name,
@@ -1282,6 +1441,16 @@ def notice_list(request):
         )
         if field_q is not None:
             qs = qs.filter(field_q)
+        day_q = _notice_day_filter_q(
+            publish_from=publish_from,
+            publish_to=publish_to,
+            start_from=start_from,
+            start_to=start_to,
+            end_from=end_from,
+            end_to=end_to,
+        )
+        if day_q is not None:
+            qs = qs.filter(day_q)
 
         progress_target = None
         if progress in {"ongoing", "in_progress", "进行中"}:
@@ -1299,8 +1468,10 @@ def notice_list(request):
         offset = (page - 1) * page_size
         page_rows = list(qs[offset : offset + page_size])
         parsed_map = _load_parsed_map([r.id for r in page_rows])
-        items = _attach_sibling_kinds(
-            [_serialize_list_item(r, parsed_map.get(r.id), now=now) for r in page_rows]
+        items = _attach_result_tags(
+            _attach_sibling_kinds(
+                [_serialize_list_item(r, parsed_map.get(r.id), now=now) for r in page_rows]
+            )
         )
 
         return JsonResponse(
@@ -1326,7 +1497,10 @@ def notice_list(request):
 def notice_detail(request, notice_id: int):
     _, error = _require_permission(request, "notice.view")
     if error:
-        return error
+        # 标签修正页也可查看公告详情
+        _, tag_error = _require_permission(request, "notice.tag.view")
+        if tag_error:
+            return error
     try:
         raw = NoticeRaw.objects.filter(id=notice_id).first()
         if not raw:

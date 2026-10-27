@@ -422,3 +422,14 @@ class ManagedFile(models.Model):
 
     class Meta:
         db_table = "managed_files"
+
+
+from apps.data_store.notice_tag_models import (  # noqa: E402,F401
+    NoticeBuyerProfile,
+    NoticeDictItem,
+    NoticeProductTag,
+    NoticeResultTag,
+    NoticeTagRule,
+)
+from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun  # noqa: E402,F401
+

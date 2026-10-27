@@ -1,4 +1,9 @@
-# one（182.168.1.120）开发栈。宿主机 3306 已被 center/admin 的 MariaDB 占用，MySQL 改映射到 13306。
+# one?182.168.1.120???????? 3306 ?? center/admin ? MariaDB ???MySQL ???? 13306?
+x-timezone-env: &timezone-env
+  TZ: Asia/Shanghai
+
+x-localtime: &localtime /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+
 services:
   frontend:
     build:
@@ -6,7 +11,8 @@ services:
     working_dir: /app
     command: sh -c "test -d node_modules && npm run dev -- --host 0.0.0.0 || (npm install && npm run dev -- --host 0.0.0.0)"
     environment:
-      # one 栈后端映射 8000（与 docker-compose.dev.yml 的 18080 不同）
+      <<: *timezone-env
+      # one ????? 8000?? docker-compose.dev.yml ? 18080 ???
       VITE_BACKEND_PORT: "8000"
       VITE_OCR_PORT: "8100"
     ports:
@@ -14,6 +20,7 @@ services:
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
+      - *localtime
     depends_on:
       - backend
 
@@ -22,6 +29,7 @@ services:
     working_dir: /app
     command: node server.mjs
     environment:
+      <<: *timezone-env
       PORT: "5180"
       BACKEND_URL: http://backend:8000
       DEFAULT_SITE_KEY: qlyc
@@ -29,6 +37,7 @@ services:
       - "18083:5180"
     volumes:
       - ../official-web:/app
+      - *localtime
     depends_on:
       - backend
 
@@ -38,6 +47,7 @@ services:
     working_dir: /app
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     environment:
+      <<: *timezone-env
       DJANGO_DEBUG: "1"
       DJANGO_SECRET_KEY: dev-only-change-me
       DJANGO_ALLOWED_HOSTS: "*"
@@ -49,7 +59,7 @@ services:
       MYSQL_PORT: "3306"
       REDIS_URL: redis://redis:6379/0
       OCR_SERVICE_URL: http://ocr-service:8100
-      # 宿主机 center：php artisan serve :8899（网关 172.18.0.1 = compose 默认 bridge）
+      # ??? center?php artisan serve :8899??? 172.18.0.1 = compose ?? bridge?
       CENTER_SMS_BASE_URL: http://172.18.0.1:8899/api/sms
       CENTER_SMS_DRY_RUN: "0"
     extra_hosts:
@@ -58,6 +68,7 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/app
+      - *localtime
     depends_on:
       mysql:
         condition: service_healthy
@@ -71,15 +82,19 @@ services:
       context: ../ocr-service
     working_dir: /app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
+    environment:
+      <<: *timezone-env
     ports:
       - "8100:8100"
     volumes:
       - ../ocr-service:/app
+      - *localtime
 
   mysql:
     image: mysql:8.0.21
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+08:00
     environment:
+      <<: *timezone-env
       MYSQL_DATABASE: yicai_erp
       MYSQL_USER: yicai
       MYSQL_PASSWORD: yicai
@@ -88,6 +103,7 @@ services:
       - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - *localtime
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
@@ -96,13 +112,134 @@ services:
 
   redis:
     image: redis:7
+    environment:
+      <<: *timezone-env
     ports:
       - "6379:6379"
+    volumes:
+      - *localtime
+
+  # ??????????????? python:3.10.13????? Docker Hub?
+  notice-crawler:
+    image: python:3.10.13
+    working_dir: /app
+    restart: unless-stopped
+    command:
+      - bash
+      - -lc
+      - |
+        pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r requirements-docker.txt
+        sed -i 's/\r$$//' docker/entrypoint.sh || true
+        chmod +x docker/entrypoint.sh
+        exec ./docker/entrypoint.sh
+    environment:
+      <<: *timezone-env
+      NOTICE_DB_URL: mysql+pymysql://root:yicai-root@mysql:3306/yicai_erp?charset=utf8mb4
+      EXTRACTOR_BACKEND: heuristic
+      CRAWL_INTERVAL_SECONDS: "10800"
+      CRAWL_STOP_DUP: "5"
+      CRAWL_LOOKBACK_DAYS: "2"
+      CRAWL_PAGE_SIZE: "20"
+      CRAWL_ATT_LIMIT: "100"
+      JD_CONTRACT_NUM: VSP-20250526220758
+      JD_QHC_CONTRACT_NUM: VSP-20251223153455
+      JD_APP_SOURCE: CLT
+      JD_IMPERSONATE: chrome131
+    volumes:
+      - ../notice_crawler:/app
+      - notice_crawler_data:/app/data
+      - *localtime
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  celery-worker:
+    # ???? backend ????? one ? Docker Hub ?????? volume ??
+    image: yzc-erp-backend:latest
+    working_dir: /app
+    command: celery -A config worker -l info -Q default -c 2
+    environment:
+      <<: *timezone-env
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: dev-only-change-me
+      DJANGO_ALLOWED_HOSTS: "*"
+      MYSQL_DATABASE: yicai_erp
+      MYSQL_USER: yicai
+      MYSQL_PASSWORD: yicai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+      NOTICE_CRAWLER_DIR: /opt/notice_crawler
+    volumes:
+      - ../backend:/app
+      - ../notice_crawler:/opt/notice_crawler
+      - *localtime
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery-beat:
+    image: yzc-erp-backend:latest
+    working_dir: /app
+    command: celery -A config beat -l info
+    environment:
+      <<: *timezone-env
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: dev-only-change-me
+      DJANGO_ALLOWED_HOSTS: "*"
+      MYSQL_DATABASE: yicai_erp
+      MYSQL_USER: yicai
+      MYSQL_PASSWORD: yicai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ../backend:/app
+      - *localtime
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery-crawler-worker:
+    image: yzc-erp-backend:latest
+    working_dir: /app
+    # ????????????????? notice_crawl_*
+    command: >
+      bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-docker.txt
+      && exec celery -A config worker -l info -Q crawler -c 1 -n crawler@%h"
+    environment:
+      <<: *timezone-env
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: dev-only-change-me
+      DJANGO_ALLOWED_HOSTS: "*"
+      MYSQL_DATABASE: yicai_erp
+      MYSQL_USER: yicai
+      MYSQL_PASSWORD: yicai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+      NOTICE_CRAWLER_DIR: /opt/notice_crawler
+      NOTICE_DB_URL: mysql+pymysql://root:yicai-root@mysql:3306/yicai_erp?charset=utf8mb4
+      EXTRACTOR_BACKEND: heuristic
+    volumes:
+      - ../backend:/app
+      - ../notice_crawler:/opt/notice_crawler
+      - *localtime
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
+      <<: *timezone-env
       MINIO_ROOT_USER: yicai
       MINIO_ROOT_PASSWORD: yicai123456
     ports:
@@ -110,8 +247,10 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+      - *localtime
 
 volumes:
   frontend_node_modules:
   mysql_data:
   minio_data:
+  notice_crawler_data:

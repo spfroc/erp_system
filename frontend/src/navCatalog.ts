@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Stamp,
+  Timer,
   Truck,
   Users,
   WalletCards,
@@ -40,6 +41,9 @@ export type CatalogViewId =
   | "platformAccounts"
   | "websiteLeads"
   | "notices"
+  | "noticeStats"
+  | "noticeTags"
+  | "noticeDict"
   | "libraryContacts"
   | "customerAccounts"
   | "sms"
@@ -55,6 +59,7 @@ export type CatalogViewId =
   | "logs"
   | "collectionAccounts"
   | "optionSettings"
+  | "devOps"
   | "menuSettings"
   | "access";
 
@@ -85,6 +90,7 @@ export const NAV_ICON_MAP = {
   History,
   Banknote,
   BadgeCheck,
+  Timer,
   LayoutList,
 } as const;
 
@@ -104,7 +110,10 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "platformAccounts", label: "平台账号", iconKey: "FileScan", permission: "platformAccount.view" },
   { viewId: "reminders", label: "每日任务清单", iconKey: "ClipboardList", permission: "dashboard.view" },
   { viewId: "trademarkCertificates", label: "商标管理", iconKey: "Stamp", permission: "trademarkCertificate.view" },
-  { viewId: "notices", label: "公告管理", iconKey: "FileText", permission: "notice.view" },
+  { viewId: "notices", label: "公告列表", iconKey: "FileText", permission: "notice.view" },
+  { viewId: "noticeStats", label: "公告统计", iconKey: "BarChart3", permission: "notice.stats.view" },
+  { viewId: "noticeTags", label: "标签修正", iconKey: "BadgeCheck", permission: "notice.tag.view" },
+  { viewId: "noticeDict", label: "类型与性质", iconKey: "LayoutList", permission: "notice.orgType.view" },
   { viewId: "serviceOrders", label: "服务订单", iconKey: "ShieldCheck", permission: "serviceOrder.view" },
   { viewId: "salesOrders", label: "销售订单", iconKey: "ShoppingCart", permission: "salesOrder.view" },
   { viewId: "purchaseOrders", label: "采购订单", iconKey: "Truck", permission: "purchaseOrder.view" },
@@ -123,6 +132,7 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "logs", label: "系统操作日志", iconKey: "History", permission: "user.manage" },
   { viewId: "collectionAccounts", label: "收款账号管理", iconKey: "Banknote", permission: "user.manage" },
   { viewId: "optionSettings", label: "选项管理", iconKey: "BadgeCheck", permission: "user.manage" },
+  { viewId: "devOps", label: "定时任务", iconKey: "Timer", permission: "dev.ops.view" },
   { viewId: "menuSettings", label: "菜单管理", iconKey: "LayoutList", permission: "menu.view" },
   { viewId: "access", label: "用户权限", iconKey: "Users", permission: "user.manage" },
 ];
@@ -200,12 +210,16 @@ export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-receiptStats", "receiptStats", "business", "finance", 50),
   item("nav-item-paymentStats", "paymentStats", "business", "finance", 60),
   item("nav-item-notices", "notices", "web", "notices", 10),
+  item("nav-item-noticeStats", "noticeStats", "web", "notices", 20),
+  item("nav-item-noticeTags", "noticeTags", "web", "notices", 30),
+  item("nav-item-noticeDict", "noticeDict", "web", "notices", 40),
   item("nav-item-officialSites", "officialSites", "web", "official", 10),
   item("nav-item-officialSeo", "officialSeo", "web", "official", 20),
   item("nav-item-sms", "sms", "system", "logs", 10),
   item("nav-item-logs", "logs", "system", "logs", 20),
   item("nav-item-collectionAccounts", "collectionAccounts", "system", "system", 10),
   item("nav-item-optionSettings", "optionSettings", "system", "system", 20),
+  item("nav-item-devOps", "devOps", "system", "system", 25),
   item("nav-item-menuSettings", "menuSettings", "system", "system", 30),
   item("nav-item-access", "access", "system", "system", 40),
 ];

@@ -10,8 +10,14 @@ const PAGE_SIZE = 20;
 
 export const PORTAL_PERMISSION_OPTIONS = [
   { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
-  { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、公告类型和近两周趋势" },
+  { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、成交标签分析与近两周趋势" },
   { id: "portal.notice.subscribe", label: "订阅消息", hint: "按关键词保存订阅（短信发送后续开通）" },
+] as const;
+
+export const PORTAL_SITE_OPTIONS = [
+  { id: "sd-ggzyjyzx", label: "山东网上商城" },
+  { id: "jd-quan-yicai", label: "京东泉易采" },
+  { id: "jd-qing-huicai", label: "京东青慧采" },
 ] as const;
 
 export type PortalPermission = (typeof PORTAL_PERMISSION_OPTIONS)[number]["id"];
@@ -24,6 +30,8 @@ export interface CustomerAccount {
   customerOrgId?: string;
   status: "启用" | "停用";
   permissions: PortalPermission[];
+  /** null/undefined = 不限制；[] = 无平台；有值 = 白名单 */
+  allowedSiteIds?: string[] | null;
   subscription?: { enabled?: boolean; keywords?: string };
   createdAt?: string;
 }
@@ -35,7 +43,16 @@ const emptyForm = {
   customerName: "",
   status: "启用" as "启用" | "停用",
   permissions: ["portal.notice.view"] as PortalPermission[],
+  siteScope: "all" as "all" | "limited",
+  allowedSiteIds: [] as string[],
 };
+
+function siteScopeLabel(item: CustomerAccount) {
+  if (item.allowedSiteIds == null) return "全部平台";
+  if (item.allowedSiteIds.length === 0) return "无平台";
+  const labels = PORTAL_SITE_OPTIONS.filter((site) => item.allowedSiteIds?.includes(site.id)).map((site) => site.label);
+  return labels.length ? labels.join("、") : `${item.allowedSiteIds.length} 个平台`;
+}
 
 function useDebounced(value: string, delay = 300) {
   const [debounced, setDebounced] = useState(value);
@@ -102,6 +119,7 @@ export function CustomerAccountsPanel({
 
   function openEdit(item: CustomerAccount) {
     setEditing(item);
+    const limited = Array.isArray(item.allowedSiteIds);
     setForm({
       name: item.name,
       phone: item.phone,
@@ -109,6 +127,8 @@ export function CustomerAccountsPanel({
       customerName: item.customerName || "",
       status: item.status,
       permissions: item.permissions || [],
+      siteScope: limited ? "limited" : "all",
+      allowedSiteIds: limited ? [...(item.allowedSiteIds || [])] : PORTAL_SITE_OPTIONS.map((site) => site.id),
     });
     setShowForm(true);
   }
@@ -119,6 +139,15 @@ export function CustomerAccountsPanel({
       permissions: current.permissions.includes(id)
         ? current.permissions.filter((item) => item !== id)
         : [...current.permissions, id],
+    }));
+  }
+
+  function toggleSite(id: string) {
+    setForm((current) => ({
+      ...current,
+      allowedSiteIds: current.allowedSiteIds.includes(id)
+        ? current.allowedSiteIds.filter((item) => item !== id)
+        : [...current.allowedSiteIds, id],
     }));
   }
 
@@ -133,6 +162,7 @@ export function CustomerAccountsPanel({
         customerOrgId: editing?.customerOrgId || "",
         status: form.status,
         permissions: form.permissions,
+        allowedSiteIds: form.siteScope === "all" ? null : form.allowedSiteIds,
         subscription: editing?.subscription || { enabled: form.permissions.includes("portal.notice.subscribe"), keywords: "" },
         createdAt: editing?.createdAt || new Date().toISOString(),
       };
@@ -156,7 +186,7 @@ export function CustomerAccountsPanel({
         <div className="panel-title action-title">
           <div>
             <h2>登录账号管理</h2>
-            <p>统计平台（portal.qlyc.co）客户账号。勾选的模块登录后才会出现，未勾选的接口也会拒绝。</p>
+            <p>统计平台（portal.qlyc.co）客户账号。可配置门户模块与可查看采集平台，未勾选的接口也会拒绝。</p>
           </div>
           <div className="panel-title-buttons">
             {canManage && (
@@ -182,6 +212,7 @@ export function CustomerAccountsPanel({
             <span>客户</span>
             <span>手机号</span>
             <span>门户权限</span>
+            <span>可查看平台</span>
             <span>状态</span>
             <span>操作</span>
           </div>
@@ -195,6 +226,7 @@ export function CustomerAccountsPanel({
               <span>{item.customerName || "—"}</span>
               <span>{item.phone}</span>
               <span>{PORTAL_PERMISSION_OPTIONS.filter((option) => item.permissions?.includes(option.id)).map((option) => option.label).join("、") || "—"}</span>
+              <span>{siteScopeLabel(item)}</span>
               <span>{item.status}</span>
               <div className="option-actions">
                 {canManage && (
@@ -218,7 +250,7 @@ export function CustomerAccountsPanel({
                 <X size={16} />
               </button>
             </div>
-            <div className="form-grid">
+            <div className="form-grid customer-account-form">
               <label>
                 账号名称
                 <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -257,6 +289,49 @@ export function CustomerAccountsPanel({
                     </span>
                   </label>
                 ))}
+              </fieldset>
+              <fieldset className="portal-permission-fieldset">
+                <legend>可查看平台</legend>
+                <label className="portal-permission-option">
+                  <input
+                    type="radio"
+                    name="siteScope"
+                    checked={form.siteScope === "all"}
+                    onChange={() => setForm({ ...form, siteScope: "all" })}
+                  />
+                  <span>
+                    <strong>不限制（全部平台）</strong>
+                    <em>未配置白名单时与现网一致，可查看全部采集站点</em>
+                  </span>
+                </label>
+                <label className="portal-permission-option">
+                  <input
+                    type="radio"
+                    name="siteScope"
+                    checked={form.siteScope === "limited"}
+                    onChange={() =>
+                      setForm({
+                        ...form,
+                        siteScope: "limited",
+                        allowedSiteIds: form.allowedSiteIds.length ? form.allowedSiteIds : PORTAL_SITE_OPTIONS.map((site) => site.id),
+                      })
+                    }
+                  />
+                  <span>
+                    <strong>限制可查看平台</strong>
+                    <em>仅统计与列表可见勾选的采集站点；全部不勾选则无数据</em>
+                  </span>
+                </label>
+                {form.siteScope === "limited" &&
+                  PORTAL_SITE_OPTIONS.map((site) => (
+                    <label key={site.id} className="portal-permission-option">
+                      <input type="checkbox" checked={form.allowedSiteIds.includes(site.id)} onChange={() => toggleSite(site.id)} />
+                      <span>
+                        <strong>{site.label}</strong>
+                        <em>{site.id}</em>
+                      </span>
+                    </label>
+                  ))}
               </fieldset>
             </div>
             <div className="modal-actions">

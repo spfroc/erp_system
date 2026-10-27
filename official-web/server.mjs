@@ -301,9 +301,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
-    if (requestHost === "portal.qlyc.co" || url.searchParams.get("site") === "portal") {
-      const portalRoot = path.join(__dirname, "portal");
-      const portalFile = url.pathname === "/" || url.pathname === "" ? path.join(portalRoot, "index.html") : resolveStaticFile(portalRoot, url.pathname);
+    const portalRoot = path.join(__dirname, "portal");
+    // 局域网可用 /portal/；生产 Host portal.qlyc.co 或 ?site=portal 也可进门户
+    // 静态资源用绝对路径 /portal/...，避免 ?site=portal 时相对资源丢参导致 echarts 404
+    const isPortalHost = requestHost === "portal.qlyc.co" || url.searchParams.get("site") === "portal";
+    const isPortalPath = url.pathname === "/portal" || url.pathname.startsWith("/portal/");
+    if (isPortalHost || isPortalPath) {
+      let portalPath = url.pathname;
+      if (isPortalPath) {
+        portalPath = url.pathname === "/portal" || url.pathname === "/portal/" ? "/" : url.pathname.slice("/portal".length) || "/";
+      } else if (portalPath === "/" || portalPath === "") {
+        portalPath = "/";
+      }
+      const portalFile =
+        portalPath === "/" || portalPath === ""
+          ? path.join(portalRoot, "index.html")
+          : resolveStaticFile(portalRoot, portalPath);
       if (!portalFile) {
         sendText(res, 404, "Not Found", "text/html; charset=utf-8");
         return;

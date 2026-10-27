@@ -60,10 +60,15 @@ import { MenuSettingsPanel } from "./MenuSettings";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
 import { LibraryContactsPanel } from "./LibraryContacts";
 import { Notices } from "./Notices";
+import { NoticeStats } from "./NoticeStats";
+import { NoticeDictAdmin } from "./NoticeDictAdmin";
+import { NoticeTags } from "./NoticeTags";
+import { DevOps } from "./DevOps";
 import { CustomerAccountsPanel } from "./CustomerAccounts";
 import { OfficialSeoPanel } from "./OfficialSeo";
 import { OfficialSitesPanel } from "./OfficialSites";
 import { SmsPanel } from "./SmsPanel";
+import { DateTimeField } from "./DateTimeField";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
   PERIOD_PRESETS,
@@ -212,6 +217,36 @@ const SERVICE_DETAIL_TABS: Array<{ id: ServiceDetailTab; label: string }> = [
 ];
 const PROJECT_MEMO_MAX_LENGTH = 200;
 const SESSION_USER_KEY = "yicai-erp-current-user-id";
+const VIEW_STORAGE_KEY = "yicai-erp-active-view";
+
+function isCatalogView(value: string): value is View {
+  return Boolean(VIEW_CATALOG_BY_ID[value as View]);
+}
+
+function readStoredView(): View {
+  const fromHash = window.location.hash.replace(/^#\/?/, "").trim();
+  if (fromHash && isCatalogView(fromHash)) return fromHash;
+  try {
+    const stored = window.sessionStorage.getItem(VIEW_STORAGE_KEY) || window.localStorage.getItem(VIEW_STORAGE_KEY) || "";
+    if (stored && isCatalogView(stored)) return stored;
+  } catch {
+    // private mode / storage blocked
+  }
+  return "dashboard";
+}
+
+function persistActiveView(next: View) {
+  try {
+    window.sessionStorage.setItem(VIEW_STORAGE_KEY, next);
+    window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+  } catch {
+    // ignore
+  }
+  const hash = `#${next}`;
+  if (window.location.hash !== hash) {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
+  }
+}
 
 interface SearchableSelectOption {
   value: string;
@@ -388,6 +423,13 @@ const permissionLabels: Record<PermissionKey, string> = {
   "trademarkCertificate.manage": "管理商标",
   "notice.view": "查看公告",
   "notice.manage": "管理公告",
+  "notice.stats.view": "查看公告统计",
+  "notice.tag.view": "查看公告标签",
+  "notice.tag.manage": "修正公告标签",
+  "notice.orgType.view": "查看公告类型",
+  "notice.orgType.manage": "管理公告类型",
+  "notice.nature.view": "查看性质",
+  "notice.nature.manage": "管理性质",
   "site.view": "查看前端网站配置",
   "site.manage": "管理前端网站配置",
   "library.view": "查看政企客户资料库",
@@ -401,13 +443,15 @@ const permissionLabels: Record<PermissionKey, string> = {
   "lead.manage": "管理商机",
   "sensitive.view": "查看敏感信息",
   "profit.view": "查看利润",
+  "dev.ops.view": "查看定时任务",
+  "dev.ops.manage": "管理定时任务",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "site.view", "library.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "site.manage", "library.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
-  { title: "安全", keys: ["sensitive.view", "user.manage"] },
+  { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "user.manage"] },
 ];
 
 function hasPermission(permissionSet: Set<PermissionKey>, permission: PermissionKey) {
@@ -423,6 +467,35 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "notice.view") {
     return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.tag.view") {
+    return permissionSet.has("notice.tag.manage") || permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.stats.view") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.tag.manage") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.orgType.view") {
+    return (
+      permissionSet.has("notice.orgType.manage") ||
+      permissionSet.has("notice.manage") ||
+      permissionSet.has("notice.nature.view") ||
+      permissionSet.has("notice.nature.manage")
+    );
+  }
+  if (permission === "notice.orgType.manage") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.nature.view") {
+    return permissionSet.has("notice.nature.manage") || permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.nature.manage") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "dev.ops.view") {
+    return permissionSet.has("dev.ops.manage");
   }
   if (permission === "site.view") {
     return permissionSet.has("site.manage");
@@ -873,187 +946,6 @@ function FilePicker({
           <X size={14} />
         </button>
       ) : null}
-    </div>
-  );
-}
-
-const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
-
-function parsePickerDate(value?: string) {
-  if (!value) return null;
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
-  if (!match) return null;
-  const date = new Date(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4] ?? "0"),
-    Number(match[5] ?? "0"),
-  );
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function formatPickerDisplay(value: string, mode: "date" | "datetime", format: "zh" | "iso" = "zh") {
-  const date = parsePickerDate(value);
-  if (!date) return "";
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  if (format === "iso") {
-    const text = `${y}-${m}-${d}`;
-    if (mode === "datetime") {
-      return `${text} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-    }
-    return text;
-  }
-  const text = `${y}年${m}月${d}日`;
-  if (mode === "datetime") {
-    return `${text} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  }
-  return text;
-}
-
-function emitPickerValue(date: Date, mode: "date" | "datetime") {
-  return mode === "datetime" ? localDateTimeInputValue(date) : formatLocalDate(date);
-}
-
-function DateTimeField({
-  value,
-  onChange,
-  mode = "date",
-  format = "zh",
-  className = "",
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  mode?: "date" | "datetime";
-  format?: "zh" | "iso";
-  className?: string;
-  placeholder?: string;
-  ariaLabel?: string;
-}) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const selected = parsePickerDate(value);
-  const [open, setOpen] = useState(false);
-  const [viewYear, setViewYear] = useState(() => selected?.getFullYear() ?? new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(() => selected?.getMonth() ?? new Date().getMonth());
-
-  useEffect(() => {
-    if (!open) return;
-    const current = parsePickerDate(value) ?? new Date();
-    setViewYear(current.getFullYear());
-    setViewMonth(current.getMonth());
-  }, [open, value]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  function shiftMonth(delta: number) {
-    const next = new Date(viewYear, viewMonth + delta, 1);
-    setViewYear(next.getFullYear());
-    setViewMonth(next.getMonth());
-  }
-
-  function applyDate(day: number, closeAfter: boolean) {
-    const base = selected ?? new Date();
-    const next = new Date(
-      viewYear,
-      viewMonth,
-      day,
-      mode === "datetime" ? base.getHours() : 0,
-      mode === "datetime" ? base.getMinutes() : 0,
-    );
-    onChange(emitPickerValue(next, mode));
-    if (closeAfter) setOpen(false);
-  }
-
-  function applyTime(hours: number, minutes: number) {
-    const base = selected ?? new Date();
-    onChange(emitPickerValue(new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes), mode));
-  }
-
-  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const now = new Date();
-  const cells: Array<number | null> = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
-  ];
-
-  return (
-    <div className={`date-time-field ${className}`.trim()} ref={rootRef}>
-      <input
-        readOnly
-        value={formatPickerDisplay(value, mode, format)}
-        placeholder={placeholder ?? (mode === "datetime" ? "选择日期时间" : format === "iso" ? "yyyy-mm-dd" : "选择日期")}
-        aria-label={ariaLabel ?? (mode === "datetime" ? "选择日期时间" : "选择日期")}
-        className="date-time-field-input"
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-      />
-      {open && (
-        <div className="date-time-calendar" role="dialog" aria-label="选择日期">
-          <div className="date-time-calendar-head">
-            <button type="button" className="ghost" onClick={() => shiftMonth(-1)} aria-label="上个月">‹</button>
-            <strong>{viewYear}年{viewMonth + 1}月</strong>
-            <button type="button" className="ghost" onClick={() => shiftMonth(1)} aria-label="下个月">›</button>
-          </div>
-          <div className="date-time-weekdays">
-            {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
-          </div>
-          <div className="date-time-days">
-            {cells.map((day, index) => {
-              if (!day) return <span key={`empty-${index}`} />;
-              const isSelected = Boolean(
-                selected
-                && selected.getFullYear() === viewYear
-                && selected.getMonth() === viewMonth
-                && selected.getDate() === day,
-              );
-              const isToday = now.getFullYear() === viewYear && now.getMonth() === viewMonth && now.getDate() === day;
-              return (
-                <button
-                  type="button"
-                  key={day}
-                  className={`${isSelected ? "is-selected" : ""} ${isToday ? "is-today" : ""}`.trim()}
-                  onClick={() => applyDate(day, mode === "date")}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-          {mode === "datetime" && (
-            <div className="date-time-clock">
-              <label>
-                <span>时</span>
-                <select value={selected ? selected.getHours() : 0} onChange={(event) => applyTime(Number(event.target.value), selected?.getMinutes() ?? 0)}>
-                  {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>分</span>
-                <select value={selected ? selected.getMinutes() : 0} onChange={(event) => applyTime(selected?.getHours() ?? 0, Number(event.target.value))}>
-                  {Array.from({ length: 60 }, (_, minute) => <option key={minute} value={minute}>{String(minute).padStart(2, "0")}</option>)}
-                </select>
-              </label>
-            </div>
-          )}
-          <div className="date-time-calendar-actions">
-            <button type="button" className="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</button>
-            <button type="button" className="ghost" onClick={() => { onChange(emitPickerValue(new Date(), mode)); setOpen(false); }}>今天</button>
-            {mode === "datetime" && <button type="button" className="primary" onClick={() => setOpen(false)}>确定</button>}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3489,7 +3381,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (identifier: string, passwo
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setViewState] = useState<View>(() => readStoredView());
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [orderFocus, setOrderFocus] = useState<OrderFocus>({});
   const [currentUserId, setCurrentUserId] = useState(() => window.localStorage.getItem(SESSION_USER_KEY) ?? "");
@@ -3498,6 +3390,32 @@ export default function App() {
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
   const [smsDraftContacts, setSmsDraftContacts] = useState<LibraryContact[] | undefined>(undefined);
+
+  function setView(next: View) {
+    setViewState(next);
+    persistActiveView(next);
+  }
+
+  useEffect(() => {
+    persistActiveView(view);
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = window.location.hash.replace(/^#\/?/, "").trim();
+      if (next && isCatalogView(next) && next !== view) {
+        setViewState(next);
+        try {
+          window.sessionStorage.setItem(VIEW_STORAGE_KEY, next);
+          window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [view]);
 
   useEffect(() => {
     if (!notice) return;
@@ -3592,7 +3510,9 @@ export default function App() {
     const accessibleNav = withCriticalNavItems(resolvedNav, (permission) => hasPermission(permissionSet, permission))
       .filter((item) => hasPermission(permissionSet, item.permission));
     if (!canAccessView(permissionSet, view, accessibleNav)) {
-      setView(accessibleNav[0]?.id ?? "dashboard");
+      const fallback = (accessibleNav[0]?.id ?? "dashboard") as View;
+      setViewState(fallback);
+      persistActiveView(fallback);
     }
   }, [currentUserId, data, view]);
 
@@ -3846,6 +3766,15 @@ export default function App() {
         {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
         {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
         {view === "notices" && <Notices onNotice={setNotice} />}
+        {view === "noticeStats" && <NoticeStats onNotice={setNotice} />}
+        {view === "noticeTags" && <NoticeTags onNotice={setNotice} canManage={can("notice.tag.manage")} />}
+        {view === "noticeDict" && (
+          <NoticeDictAdmin
+            onNotice={setNotice}
+            canManageOrgType={can("notice.orgType.manage")}
+            canManageNature={can("notice.nature.manage")}
+          />
+        )}
         {view === "customerAccounts" && <CustomerAccountsPanel onNotice={setNotice} can={can} />}
         {view === "libraryContacts" && (
           <LibraryContactsPanel
@@ -3883,6 +3812,7 @@ export default function App() {
         {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
         {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
         {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
+        {view === "devOps" && <DevOps onNotice={setNotice} canManage={can("dev.ops.manage")} />}
         {view === "menuSettings" && (
           <MenuSettingsPanel
             data={data}

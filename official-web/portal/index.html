@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>壹采科技数据服务平台</title>
-  <script src="echarts.min.js"></script>
+  <script src="/portal/echarts.min.js"></script>
   <style>
     :root {
       --green: #1b6844;
@@ -96,6 +96,35 @@
     .dropdown button:hover { background: #f6efe2; }
     .dropdown button.danger { color: #a33b2b; }
     .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 20px; }
+    #panel.stats-panel { overflow: auto; display: block; }
+    #panel.stats-panel .charts { flex: none; height: 320px; }
+    #panel.stats-panel .chart { height: 280px; }
+    .home-intro { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+    .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
+    .stats-filters .segmented { flex: none; }
+    .stats-custom-range { display: inline-flex; align-items: center; gap: 8px; }
+    .stats-custom-range input[type="date"] { width: auto; min-width: 140px; margin-top: 0; padding: 7px 10px; }
+    .stats-custom-range span { color: var(--muted); font-size: 13px; }
+    .home-site-block { margin-top: 16px; }
+    .home-site-block > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
+    .home-site-block .charts { height: 280px; }
+    .home-site-block .chart { height: 240px; }
+    .home-site-grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 1280px) {
+      .home-site-grid:has(> :nth-child(2)) { grid-template-columns: 1fr 1fr; }
+    }
+    .tag-stats { margin-top: 16px; }
+    .tag-stats > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
+    .tag-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .tag-tables { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 12px; margin-top: 12px; }
+    .tag-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tag-table th, .tag-table td { padding: 8px 6px; border-bottom: 1px solid #f0e6d6; text-align: left; }
+    .tag-table th { color: var(--muted); font-weight: 600; }
+    .tag-table tr.clickable { cursor: pointer; }
+    .tag-table tr.clickable:hover { background: #fbf3df; }
+    .segmented { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+    .segmented button { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 6px 12px; }
+    .segmented button.active { background: #1f8a56; border-color: #1f8a56; color: #fff; }
     .metrics { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
     .metric, .card { background: var(--card); border: 1px solid rgba(234, 223, 206, .9); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); }
     .metric { position: relative; overflow: hidden; padding-left: 18px; }
@@ -114,6 +143,7 @@
     .metric.tone-teal strong { color: #1d756c; }
     .metric.tone-ink strong { color: #2d5570; }
     .charts { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .charts:has(> :only-child) { grid-template-columns: 1fr; }
     .charts > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
     .chart { flex: 1; width: 100%; min-height: 0; height: auto; }
     .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
@@ -141,9 +171,17 @@
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .tag { background: #fbf3df; color: #8a6414; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
     .empty { color: var(--muted); padding: 28px 0; }
+    .boot {
+      height: 100%; display: grid; place-items: center;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(215,164,65,.16), transparent 28%),
+        radial-gradient(circle at 0% 100%, rgba(21,122,69,.08), transparent 32%),
+        #f3eee4;
+      color: var(--muted); font-size: 14px;
+    }
     #panel > .card:not(.list-card) { max-width: 720px; }
     @media (max-width: 960px) {
-      .login, .app, .metrics, .charts { grid-template-columns: 1fr; }
+      .login, .app, .metrics, .charts, .tag-metrics, .tag-tables { grid-template-columns: 1fr; }
       .login-visual { height: 220px; }
       .login-visual img { height: 220px; }
       html, body { overflow: auto; }
@@ -161,9 +199,11 @@
   </style>
 </head>
 <body>
-  <section id="login" class="login">
+  <section id="boot" class="boot">加载中…</section>
+
+  <section id="login" class="login" hidden>
     <div class="login-visual">
-      <img src="login-visual.jpg" alt="" />
+      <img src="/portal/login-visual.jpg" alt="" />
     </div>
     <div class="login-panel">
       <form id="login-form" class="login-card">
@@ -202,17 +242,37 @@
   </section>
 
   <script>
+    const bootView = document.getElementById("boot");
     const loginView = document.getElementById("login");
     const appView = document.getElementById("app");
     const dropdown = document.getElementById("dropdown");
     let me = null;
-    let tab = "notices";
+    let tab = "home";
     let noticeQuery = { page: 1, search: "", siteId: "", noticeKind: "" };
+    function formatYmd(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
+    }
+    const monthStartYmd = formatYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const todayYmd = formatYmd(new Date());
+    let tagQuery = {
+      period: "this_month",
+      startDate: monthStartYmd,
+      endDate: todayYmd,
+      dealKind: "",
+      province: "",
+      buyer: "",
+    };
     let noticeRequest = 0;
     let noticeSearchTimer = 0;
+    let tagSearchTimer = 0;
     let charts = [];
+    const TAB_STORAGE_KEY = "portal_active_tab";
 
     const MENUS = [
+      ["home", "首页", "portal.stats.view"],
       ["notices", "公告列表", "portal.notice.view"],
       ["stats", "数据统计", "portal.stats.view"],
       ["subscription", "订阅", "portal.notice.subscribe"],
@@ -222,6 +282,25 @@
       "portal.stats.view": "数据统计",
       "portal.notice.subscribe": "订阅",
     };
+
+    function readSavedTab() {
+      const hash = (location.hash || "").replace(/^#/, "").trim();
+      if (hash) return hash;
+      try {
+        return localStorage.getItem(TAB_STORAGE_KEY) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function saveTab(id) {
+      try {
+        localStorage.setItem(TAB_STORAGE_KEY, id);
+      } catch (_) {}
+      if (location.hash.replace(/^#/, "") !== id) {
+        history.replaceState(null, "", "#" + id);
+      }
+    }
 
     async function api(path, options) {
       const response = await fetch(path, {
@@ -239,8 +318,16 @@
       charts = [];
     }
 
+    function showLogin() {
+      me = null;
+      bootView.hidden = true;
+      appView.hidden = true;
+      loginView.hidden = false;
+    }
+
     function showApp(account) {
       me = account;
+      bootView.hidden = true;
       loginView.hidden = true;
       appView.hidden = false;
       const name = account.customerName || account.name || "客户";
@@ -257,7 +344,11 @@
         button.onclick = () => openTab(item[0]);
         nav.appendChild(button);
       });
-      const next = allowed.some((item) => item[0] === tab) ? tab : (allowed[0] ? allowed[0][0] : "account");
+      const saved = readSavedTab();
+      const preferred = saved || "home";
+      const known = new Set(allowed.map((item) => item[0]));
+      known.add("account");
+      const next = known.has(preferred) ? preferred : (allowed[0] ? allowed[0][0] : "account");
       openTab(next);
     }
 
@@ -270,14 +361,17 @@
     async function openTab(id) {
       dropdown.hidden = true;
       tab = id;
+      saveTab(id);
       markNav();
       disposeCharts();
-      const titles = { notices: "公告列表", stats: "数据统计", subscription: "订阅", account: "用户中心" };
+      const titles = { home: "首页", notices: "公告列表", stats: "数据统计", subscription: "订阅", account: "用户中心" };
       document.getElementById("title").textContent = titles[id] || "";
       const panel = document.getElementById("panel");
+      panel.classList.toggle("stats-panel", id === "stats" || id === "home");
       panel.innerHTML = '<p class="empty">加载中…</p>';
       try {
-        if (id === "stats") await renderStats(panel);
+        if (id === "home") await renderHome(panel);
+        else if (id === "stats") await renderStats(panel);
         else if (id === "notices") await renderNotices(panel);
         else if (id === "subscription") renderSubscription(panel);
         else renderAccount(panel);
@@ -285,6 +379,265 @@
         panel.innerHTML = '<p class="error"></p>';
         panel.querySelector(".error").textContent = error.message;
       }
+    }
+
+    function appendMetricRow(parent, rows) {
+      const metrics = document.createElement("div");
+      metrics.className = "metrics";
+      rows.forEach(([label, value, amount, tone]) => {
+        const card = document.createElement("div");
+        card.className = "metric tone-" + tone + (amount ? " amount" : "");
+        card.innerHTML = "<span></span><strong></strong>";
+        card.querySelector("span").textContent = label;
+        card.querySelector("strong").textContent = value;
+        metrics.appendChild(card);
+      });
+      parent.appendChild(metrics);
+    }
+
+    function chartAxis() {
+      return { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
+    }
+
+    function mountSiteCharts(prefix, data) {
+      const axis = chartAxis();
+      const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
+      const siteEl = document.getElementById(prefix + "-site");
+      const kindEl = document.getElementById(prefix + "-kind");
+      const dealEl = document.getElementById(prefix + "-deal");
+      const dailyEl = document.getElementById(prefix + "-daily");
+      if (siteEl) {
+        mountChart(siteEl, {
+          color: ["#1f8a56"],
+          grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "value", ...axis },
+          yAxis: { type: "category", data: (data.bySite || []).map((row) => row.label).reverse(), ...axis },
+          series: [{ type: "bar", barWidth: 14, data: (data.bySite || []).map((row) => row.count).reverse(), itemStyle: { borderRadius: [0, 6, 6, 0], color: bar } }],
+        });
+      }
+      if (kindEl) {
+        mountChart(kindEl, {
+          color: ["#1f8a56", "#e0b15a", "#2a9d8f", "#e07a4c", "#3d6b8a", "#c45c6a", "#8d9a84"],
+          tooltip: { trigger: "item" },
+          legend: { bottom: 0, type: "scroll" },
+          series: [{
+            type: "pie",
+            radius: ["42%", "68%"],
+            center: ["50%", "44%"],
+            data: (data.byKind || []).map((row) => ({ name: row.kind, value: row.count })),
+          }],
+        });
+      }
+      if (dealEl) {
+        const dealRows = data.monthlyDeal || [];
+        mountChart(dealEl, {
+          color: ["#d7a441"],
+          grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis", valueFormatter: (value) => formatMoney(value) },
+          xAxis: { type: "category", data: dealRows.map((row) => String(row.month).slice(2).replace("-", "/")), ...axis },
+          yAxis: { type: "value", ...axis, axisLabel: { color: "#74685a", formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
+          series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: new echarts.graphic.LinearGradient(0, 1, 0, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]) } }],
+        });
+      }
+      if (dailyEl) {
+        mountChart(dailyEl, {
+          color: ["#1f8a56"],
+          grid: { left: 24, right: 16, top: 24, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "category", data: (data.daily || []).map((row) => String(row.date).slice(5)), ...axis },
+          yAxis: { type: "value", ...axis },
+          series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(31,138,86,.28)" }, { offset: 1, color: "rgba(224,177,90,.05)" }]) }, data: (data.daily || []).map((row) => row.count) }],
+        });
+      }
+    }
+
+    function buildChartGrid(prefix, titles, { includeSite = true } = {}) {
+      const wrap = document.createElement("div");
+      const topCards = includeSite
+        ? '<section class="card"><h3>' + (titles[0] || "平台分布") + '</h3><div class="chart" id="' + prefix + '-site"></div></section>' +
+          '<section class="card"><h3>' + (titles[1] || "公告类型") + '</h3><div class="chart" id="' + prefix + '-kind"></div></section>'
+        : '<section class="card"><h3>' + (titles[1] || "公告类型") + '</h3><div class="chart" id="' + prefix + '-kind"></div></section>';
+      wrap.innerHTML =
+        '<div class="charts">' + topCards + "</div>" +
+        '<div class="charts">' +
+        '<section class="card"><h3>' + (titles[2] || "月成交金额") + '</h3><div class="chart" id="' + prefix + '-deal"></div></section>' +
+        '<section class="card"><h3>' + (titles[3] || "发布量") + '</h3><div class="chart" id="' + prefix + '-daily"></div></section>' +
+        "</div>";
+      return wrap;
+    }
+
+    function statsQueryParams(extra) {
+      const params = new URLSearchParams({ period: tagQuery.period });
+      if (tagQuery.period === "custom") {
+        params.set("startDate", tagQuery.startDate);
+        params.set("endDate", tagQuery.endDate);
+      }
+      if (tagQuery.dealKind) params.set("deal_kind", tagQuery.dealKind);
+      if (tagQuery.province) params.set("province", tagQuery.province);
+      if (tagQuery.buyer) params.set("buyer", tagQuery.buyer);
+      Object.entries(extra || {}).forEach(([key, value]) => {
+        if (value != null && value !== "") params.set(key, String(value));
+      });
+      return params;
+    }
+
+    function overviewMetricRows(data) {
+      return [
+        ["公告总量", String(data.publicNoticeTotal ?? 0), false, "jade"],
+        ["采购公告总额", formatMoney(data.purchaseAmount ?? data.lastMonthPurchaseAmount), true, "gold"],
+        ["成交公告总额", formatMoney(data.dealAmount ?? data.lastMonthDealAmount), true, "coral"],
+        ["今日发布", String(data.todayCount ?? 0), false, "teal"],
+        ["近 7 日", String(data.weekCount ?? 0), false, "ink"],
+      ];
+    }
+
+    function mountStatsFilters(parent, { showDealKinds = true, showTagFilters = false, dealKinds = null, onChange } = {}) {
+      const box = document.createElement("div");
+      box.className = "stats-filters";
+      box.innerHTML =
+        '<div class="segmented" data-role="period">' +
+        '<button type="button" data-period="this_week">本周</button>' +
+        '<button type="button" data-period="this_month">当月</button>' +
+        '<button type="button" data-period="last_month">上月</button>' +
+        '<button type="button" data-period="custom">自定义</button>' +
+        "</div>" +
+        '<div class="stats-custom-range" data-role="custom-range" hidden>' +
+        '<input type="date" data-role="start-date" />' +
+        "<span>至</span>" +
+        '<input type="date" data-role="end-date" />' +
+        "</div>" +
+        (showDealKinds ? '<div class="segmented" data-role="deal"></div>' : "") +
+        (showTagFilters
+          ? '<label style="min-width:140px;margin:0">地区<input name="province" placeholder="如山东省" /></label>' +
+            '<label style="min-width:140px;margin:0">采购人<input name="buyer" placeholder="采购人关键词" /></label>'
+          : "");
+      parent.appendChild(box);
+
+      const syncActive = () => {
+        box.querySelectorAll("[data-period]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.period === tagQuery.period);
+        });
+        const customRange = box.querySelector("[data-role=custom-range]");
+        customRange.hidden = tagQuery.period !== "custom";
+        box.querySelector("[data-role=start-date]").value = tagQuery.startDate;
+        box.querySelector("[data-role=end-date]").value = tagQuery.endDate;
+        box.querySelectorAll("[data-deal]").forEach((button) => {
+          button.classList.toggle("active", (button.dataset.deal || "") === (tagQuery.dealKind || ""));
+        });
+      };
+
+      const dealBox = box.querySelector("[data-role=deal]");
+      if (dealBox) {
+        const kinds = ["", ...((dealKinds && dealKinds.length ? dealKinds : null) || ["商品", "服务", "工程", "未识别"])];
+        kinds.forEach((kind) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset.deal = kind;
+          button.textContent = kind || "全部";
+          button.onclick = () => {
+            tagQuery.dealKind = kind;
+            syncActive();
+            onChange();
+          };
+          dealBox.appendChild(button);
+        });
+      }
+
+      box.querySelectorAll("[data-period]").forEach((button) => {
+        button.onclick = () => {
+          tagQuery.period = button.dataset.period;
+          syncActive();
+          onChange();
+        };
+      });
+      const startInput = box.querySelector("[data-role=start-date]");
+      const endInput = box.querySelector("[data-role=end-date]");
+      const onCustomChange = () => {
+        tagQuery.startDate = startInput.value || tagQuery.startDate;
+        tagQuery.endDate = endInput.value || tagQuery.endDate;
+        if (tagQuery.period === "custom" && tagQuery.startDate && tagQuery.endDate) onChange();
+      };
+      startInput.onchange = onCustomChange;
+      endInput.onchange = onCustomChange;
+
+      if (showTagFilters) {
+        const provinceInput = box.querySelector("[name=province]");
+        const buyerInput = box.querySelector("[name=buyer]");
+        provinceInput.value = tagQuery.province;
+        buyerInput.value = tagQuery.buyer;
+        const onFilterInput = () => {
+          window.clearTimeout(tagSearchTimer);
+          tagSearchTimer = window.setTimeout(() => {
+            tagQuery.province = provinceInput.value.trim();
+            tagQuery.buyer = buyerInput.value.trim();
+            onChange();
+          }, 300);
+        };
+        provinceInput.oninput = onFilterInput;
+        buyerInput.oninput = onFilterInput;
+      }
+
+      syncActive();
+      return box;
+    }
+
+    async function renderHome(panel) {
+      if (tagQuery.period === "custom" && (!tagQuery.startDate || !tagQuery.endDate)) {
+        panel.innerHTML = '<p class="empty">请选择自定义起止日期（yyyy-mm-dd）</p>';
+        return;
+      }
+      const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeSites: "1" }).toString())).data;
+      panel.innerHTML = "";
+      const sites = data.siteStats || [];
+      const siteLabels = (data.sites || []).map((site) => site.label).filter(Boolean);
+      mountStatsFilters(panel, {
+        showDealKinds: false,
+        onChange: () => openTab("home"),
+      });
+      const intro = document.createElement("p");
+      intro.className = "home-intro";
+      if (!sites.length) {
+        intro.textContent = "当前账号未授权任何采集平台，暂无统计数据。请联系管理员配置可查看平台。";
+        panel.appendChild(intro);
+        return;
+      }
+      if (sites.length === 1) {
+        intro.textContent = "当前可查看平台：" + (sites[0].label || sites[0].siteId) + "。以下为该平台数据统计。";
+      } else {
+        intro.textContent = "当前可查看 " + sites.length + " 个平台（" + siteLabels.join("、") + "）。上方为合计，下方为各平台明细。";
+      }
+      panel.appendChild(intro);
+
+      if (sites.length > 1) {
+        const overview = document.createElement("section");
+        overview.className = "card home-site-block";
+        overview.innerHTML = "<h3>全部可查看平台 · 合计</h3>";
+        appendMetricRow(overview, overviewMetricRows(data));
+        overview.appendChild(buildChartGrid("home-all", ["平台分布", "公告类型", "月成交金额", "发布量"], { includeSite: true }));
+        panel.appendChild(overview);
+        mountSiteCharts("home-all", data);
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "home-site-grid";
+      const chartJobs = [];
+      sites.forEach((site, index) => {
+        const block = document.createElement("section");
+        block.className = "card home-site-block";
+        const prefix = "home-site-" + index;
+        block.innerHTML = "<h3></h3>";
+        block.querySelector("h3").textContent =
+          sites.length === 1 ? (site.label || site.siteId) : (site.label || site.siteId) + " · 明细";
+        appendMetricRow(block, overviewMetricRows(site));
+        // 单个平台不展示「平台分布」
+        block.appendChild(buildChartGrid(prefix, ["平台分布", "公告类型", "月成交金额", "发布量"], { includeSite: false }));
+        grid.appendChild(block);
+        chartJobs.push([prefix, site]);
+      });
+      panel.appendChild(grid);
+      chartJobs.forEach(([prefix, site]) => mountSiteCharts(prefix, site));
+      fitCharts();
     }
 
     function mountChart(el, option) {
@@ -306,36 +659,96 @@
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " 元";
     }
 
-    async function renderStats(panel) {
-      const data = (await api("/api/portal/stats/")).data;
-      panel.innerHTML = "";
-      const metrics = document.createElement("div");
-      metrics.className = "metrics";
-      [
-        ["公告总量", String(data.publicNoticeTotal ?? 0), false, "jade"],
-        ["上月采购公告总额", formatMoney(data.lastMonthPurchaseAmount), true, "gold"],
-        ["上月成交公告总额", formatMoney(data.lastMonthDealAmount), true, "coral"],
-        ["今日发布", String(data.todayCount ?? 0), false, "teal"],
-        ["近 7 日", String(data.weekCount ?? 0), false, "ink"],
-      ].forEach(([label, value, amount, tone]) => {
-        const card = document.createElement("div");
-        card.className = "metric tone-" + tone + (amount ? " amount" : "");
-        card.innerHTML = "<span></span><strong></strong>";
-        card.querySelector("span").textContent = label;
-        card.querySelector("strong").textContent = value;
-        metrics.appendChild(card);
-      });
-      panel.appendChild(metrics);
+    function moneyLabel(value) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return "0.00";
+      if (Math.abs(amount) >= 10000) return (amount / 10000).toFixed(2) + "万";
+      return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
 
+    function fillTagStats(root, data) {
+      const tag = data.tagStats || {};
+      root.querySelector("[data-tag=noticeCount]").textContent = String(tag.noticeCount ?? 0);
+      root.querySelector("[data-tag=dealAmount]").textContent = moneyLabel(tag.dealAmount);
+      root.querySelector("[data-tag=buyerCount]").textContent = String(tag.buyerCount ?? 0);
+      root.querySelector("[data-tag=goodsCount]").textContent = String(tag.goodsCount ?? 0);
+
+      const dealBody = root.querySelector("[data-tag=dealBody]");
+      dealBody.innerHTML = "";
+      (tag.byDealKind || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        if (!tagQuery.dealKind) tr.className = "clickable";
+        tr.innerHTML = "<td></td><td></td><td></td>";
+        tr.children[0].textContent = row.dealKind;
+        tr.children[1].textContent = String(row.count);
+        tr.children[2].textContent = moneyLabel(row.amount);
+        if (!tagQuery.dealKind) {
+          tr.onclick = () => {
+            tagQuery.dealKind = row.dealKind;
+            openTab("stats");
+          };
+        }
+        dealBody.appendChild(tr);
+      });
+      if (!(tag.byDealKind || []).length) dealBody.innerHTML = '<tr><td colspan="3">暂无成交标签数据</td></tr>';
+
+      const regionBody = root.querySelector("[data-tag=regionBody]");
+      regionBody.innerHTML = "";
+      (tag.byProvince || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td></td><td></td><td></td>";
+        tr.children[0].textContent = row.province;
+        tr.children[1].textContent = String(row.count);
+        tr.children[2].textContent = moneyLabel(row.amount);
+        regionBody.appendChild(tr);
+      });
+      if (!(tag.byProvince || []).length) regionBody.innerHTML = '<tr><td colspan="3">暂无区域数据</td></tr>';
+
+      const buyerBody = root.querySelector("[data-tag=buyerBody]");
+      buyerBody.innerHTML = "";
+      (tag.byBuyer || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td></td><td></td><td></td>";
+        tr.children[0].textContent = row.buyerName;
+        const sub = [row.orgType, row.nature].filter(Boolean).join(" · ");
+        if (sub) tr.children[0].innerHTML = "<strong></strong><div style='color:#74685a;font-size:12px'></div>";
+        if (sub) {
+          tr.children[0].querySelector("strong").textContent = row.buyerName;
+          tr.children[0].querySelector("div").textContent = sub;
+        }
+        tr.children[1].textContent = String(row.count);
+        tr.children[2].textContent = moneyLabel(row.amount);
+        buyerBody.appendChild(tr);
+      });
+      if (!(tag.byBuyer || []).length) buyerBody.innerHTML = '<tr><td colspan="3">暂无采购人数据</td></tr>';
+    }
+
+    async function renderStats(panel) {
+      if (tagQuery.period === "custom" && (!tagQuery.startDate || !tagQuery.endDate)) {
+        panel.innerHTML = '<p class="empty">请选择自定义起止日期（yyyy-mm-dd）</p>';
+        return;
+      }
+      const data = (await api("/api/portal/stats/?" + statsQueryParams().toString())).data;
+      panel.innerHTML = "";
+      mountStatsFilters(panel, {
+        showTagFilters: true,
+        dealKinds: data.dealKinds,
+        onChange: () => openTab("stats"),
+      });
+      appendMetricRow(panel, overviewMetricRows(data));
+
+      const includeSiteChart = (data.bySite || []).length > 1;
       const grid = document.createElement("div");
       grid.className = "charts";
-      const siteCard = document.createElement("section");
-      siteCard.className = "card";
-      siteCard.innerHTML = '<h3>平台分布</h3><div class="chart" id="chart-site"></div>';
+      if (includeSiteChart) {
+        const siteCard = document.createElement("section");
+        siteCard.className = "card";
+        siteCard.innerHTML = '<h3>平台分布</h3><div class="chart" id="chart-site"></div>';
+        grid.appendChild(siteCard);
+      }
       const kindCard = document.createElement("section");
       kindCard.className = "card";
       kindCard.innerHTML = '<h3>公告类型</h3><div class="chart" id="chart-kind"></div>';
-      grid.appendChild(siteCard);
       grid.appendChild(kindCard);
       panel.appendChild(grid);
 
@@ -351,16 +764,36 @@
       lower.appendChild(trendCard);
       panel.appendChild(lower);
 
+      const tagBlock = document.createElement("section");
+      tagBlock.className = "card tag-stats";
+      tagBlock.innerHTML =
+        "<h3>成交标签分析</h3>" +
+        '<div class="tag-metrics">' +
+        '<div class="metric tone-jade"><span>结果公告数</span><strong data-tag="noticeCount">—</strong></div>' +
+        '<div class="metric tone-gold amount"><span>成交金额</span><strong data-tag="dealAmount">—</strong></div>' +
+        '<div class="metric tone-teal"><span>采购人数</span><strong data-tag="buyerCount">—</strong></div>' +
+        '<div class="metric tone-ink"><span>商品行数</span><strong data-tag="goodsCount">—</strong></div>' +
+        "</div>" +
+        '<div class="tag-tables">' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按成交类型</h3><table class="tag-table"><thead><tr><th>类型</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="dealBody"></tbody></table></div>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按省份</h3><table class="tag-table"><thead><tr><th>省份</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="regionBody"></tbody></table></div>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按采购人</h3><table class="tag-table"><thead><tr><th>采购人</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="buyerBody"></tbody></table></div>' +
+        "</div>";
+      panel.appendChild(tagBlock);
+      fillTagStats(tagBlock, data);
+
       const axis = { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
       const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
-      mountChart(document.getElementById("chart-site"), {
-        color: ["#1f8a56"],
-        grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
-        tooltip: { trigger: "axis" },
-        xAxis: { type: "value", ...axis },
-        yAxis: { type: "category", data: (data.bySite || []).map((row) => row.label).reverse(), ...axis },
-        series: [{ type: "bar", barWidth: 14, data: (data.bySite || []).map((row) => row.count).reverse(), itemStyle: { borderRadius: [0, 6, 6, 0], color: bar } }],
-      });
+      if (includeSiteChart) {
+        mountChart(document.getElementById("chart-site"), {
+          color: ["#1f8a56"],
+          grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "value", ...axis },
+          yAxis: { type: "category", data: (data.bySite || []).map((row) => row.label).reverse(), ...axis },
+          series: [{ type: "bar", barWidth: 14, data: (data.bySite || []).map((row) => row.count).reverse(), itemStyle: { borderRadius: [0, 6, 6, 0], color: bar } }],
+        });
+      }
       mountChart(document.getElementById("chart-kind"), {
         color: ["#1f8a56", "#e0b15a", "#2a9d8f", "#e07a4c", "#3d6b8a", "#c45c6a", "#8d9a84"],
         tooltip: { trigger: "item" },
@@ -532,11 +965,14 @@
       const card = document.createElement("section");
       card.className = "card";
       const tags = (me.permissions || []).map((id) => PERMISSION_LABELS[id] || id);
-      card.innerHTML = '<dl class="profile"><dt>名称</dt><dd id="acc-name"></dd><dt>手机号</dt><dd id="acc-phone"></dd><dt>客户</dt><dd id="acc-customer"></dd><dt>状态</dt><dd id="acc-status"></dd><dt>权限</dt><dd><div class="tags" id="acc-tags"></div></dd></dl>';
+      const sites = (me.allowedSites || []).map((site) => site.label || site.id);
+      const siteText = me.siteScope === "limited" ? (sites.length ? sites.join("、") : "无平台") : "全部平台";
+      card.innerHTML = '<dl class="profile"><dt>名称</dt><dd id="acc-name"></dd><dt>手机号</dt><dd id="acc-phone"></dd><dt>客户</dt><dd id="acc-customer"></dd><dt>状态</dt><dd id="acc-status"></dd><dt>可查看平台</dt><dd id="acc-sites"></dd><dt>权限</dt><dd><div class="tags" id="acc-tags"></div></dd></dl>';
       card.querySelector("#acc-name").textContent = me.name || "—";
       card.querySelector("#acc-phone").textContent = me.phone || "—";
       card.querySelector("#acc-customer").textContent = me.customerName || "—";
       card.querySelector("#acc-status").textContent = me.status || "—";
+      card.querySelector("#acc-sites").textContent = siteText;
       const tagBox = card.querySelector("#acc-tags");
       if (!tags.length) tagBox.textContent = "未开通";
       tags.forEach((label) => {
@@ -571,12 +1007,20 @@
     dropdown.querySelector("[data-go=account]").onclick = () => openTab("account");
     document.getElementById("logout").onclick = async () => {
       await api("/api/portal/logout/", { method: "POST", body: "{}" }).catch(() => {});
-      location.reload();
+      disposeCharts();
+      showLogin();
     };
     document.addEventListener("click", () => { dropdown.hidden = true; });
     window.addEventListener("resize", () => charts.forEach((chart) => chart.resize()));
+    window.addEventListener("hashchange", () => {
+      if (!me) return;
+      const next = readSavedTab() || "home";
+      if (next !== tab) openTab(next);
+    });
 
-    api("/api/portal/me/").then((body) => showApp(body.data)).catch(() => {});
+    api("/api/portal/me/")
+      .then((body) => showApp(body.data))
+      .catch(() => showLogin());
   </script>
 </body>
 </html>

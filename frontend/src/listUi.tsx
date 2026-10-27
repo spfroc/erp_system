@@ -86,12 +86,16 @@ export function SearchField({
   placeholder,
   ariaLabel,
   className,
+  clearReveal = "always",
+  onSubmit,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   ariaLabel?: string;
   className?: string;
+  clearReveal?: "always" | "hover";
+  onSubmit?: () => void;
 }) {
   return (
     <div className={["project-search", className].filter(Boolean).join(" ")}>
@@ -99,11 +103,22 @@ export function SearchField({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && onSubmit) {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
         placeholder={placeholder}
         aria-label={ariaLabel ?? placeholder}
       />
       {value ? (
-        <button type="button" className="search-clear" aria-label="清空搜索" onClick={() => onChange("")}>
+        <button
+          type="button"
+          className={`search-clear${clearReveal === "hover" ? " is-hover-reveal" : ""}`}
+          aria-label="清空搜索"
+          onClick={() => onChange("")}
+        >
           <X size={14} />
         </button>
       ) : null}

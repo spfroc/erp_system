@@ -157,3 +157,24 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
 }
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ROUTES = {
+    "apps.data_store.dev_ops_tasks.run_crawler_script": {"queue": "crawler"},
+}
+CELERY_BEAT_SCHEDULE = {
+    "tick-dev-ops-jobs": {
+        "task": "apps.data_store.dev_ops_tasks.tick_scheduled_jobs",
+        "schedule": 60.0,
+    },
+}
+NOTICE_CRAWLER_DIR = os.getenv("NOTICE_CRAWLER_DIR", str(BASE_DIR.parent / "notice_crawler"))
+
