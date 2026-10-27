@@ -246,6 +246,12 @@ def notice_result_stats(request):
             deal_kind=request.GET.get("deal_kind") or request.GET.get("dealKind") or "",
             start_date=start_date,
             end_date=end_date,
+            publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
+            publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
+            start_date_from=(request.GET.get("startDateFrom") or request.GET.get("start_date_from") or "").strip(),
+            start_date_to=(request.GET.get("startDateTo") or request.GET.get("start_date_to") or "").strip(),
+            end_date_from=(request.GET.get("endDateFrom") or request.GET.get("end_date_from") or "").strip(),
+            end_date_to=(request.GET.get("endDateTo") or request.GET.get("end_date_to") or "").strip(),
             notice_kinds=notice_kinds,
         )
     )

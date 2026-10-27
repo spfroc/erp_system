@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Search, X } from "lucide-react";
 import { backendApiUrl } from "./apiConfig";
+import { DateTimeField } from "./DateTimeField";
 import { AuthExpiredError } from "./db";
 import { CopyableLine, SearchField } from "./listUi";
 import { NoticeKindMultiSelect, noticeKindOptions } from "./noticeKindMultiSelect";
@@ -21,21 +23,34 @@ type Stats = {
   detail?: string;
 };
 
+type DateFilters = {
+  publishDateFrom: string;
+  publishDateTo: string;
+  startDateFrom: string;
+  startDateTo: string;
+  endDateFrom: string;
+  endDateTo: string;
+};
+
+const EMPTY_DATES: DateFilters = {
+  publishDateFrom: "",
+  publishDateTo: "",
+  startDateFrom: "",
+  startDateTo: "",
+  endDateFrom: "",
+  endDateTo: "",
+};
+
 const PERIODS = [
+  { id: "today", label: "今日" },
   { id: "this_week", label: "本周" },
   { id: "this_month", label: "当月" },
   { id: "last_month", label: "上月" },
+  { id: "this_year", label: "本年" },
   { id: "custom", label: "自定义" },
 ];
 
 const DEAL_KIND_FILTERS = ["全部", "商品", "服务", "工程", "未识别"];
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function moneyLabel(value: string) {
   const amount = Number(value);
@@ -44,10 +59,44 @@ function moneyLabel(value: string) {
   return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function StatsClearable({
+  value,
+  onClear,
+  clearLabel,
+  children,
+}: {
+  value: string;
+  onClear: () => void;
+  clearLabel: string;
+  children: ReactNode;
+}) {
+  const hasValue = Boolean(value);
+  return (
+    <div className={`notice-clearable${hasValue ? " has-value" : ""}`}>
+      {children}
+      {hasValue ? (
+        <button
+          type="button"
+          className="notice-field-clear"
+          aria-label={clearLabel}
+          title={clearLabel}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClear();
+          }}
+        >
+          <X size={14} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success" | "error"; message: string }) => void }) {
   const [period, setPeriod] = useState("this_month");
-  const [customStart, setCustomStart] = useState(() => formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
-  const [customEnd, setCustomEnd] = useState(() => formatLocalDate(new Date()));
+  const [draftDates, setDraftDates] = useState<DateFilters>(EMPTY_DATES);
+  const [appliedDates, setAppliedDates] = useState<DateFilters>(EMPTY_DATES);
   const [province, setProvince] = useState("");
   const [buyer, setBuyer] = useState("");
   const [dealKind, setDealKind] = useState("全部");
@@ -57,6 +106,7 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
   const [queryBuyer, setQueryBuyer] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
   const [chartProvince, setChartProvince] = useState("");
+  const [queryNonce, setQueryNonce] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -68,15 +118,34 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
 
   useEffect(() => {
     setChartProvince("");
-  }, [period, customStart, customEnd, queryProvince, queryBuyer, dealKind, noticeKinds]);
+  }, [period, appliedDates, queryProvince, queryBuyer, dealKind, noticeKinds, queryNonce]);
 
   useEffect(() => {
-    if (period === "custom" && (!customStart || !customEnd)) return;
-    const params = new URLSearchParams({ period });
-    if (period === "custom") {
-      params.set("startDate", customStart);
-      params.set("endDate", customEnd);
+    const hasPublishRange = Boolean(appliedDates.publishDateFrom || appliedDates.publishDateTo);
+    const effectivePeriod = hasPublishRange ? "custom" : period;
+    if (effectivePeriod === "custom" && !appliedDates.publishDateFrom && !appliedDates.publishDateTo) {
+      // 选了自定义但还没点查询填日期时，等用户查询
+      if (!appliedDates.startDateFrom && !appliedDates.startDateTo && !appliedDates.endDateFrom && !appliedDates.endDateTo) {
+        return;
+      }
     }
+    const params = new URLSearchParams({ period: effectivePeriod });
+    if (appliedDates.publishDateFrom) params.set("publishDateFrom", appliedDates.publishDateFrom);
+    if (appliedDates.publishDateTo) params.set("publishDateTo", appliedDates.publishDateTo);
+    if (appliedDates.publishDateFrom && appliedDates.publishDateTo) {
+      params.set("startDate", appliedDates.publishDateFrom);
+      params.set("endDate", appliedDates.publishDateTo);
+    } else if (appliedDates.publishDateFrom) {
+      params.set("startDate", appliedDates.publishDateFrom);
+      params.set("endDate", appliedDates.publishDateFrom);
+    } else if (appliedDates.publishDateTo) {
+      params.set("startDate", appliedDates.publishDateTo);
+      params.set("endDate", appliedDates.publishDateTo);
+    }
+    if (appliedDates.startDateFrom) params.set("startDateFrom", appliedDates.startDateFrom);
+    if (appliedDates.startDateTo) params.set("startDateTo", appliedDates.startDateTo);
+    if (appliedDates.endDateFrom) params.set("endDateFrom", appliedDates.endDateFrom);
+    if (appliedDates.endDateTo) params.set("endDateTo", appliedDates.endDateTo);
     if (queryProvince) params.set("province", queryProvince);
     if (queryBuyer) params.set("buyer", queryBuyer);
     if (dealKind !== "全部") params.set("deal_kind", dealKind);
@@ -108,7 +177,46 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
     return () => {
       cancelled = true;
     };
-  }, [period, customStart, customEnd, queryProvince, queryBuyer, dealKind, noticeKinds, onNotice]);
+  }, [period, appliedDates, queryProvince, queryBuyer, dealKind, noticeKinds, onNotice, queryNonce]);
+
+  function patchDraft(patch: Partial<DateFilters>) {
+    setDraftDates((current) => ({ ...current, ...patch }));
+  }
+
+  function selectPeriod(next: string) {
+    setPeriod(next);
+    if (next !== "custom") {
+      setDraftDates((current) => ({
+        ...current,
+        publishDateFrom: "",
+        publishDateTo: "",
+      }));
+      setAppliedDates((current) => ({
+        ...current,
+        publishDateFrom: "",
+        publishDateTo: "",
+      }));
+    }
+  }
+
+  function runDateQuery() {
+    if (period === "custom" || draftDates.publishDateFrom || draftDates.publishDateTo) {
+      if (!draftDates.publishDateFrom && !draftDates.publishDateTo && period === "custom") {
+        onNotice({ type: "error", message: "自定义周期请填写发布日期起止（可只填一端）。" });
+        return;
+      }
+      setPeriod("custom");
+    }
+    setAppliedDates({ ...draftDates });
+    setQueryNonce((value) => value + 1);
+  }
+
+  function clearDateFilters() {
+    setDraftDates(EMPTY_DATES);
+    setAppliedDates(EMPTY_DATES);
+    setPeriod("this_month");
+    setQueryNonce((value) => value + 1);
+  }
 
   const provinces = stats?.byProvince || [];
   const dealKindRows = stats?.byDealKind || [];
@@ -135,23 +243,109 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
         <div className="page-toolbar">
           <div className="segmented cashflow-period-row" role="tablist" aria-label="统计周期">
             {PERIODS.map((item) => (
-              <button key={item.id} type="button" className={period === item.id ? "active" : ""} onClick={() => setPeriod(item.id)}>
+              <button key={item.id} type="button" className={period === item.id ? "active" : ""} onClick={() => selectPeriod(item.id)}>
                 {item.label}
               </button>
             ))}
-            {period === "custom" && (
-              <div className="cashflow-custom-range notice-stats-custom-range">
-                <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} aria-label="开始日期" />
-                <span>至</span>
-                <input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} aria-label="结束日期" />
-              </div>
-            )}
           </div>
           <div className="page-toolbar-actions notice-stats-filters">
             <SearchField value={province} onChange={setProvince} placeholder="筛选地区，如山东省" />
             <SearchField value={buyer} onChange={setBuyer} placeholder="筛选采购人" />
           </div>
         </div>
+
+        <div className="notice-filters notice-stats-date-filters">
+          <div className="notice-filters-row notice-filters-dates">
+            <label className="orders-filter-field notice-date-range-field">
+              <span>发布日期</span>
+              <div className="notice-date-range-inputs">
+                <StatsClearable value={draftDates.publishDateFrom} clearLabel="清空发布开始日期" onClear={() => patchDraft({ publishDateFrom: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.publishDateFrom}
+                    onChange={(value) => patchDraft({ publishDateFrom: value })}
+                    placeholder="开始日期"
+                    ariaLabel="发布开始日期"
+                  />
+                </StatsClearable>
+                <span className="notice-date-range-sep">至</span>
+                <StatsClearable value={draftDates.publishDateTo} clearLabel="清空发布结束日期" onClear={() => patchDraft({ publishDateTo: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.publishDateTo}
+                    onChange={(value) => patchDraft({ publishDateTo: value })}
+                    placeholder="结束日期"
+                    ariaLabel="发布结束日期"
+                  />
+                </StatsClearable>
+              </div>
+            </label>
+            <label className="orders-filter-field notice-date-range-field">
+              <span>开始日期</span>
+              <div className="notice-date-range-inputs">
+                <StatsClearable value={draftDates.startDateFrom} clearLabel="清空开始时间起" onClear={() => patchDraft({ startDateFrom: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.startDateFrom}
+                    onChange={(value) => patchDraft({ startDateFrom: value })}
+                    placeholder="开始日期"
+                    ariaLabel="开始时间起"
+                  />
+                </StatsClearable>
+                <span className="notice-date-range-sep">至</span>
+                <StatsClearable value={draftDates.startDateTo} clearLabel="清空开始时间止" onClear={() => patchDraft({ startDateTo: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.startDateTo}
+                    onChange={(value) => patchDraft({ startDateTo: value })}
+                    placeholder="结束日期"
+                    ariaLabel="开始时间止"
+                  />
+                </StatsClearable>
+              </div>
+            </label>
+            <label className="orders-filter-field notice-date-range-field">
+              <span>结束日期</span>
+              <div className="notice-date-range-inputs">
+                <StatsClearable value={draftDates.endDateFrom} clearLabel="清空结束时间起" onClear={() => patchDraft({ endDateFrom: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.endDateFrom}
+                    onChange={(value) => patchDraft({ endDateFrom: value })}
+                    placeholder="开始日期"
+                    ariaLabel="结束时间起"
+                  />
+                </StatsClearable>
+                <span className="notice-date-range-sep">至</span>
+                <StatsClearable value={draftDates.endDateTo} clearLabel="清空结束时间止" onClear={() => patchDraft({ endDateTo: "" })}>
+                  <DateTimeField
+                    mode="date"
+                    format="iso"
+                    value={draftDates.endDateTo}
+                    onChange={(value) => patchDraft({ endDateTo: value })}
+                    placeholder="结束日期"
+                    ariaLabel="结束时间止"
+                  />
+                </StatsClearable>
+              </div>
+            </label>
+          </div>
+          <div className="notice-filters-actions">
+            <button className="ghost" type="button" onClick={clearDateFilters}>
+              清除
+            </button>
+            <button className="primary" type="button" onClick={runDateQuery}>
+              <Search size={15} />
+              查询
+            </button>
+          </div>
+        </div>
+
         <NoticeKindMultiSelect options={kindOptions} value={noticeKinds} onChange={setNoticeKinds} />
         <div className="segmented" role="tablist" aria-label="成交类型">
           {DEAL_KIND_FILTERS.map((item) => (

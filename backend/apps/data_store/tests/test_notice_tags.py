@@ -171,6 +171,12 @@ class NoticeTagRuleTests(SimpleTestCase):
         week_start, week_end = period_bounds("this_week", now)
         self.assertEqual(week_start.date().isoformat(), "2026-10-26")
         self.assertEqual(week_end.date().isoformat(), "2026-11-02")
+        today_start, today_end = period_bounds("today", now)
+        self.assertEqual(today_start.date().isoformat(), "2026-10-26")
+        self.assertEqual(today_end.date().isoformat(), "2026-10-27")
+        year_start, year_end = period_bounds("this_year", now)
+        self.assertEqual(year_start.date().isoformat(), "2026-01-01")
+        self.assertEqual(year_end.date().isoformat(), "2027-01-01")
         custom_start, custom_end = period_bounds(
             "custom",
             now,

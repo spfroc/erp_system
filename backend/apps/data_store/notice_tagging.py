@@ -585,6 +585,8 @@ def period_bounds(
             end = start_of_day.replace(year=end_day.year, month=end_day.month, day=end_day.day)
             return start, end
         period = "this_month"
+    if period == "today":
+        return start_of_day, start_of_day + timedelta(days=1)
     if period == "this_week":
         start = start_of_day - timedelta(days=start_of_day.weekday())
         return start, start + timedelta(days=7)
@@ -592,11 +594,14 @@ def period_bounds(
     if period == "last_month":
         previous = month_start - timedelta(days=1)
         return previous.replace(day=1), month_start
+    if period == "this_year":
+        year_start = start_of_day.replace(month=1, day=1)
+        return year_start, year_start.replace(year=year_start.year + 1)
     next_month = (month_start + timedelta(days=32)).replace(day=1)
     return month_start, next_month
 
 
-STAT_PERIODS = frozenset({"this_week", "this_month", "last_month", "custom"})
+STAT_PERIODS = frozenset({"today", "this_week", "this_month", "last_month", "this_year", "custom"})
 
 
 def normalize_stats_period(period: str, start_date: str = "", end_date: str = "") -> str:
@@ -608,6 +613,26 @@ def normalize_stats_period(period: str, start_date: str = "", end_date: str = ""
     if period not in STAT_PERIODS:
         return "this_month"
     return period
+
+
+def _inclusive_day_bounds(start_date: str = "", end_date: str = "") -> tuple[datetime, datetime] | None:
+    """把 YYYY-MM-DD 起止转成本地时区 [start, end) ；只填一端时另一端放宽。"""
+    start_day = _parse_ymd(start_date)
+    end_day = _parse_ymd(end_date)
+    if not start_day and not end_day:
+        return None
+    current = timezone.localtime(timezone.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    if start_day and end_day and end_day < start_day:
+        start_day, end_day = end_day, start_day
+    if start_day:
+        start = current.replace(year=start_day.year, month=start_day.month, day=start_day.day)
+    else:
+        start = current.replace(year=1970, month=1, day=1)
+    if end_day:
+        end = current.replace(year=end_day.year, month=end_day.month, day=end_day.day) + timedelta(days=1)
+    else:
+        end = current + timedelta(days=36600)
+    return start, end
 
 
 def _name_key(name: str) -> str:
@@ -981,11 +1006,34 @@ def build_result_stats(
     site_ids: list[str] | None = None,
     start_date: str = "",
     end_date: str = "",
+    publish_date_from: str = "",
+    publish_date_to: str = "",
+    start_date_from: str = "",
+    start_date_to: str = "",
+    end_date_from: str = "",
+    end_date_to: str = "",
     notice_kinds: list[str] | None = None,
 ) -> dict:
+    # 发布日期起止优先于周期预设
+    publish_from = (publish_date_from or start_date or "").strip()
+    publish_to = (publish_date_to or end_date or "").strip()
+    if publish_from or publish_to:
+        period = "custom"
+        if publish_from and publish_to:
+            start_date, end_date = publish_from, publish_to
+        elif publish_from:
+            start_date = end_date = publish_from
+        else:
+            start_date = end_date = publish_to
     period = normalize_stats_period(period, start_date, end_date)
     start, end = period_bounds(period, start_date=start_date, end_date=end_date)
     parsed_qs = _stats_parsed_queryset(notice_kinds=notice_kinds).filter(publish_time__gte=start, publish_time__lt=end)
+    start_bounds = _inclusive_day_bounds(start_date_from, start_date_to)
+    if start_bounds:
+        parsed_qs = parsed_qs.filter(start_time__gte=start_bounds[0], start_time__lt=start_bounds[1])
+    end_bounds = _inclusive_day_bounds(end_date_from, end_date_to)
+    if end_bounds:
+        parsed_qs = parsed_qs.filter(end_time__gte=end_bounds[0], end_time__lt=end_bounds[1])
     if site_ids is not None:
         if not site_ids:
             return {

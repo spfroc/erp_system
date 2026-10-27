@@ -2326,14 +2326,16 @@ nav button:hover {
   margin-top: 16px;
 }
 
-.notice-stats-custom-range input[type="date"] {
-  min-width: 140px;
-  padding: 7px 10px;
-  border: 1px solid var(--line, #eadfce);
-  border-radius: 10px;
-  background: #fff;
-  color: inherit;
-  font: inherit;
+.notice-stats-date-filters {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid #e5ebe6;
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.notice-stats-date-filters .notice-filters-actions {
+  margin-top: 10px;
 }
 
 .notice-stats-filters {
