@@ -313,12 +313,16 @@ LIST_INDEXES: tuple[tuple[str, str, str], ...] = (
     ("notice_raw", "idx_raw_site_notice_type", "site_id, notice_type"),
     ("notice_raw", "idx_raw_region", "region_name"),
     ("notice_raw", "idx_raw_parse_site", "parse_status, site_id, id"),
+    ("notice_raw", "idx_raw_publish_id", "publish_time, id"),
     ("notice_parsed", "idx_parsed_site_kind", "site_id, notice_kind"),
     ("notice_parsed", "idx_parsed_region", "region_name"),
     ("notice_parsed", "idx_parsed_project_name", "project_name(191)"),
     ("notice_parsed", "idx_parsed_end_time", "end_time"),
     ("notice_parsed", "idx_parsed_start_time", "start_time"),
     ("notice_parsed", "idx_parsed_site_project", "site_id, project_code"),
+    ("notice_parsed", "idx_parsed_publish_time", "publish_time"),
+    ("notice_parsed", "idx_parsed_publish_raw", "publish_time, notice_raw_id"),
+    ("notice_goods", "idx_goods_raw_product", "notice_raw_id, product_name(191)"),
 )
 
 
@@ -332,7 +336,7 @@ def ensure_list_indexes(*, dry_run: bool = False) -> list[str]:
                 text(
                     "SELECT TABLE_NAME, INDEX_NAME FROM information_schema.STATISTICS "
                     "WHERE TABLE_SCHEMA = DATABASE() "
-                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed')"
+                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed', 'notice_goods')"
                 )
             )
         }
@@ -342,7 +346,7 @@ def ensure_list_indexes(*, dry_run: bool = False) -> list[str]:
                 text(
                     "SELECT TABLE_NAME FROM information_schema.TABLES "
                     "WHERE TABLE_SCHEMA = DATABASE() "
-                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed')"
+                    "AND TABLE_NAME IN ('notice_raw', 'notice_parsed', 'notice_goods')"
                 )
             )
         }

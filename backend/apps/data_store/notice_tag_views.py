@@ -233,7 +233,7 @@ def notice_result_stats(request):
         return error
     start_date = (request.GET.get("startDate") or request.GET.get("start_date") or "").strip()
     end_date = (request.GET.get("endDate") or request.GET.get("end_date") or "").strip()
-    period = request.GET.get("period") or "this_month"
+    period = request.GET.get("period") or "last_30_days"
     notice_kinds = _parse_notice_kinds(
         request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "",
         request.GET.get("noticeKind") or "",

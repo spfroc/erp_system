@@ -1129,12 +1129,13 @@ def _range_bound_strings(from_day: date | None, to_day: date | None) -> tuple[st
 
 
 def _parsed_time_range_q(field: str, lo: str | None, hi: str | None) -> Q:
+    """用 Exists 关联 parsed 时间字段，避免 id__in 物化大结果集。"""
     filters: dict[str, str] = {}
     if lo:
         filters[f"{field}__gte"] = lo
     if hi:
         filters[f"{field}__lt"] = hi
-    return Q(id__in=NoticeParsed.objects.filter(**filters).values("notice_raw_id"))
+    return Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), **filters)))
 
 
 def _notice_day_filter_q(
@@ -1158,7 +1159,10 @@ def _notice_day_filter_q(
             raw_filters["publish_time__gte"] = publish_lo
         if publish_hi:
             raw_filters["publish_time__lt"] = publish_hi
-        q &= Q(**raw_filters) | _parsed_time_range_q("publish_time", publish_lo, publish_hi)
+        # raw 有发布时间优先走索引；parsed 兜底用 Exists（无 raw 时间的历史行）
+        q &= Q(**raw_filters) | (
+            Q(publish_time__isnull=True) & _parsed_time_range_q("publish_time", publish_lo, publish_hi)
+        )
 
     start_lo, start_hi = _range_bound_strings(_parse_filter_ymd(start_from), _parse_filter_ymd(start_to))
     if start_lo or start_hi:
@@ -1186,24 +1190,26 @@ def _notice_field_filter_q(
     applied = False
     if project_code:
         applied = True
-        q &= Q(
-            id__in=NoticeParsed.objects.filter(
-                Q(project_code__icontains=project_code) | Q(notice_key__icontains=project_code)
-            ).values("notice_raw_id")
-        ) | Q(notice_key__icontains=project_code)
+        q &= Q(notice_key__icontains=project_code) | Q(
+            Exists(
+                NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                    Q(project_code__icontains=project_code) | Q(notice_key__icontains=project_code)
+                )
+            )
+        )
     if project_name:
         applied = True
-        q &= Q(
-            id__in=NoticeParsed.objects.filter(
-                Q(project_name__icontains=project_name) | Q(notice_title__icontains=project_name)
-            ).values("notice_raw_id")
-        ) | Q(title__icontains=project_name)
+        q &= Q(title__icontains=project_name) | Q(
+            Exists(
+                NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                    Q(project_name__icontains=project_name) | Q(notice_title__icontains=project_name)
+                )
+            )
+        )
     if buyer_name:
         applied = True
         q &= Q(
-            id__in=NoticeParsed.objects.filter(buyer_name__icontains=buyer_name).values(
-                "notice_raw_id"
-            )
+            Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), buyer_name__icontains=buyer_name))
         )
     if supplier_name:
         applied = True
@@ -1247,39 +1253,38 @@ def _progress_filter_q(progress_target: str, now=None) -> Q:
         if codes:
             closed_type_q |= Q(site_id=sid, notice_type__in=codes)
 
-    closed_kind_ids = NoticeParsed.objects.filter(notice_kind__in=CLOSED_NOTICE_KINDS).values(
-        "notice_raw_id"
+    closed_q = closed_type_q | Q(
+        Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), notice_kind__in=CLOSED_NOTICE_KINDS))
     )
-    closed_q = closed_type_q | Q(id__in=closed_kind_ids)
 
-    direct_ids = NoticeParsed.objects.filter(
-        Q(procurement_mode__icontains="直购") | Q(procurement_mode__icontains="直接采购")
-    ).values("notice_raw_id")
-    direct_q = Q(id__in=direct_ids)
+    direct_q = Q(
+        Exists(
+            NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                Q(procurement_mode__icontains="直购") | Q(procurement_mode__icontains="直接采购")
+            )
+        )
+    )
 
     # 墙钟字符串直接比较，避免 USE_TZ 把上海时间当 UTC 偏移
-    ended_by_time = NoticeParsed.objects.filter(end_time__lt=wall).values("notice_raw_id")
-    upcoming_ids = NoticeParsed.objects.filter(start_time__gt=wall).values("notice_raw_id")
-    ongoing_ids = (
-        NoticeParsed.objects.filter(end_time__gte=wall)
-        .filter(Q(start_time__isnull=True) | Q(start_time__lte=wall))
-        .exclude(notice_kind__in=CLOSED_NOTICE_KINDS)
-        .exclude(Q(procurement_mode__icontains="直购") | Q(procurement_mode__icontains="直接采购"))
-        .values("notice_raw_id")
+    ended_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__lt=wall)))
+    upcoming_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), start_time__gt=wall)))
+    ongoing_q = Q(
+        Exists(
+            NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__gte=wall)
+            .filter(Q(start_time__isnull=True) | Q(start_time__lte=wall))
+            .exclude(notice_kind__in=CLOSED_NOTICE_KINDS)
+            .exclude(Q(procurement_mode__icontains="直购") | Q(procurement_mode__icontains="直接采购"))
+        )
     )
 
     if progress_target == "ended":
-        return closed_q | Q(id__in=ended_by_time)
+        return closed_q | ended_q
     if progress_target == "upcoming":
-        return Q(id__in=upcoming_ids) & ~closed_q & ~Q(id__in=ended_by_time)
+        return upcoming_q & ~closed_q & ~ended_q
     if progress_target == "ongoing":
-        return Q(id__in=ongoing_ids) & ~closed_type_q & ~direct_q
+        return ongoing_q & ~closed_type_q & ~direct_q
     if progress_target == "unknown":
-        return ~(
-            (closed_q | Q(id__in=ended_by_time))
-            | (Q(id__in=upcoming_ids) & ~closed_q & ~Q(id__in=ended_by_time))
-            | (Q(id__in=ongoing_ids) & ~closed_type_q & ~direct_q)
-        )
+        return ~((closed_q | ended_q) | (upcoming_q & ~closed_q & ~ended_q) | (ongoing_q & ~closed_type_q & ~direct_q))
     return Q()
 
 
@@ -1421,13 +1426,15 @@ def notice_list(request):
                 | Q(notice_key__icontains=search)
                 | Q(region_name__icontains=search)
                 | Q(
-                    id__in=NoticeParsed.objects.filter(
-                        Q(project_code__icontains=search)
-                        | Q(project_name__icontains=search)
-                        | Q(buyer_name__icontains=search)
-                        | Q(deal_supplier__icontains=search)
-                        | Q(notice_title__icontains=search)
-                    ).values("notice_raw_id")
+                    Exists(
+                        NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                            Q(project_code__icontains=search)
+                            | Q(project_name__icontains=search)
+                            | Q(buyer_name__icontains=search)
+                            | Q(deal_supplier__icontains=search)
+                            | Q(notice_title__icontains=search)
+                        )
+                    )
                 )
             )
         if notice_kinds:

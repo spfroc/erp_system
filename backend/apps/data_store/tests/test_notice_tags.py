@@ -186,6 +186,28 @@ class NoticeTagRuleTests(SimpleTestCase):
         self.assertEqual(custom_start.date().isoformat(), "2026-10-01")
         self.assertEqual(custom_end.date().isoformat(), "2026-10-28")
 
+    def test_inclusive_day_bounds_open_ended(self):
+        from apps.data_store.notice_tagging import STATS_MAX_SPAN_DAYS, _inclusive_day_bounds
+
+        only_start = _inclusive_day_bounds("2026-09-01", "")
+        self.assertIsNotNone(only_start)
+        self.assertEqual(only_start[0].date().isoformat(), "2026-09-01")
+        # 只填开始：截止到今天（或最多 1 年）
+        self.assertLessEqual((only_start[1].date() - only_start[0].date()).days, STATS_MAX_SPAN_DAYS)
+        only_end = _inclusive_day_bounds("", "2026-10-27")
+        self.assertIsNotNone(only_end)
+        self.assertEqual(only_end[1].date().isoformat(), "2026-10-28")
+        self.assertEqual((only_end[1].date() - only_end[0].date()).days, STATS_MAX_SPAN_DAYS)
+        both = _inclusive_day_bounds("2026-09-01", "2026-10-27")
+        self.assertEqual(both[0].date().isoformat(), "2026-09-01")
+        self.assertEqual(both[1].date().isoformat(), "2026-10-28")
+
+    def test_period_bounds_last_30_days(self):
+        now = datetime(2026, 10, 27, 12, 0, tzinfo=SHANGHAI)
+        start, end = period_bounds("last_30_days", now)
+        self.assertEqual(start.date().isoformat(), "2026-09-28")
+        self.assertEqual(end.date().isoformat(), "2026-10-28")
+
     def test_classify_deal_kind_from_products_and_title(self):
         # 凡有商品明细 → 商品（即使标题像服务）
         goods = classify_deal_kind(

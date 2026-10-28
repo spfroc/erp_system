@@ -587,6 +587,8 @@ def period_bounds(
         period = "this_month"
     if period == "today":
         return start_of_day, start_of_day + timedelta(days=1)
+    if period == "last_30_days":
+        return start_of_day - timedelta(days=29), start_of_day + timedelta(days=1)
     if period == "this_week":
         start = start_of_day - timedelta(days=start_of_day.weekday())
         return start, start + timedelta(days=7)
@@ -601,22 +603,23 @@ def period_bounds(
     return month_start, next_month
 
 
-STAT_PERIODS = frozenset({"today", "this_week", "this_month", "last_month", "this_year", "custom"})
+STAT_PERIODS = frozenset({"today", "last_30_days", "this_week", "this_month", "last_month", "this_year", "custom"})
+STATS_MAX_SPAN_DAYS = 366
 
 
 def normalize_stats_period(period: str, start_date: str = "", end_date: str = "") -> str:
-    period = (period or "").strip() or "this_month"
+    period = (period or "").strip() or "last_30_days"
     if period == "custom" or (_parse_ymd(start_date) and _parse_ymd(end_date)):
         if _parse_ymd(start_date) and _parse_ymd(end_date):
             return "custom"
-        return "this_month"
+        return "last_30_days"
     if period not in STAT_PERIODS:
-        return "this_month"
+        return "last_30_days"
     return period
 
 
 def _inclusive_day_bounds(start_date: str = "", end_date: str = "") -> tuple[datetime, datetime] | None:
-    """把 YYYY-MM-DD 起止转成本地时区 [start, end) ；只填一端时另一端放宽。"""
+    """把 YYYY-MM-DD 起止转成本地时区 [start, end)；只填一端时另一端放宽，总跨度最多 1 年。"""
     start_day = _parse_ymd(start_date)
     end_day = _parse_ymd(end_date)
     if not start_day and not end_day:
@@ -627,12 +630,29 @@ def _inclusive_day_bounds(start_date: str = "", end_date: str = "") -> tuple[dat
     if start_day:
         start = current.replace(year=start_day.year, month=start_day.month, day=start_day.day)
     else:
-        start = current.replace(year=1970, month=1, day=1)
+        assert end_day is not None
+        end_inclusive = current.replace(year=end_day.year, month=end_day.month, day=end_day.day)
+        start = end_inclusive - timedelta(days=STATS_MAX_SPAN_DAYS - 1)
     if end_day:
         end = current.replace(year=end_day.year, month=end_day.month, day=end_day.day) + timedelta(days=1)
     else:
-        end = current + timedelta(days=36600)
+        # 只填开始：默认到今天，且不超过 1 年跨度
+        end = min(current + timedelta(days=1), start + timedelta(days=STATS_MAX_SPAN_DAYS))
+    if (end.date() - start.date()).days > STATS_MAX_SPAN_DAYS:
+        end = start + timedelta(days=STATS_MAX_SPAN_DAYS)
     return start, end
+
+
+def _clamp_stats_window(start: datetime, end: datetime) -> tuple[datetime, datetime, str]:
+    """强制统计窗口不超过 1 年；返回 (start, end, detail)。"""
+    detail = ""
+    if end <= start:
+        end = start + timedelta(days=1)
+    span_days = (end.date() - start.date()).days
+    if span_days > STATS_MAX_SPAN_DAYS:
+        end = start + timedelta(days=STATS_MAX_SPAN_DAYS)
+        detail = f"统计跨度最长 {STATS_MAX_SPAN_DAYS} 天，已自动截断。"
+    return start, end, detail
 
 
 def _name_key(name: str) -> str:
@@ -1014,19 +1034,28 @@ def build_result_stats(
     end_date_to: str = "",
     notice_kinds: list[str] | None = None,
 ) -> dict:
-    # 发布日期起止优先于周期预设
-    publish_from = (publish_date_from or start_date or "").strip()
-    publish_to = (publish_date_to or end_date or "").strip()
-    if publish_from or publish_to:
+    # 发布日期：可只填一端（起=从该日起；止=截至该日）；两端都填才是闭区间
+    publish_from = (publish_date_from or "").strip()
+    publish_to = (publish_date_to or "").strip()
+    # 兼容旧参数 startDate/endDate（两端齐全时视为发布区间）
+    legacy_start = (start_date or "").strip()
+    legacy_end = (end_date or "").strip()
+    if not publish_from and not publish_to and legacy_start and legacy_end:
+        publish_from, publish_to = legacy_start, legacy_end
+    span_detail = ""
+    publish_bounds = _inclusive_day_bounds(publish_from, publish_to)
+    if publish_bounds:
         period = "custom"
-        if publish_from and publish_to:
-            start_date, end_date = publish_from, publish_to
-        elif publish_from:
-            start_date = end_date = publish_from
-        else:
-            start_date = end_date = publish_to
-    period = normalize_stats_period(period, start_date, end_date)
-    start, end = period_bounds(period, start_date=start_date, end_date=end_date)
+        start, end = publish_bounds
+    else:
+        period = normalize_stats_period(period, start_date, end_date)
+        start, end = period_bounds(period, start_date=start_date, end_date=end_date)
+    start, end, span_detail = _clamp_stats_window(start, end)
+    province = province.strip()
+    buyer = buyer.strip()
+    deal_kind = deal_kind.strip()
+    if deal_kind and deal_kind not in DEAL_KINDS:
+        deal_kind = ""
     parsed_qs = _stats_parsed_queryset(notice_kinds=notice_kinds).filter(publish_time__gte=start, publish_time__lt=end)
     start_bounds = _inclusive_day_bounds(start_date_from, start_date_to)
     if start_bounds:
@@ -1052,30 +1081,46 @@ def build_result_stats(
                 "byRegion": [],
                 "byBuyer": [],
                 "noticeKinds": list(notice_kinds or []),
+                "detail": span_detail,
             }
         parsed_qs = parsed_qs.filter(notice_raw_id__in=NoticeRaw.objects.filter(site_id__in=site_ids).values("id"))
+    # 成交类型 / 采购人尽量下推 SQL，缩小拉回内存的行数
+    if deal_kind:
+        if deal_kind == DEAL_KIND_UNKNOWN:
+            parsed_qs = parsed_qs.filter(
+                Q(notice_raw_id__in=NoticeResultTag.objects.filter(Q(deal_kind="") | Q(deal_kind=DEAL_KIND_UNKNOWN)).values("notice_raw_id"))
+                | ~Q(notice_raw_id__in=NoticeResultTag.objects.values("notice_raw_id"))
+            )
+        else:
+            parsed_qs = parsed_qs.filter(
+                notice_raw_id__in=NoticeResultTag.objects.filter(deal_kind=deal_kind).values("notice_raw_id")
+            )
+    if buyer:
+        tagged_buyer_ids = NoticeResultTag.objects.filter(buyer_profile__buyer_name__icontains=buyer).values("notice_raw_id")
+        parsed_qs = parsed_qs.filter(Q(buyer_name__icontains=buyer) | Q(notice_raw_id__in=tagged_buyer_ids))
+    if province:
+        tagged_region_ids = NoticeResultTag.objects.filter(
+            Q(buyer_profile__province__icontains=province)
+            | Q(buyer_profile__city__icontains=province)
+            | Q(buyer_profile__district__icontains=province)
+        ).values("notice_raw_id")
+        parsed_qs = parsed_qs.filter(Q(region_name__icontains=province) | Q(notice_raw_id__in=tagged_region_ids))
+
     rows = list(
         parsed_qs.values(
             "notice_raw_id",
             "buyer_name",
             "region_name",
             "deal_amount",
-            "budget_amount",
-            "notice_title",
             "notice_kind",
-            "publish_time",
         )
     )
     raw_ids = [row["notice_raw_id"] for row in rows]
-    tags = {
-        tag.notice_raw_id: tag
-        for tag in NoticeResultTag.objects.select_related("buyer_profile").filter(notice_raw_id__in=raw_ids)
-    }
-    province = province.strip()
-    buyer = buyer.strip()
-    deal_kind = deal_kind.strip()
-    if deal_kind and deal_kind not in DEAL_KINDS:
-        deal_kind = ""
+    tags: dict[int, NoticeResultTag] = {}
+    for offset in range(0, len(raw_ids), 2000):
+        chunk = raw_ids[offset : offset + 2000]
+        for tag in NoticeResultTag.objects.select_related("buyer_profile").filter(notice_raw_id__in=chunk):
+            tags[tag.notice_raw_id] = tag
     kept = []
     for row in rows:
         tag = tags.get(row["notice_raw_id"])
@@ -1173,7 +1218,7 @@ def build_result_stats(
         )
 
     deal_kind_order = {kind: index for index, kind in enumerate(DEAL_KINDS)}
-    return {
+    result = {
         "period": period,
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -1184,6 +1229,7 @@ def build_result_stats(
         "buyerCount": len(buyers),
         "goodsCount": goods_count,
         "noticeKinds": [kind for kind in (notice_kinds or []) if kind],
+        "maxSpanDays": STATS_MAX_SPAN_DAYS,
         "byDealKind": [
             {"dealKind": item["dealKind"], "count": item["count"], "amount": money(item["amount"])}
             for item in sorted(
@@ -1206,6 +1252,9 @@ def build_result_stats(
             for item in sorted(by_buyer.values(), key=lambda item: item["amount"], reverse=True)[:30]
         ],
     }
+    if span_detail:
+        result["detail"] = span_detail
+    return result
 
 
 def safe_stats(**kwargs) -> dict:
@@ -1213,7 +1262,7 @@ def safe_stats(**kwargs) -> dict:
         return build_result_stats(**kwargs)
     except DatabaseError:
         return {
-            "period": kwargs.get("period") or "this_month",
+            "period": kwargs.get("period") or "last_30_days",
             "noticeCount": 0,
             "dealAmount": "0.00",
             "buyerCount": 0,

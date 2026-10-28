@@ -34,6 +34,15 @@ type NoticeQuery = {
   endDateTo: string;
 };
 
+function defaultPublishFrom() {
+  const date = new Date();
+  date.setDate(date.getDate() - 29);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const EMPTY_NOTICE_QUERY: NoticeQuery = {
   search: "",
   projectCode: "",
@@ -46,7 +55,8 @@ const EMPTY_NOTICE_QUERY: NoticeQuery = {
   regionName: "",
   parseStatus: "",
   progress: "",
-  publishDateFrom: "",
+  // 默认近 30 天，避免无日期条件扫全表
+  publishDateFrom: defaultPublishFrom(),
   publishDateTo: "",
   startDateFrom: "",
   startDateTo: "",

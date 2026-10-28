@@ -89,94 +89,101 @@ def crawl_sd_mall(
             dup = _DupStop(stop_dup)
             stop_category = False
             pbar = tqdm(desc=f"{MALL_SITE}/{label}", unit="page")
-            while True:
-                if max_pages and page > max_pages:
-                    break
-                data = client.list_notices(
-                    project_type=project_type,
-                    notice_type=notice_type,
-                    page_num=page,
-                    page_size=page_size,
-                    start_date=start_arg,
-                    end_date=end_arg,
-                )
-                items = data.get("data") or []
-                total = int(data.get("total") or 0)
-                if total_pages is None:
-                    total_pages = max(1, (total + page_size - 1) // page_size)
-                    pbar.total = min(total_pages, max_pages or total_pages)
+            try:
+                while True:
+                    if max_pages and page > max_pages:
+                        break
+                    try:
+                        data = client.list_notices(
+                            project_type=project_type,
+                            notice_type=notice_type,
+                            page_num=page,
+                            page_size=page_size,
+                            start_date=start_arg,
+                            end_date=end_arg,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        # 列表接口重试耗尽后跳过该类，避免整次全量任务中断
+                        tqdm.write(f"{MALL_SITE}/{label} 第 {page} 页列表失败，跳过该类：{exc}")
+                        break
+                    items = data.get("data") or []
+                    total = int(data.get("total") or 0)
+                    if total_pages is None:
+                        total_pages = max(1, (total + page_size - 1) // page_size)
+                        pbar.total = min(total_pages, max_pages or total_pages)
 
-                for item in items:
-                    notice_guid = str(item.get("noticeGuid") or "")
-                    if not notice_guid:
-                        continue
-                    published = _day_of(item.get("publishTime") or item.get("createDate"))
-                    if start_day and published and published < start_day:
-                        stop_category = True
-                        tqdm.write(f"{label} 早于 {start_day.isoformat()}，停止该类")
-                        break
-                    if end_day and published and published > end_day:
-                        continue
-                    if dup.hit(raw_exists(session, MALL_SITE, notice_guid)):
-                        stop_category = True
-                        tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
-                        break
-                    if dup.streak:
-                        continue
-                    row = upsert_raw(
-                        session,
-                        site_id=MALL_SITE,
-                        notice_key=notice_guid,
-                        auction_type=str(project_type),
-                        notice_type=str(notice_type),
-                        title=item.get("title"),
-                        region_name=normalize_region_name(MALL_SITE, item.get("regionName")),
-                        publish_time=parse_dt(item.get("publishTime") or item.get("createDate")),
-                        list_json=item,
-                        source_url=(
-                            "https://ggzyjyzx.shandong.gov.cn:8182/gpmall-main-web/basic/"
-                            f"noticeDetail?noticeGuid={notice_guid}"
-                        ),
-                        crawl_status="list_only",
-                    )
-                    if with_detail:
-                        try:
-                            detail = client.get_detail(notice_guid)
-                            html = detail.get("content") or ""
-                            text = html_to_text(html)
-                            raw = upsert_raw(
-                                session,
-                                site_id=MALL_SITE,
-                                notice_key=notice_guid,
-                                detail_json=detail,
-                                content_html=html,
-                                content_text=text,
-                                title=detail.get("title") or item.get("title"),
-                                crawl_status="detail_ok",
-                            )
+                    for item in items:
+                        notice_guid = str(item.get("noticeGuid") or "")
+                        if not notice_guid:
+                            continue
+                        published = _day_of(item.get("publishTime") or item.get("createDate"))
+                        if start_day and published and published < start_day:
+                            stop_category = True
+                            tqdm.write(f"{label} 早于 {start_day.isoformat()}，停止该类")
+                            break
+                        if end_day and published and published > end_day:
+                            continue
+                        if dup.hit(raw_exists(session, MALL_SITE, notice_guid)):
+                            stop_category = True
+                            tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
+                            break
+                        if dup.streak:
+                            continue
+                        row = upsert_raw(
+                            session,
+                            site_id=MALL_SITE,
+                            notice_key=notice_guid,
+                            auction_type=str(project_type),
+                            notice_type=str(notice_type),
+                            title=item.get("title"),
+                            region_name=normalize_region_name(MALL_SITE, item.get("regionName")),
+                            publish_time=parse_dt(item.get("publishTime") or item.get("createDate")),
+                            list_json=item,
+                            source_url=(
+                                "https://ggzyjyzx.shandong.gov.cn:8182/gpmall-main-web/basic/"
+                                f"noticeDetail?noticeGuid={notice_guid}"
+                            ),
+                            crawl_status="list_only",
+                        )
+                        if with_detail:
                             try:
-                                _parse_after_detail(session, raw, html=html, text=text)
+                                detail = client.get_detail(notice_guid)
+                                html = detail.get("content") or ""
+                                text = html_to_text(html)
+                                raw = upsert_raw(
+                                    session,
+                                    site_id=MALL_SITE,
+                                    notice_key=notice_guid,
+                                    detail_json=detail,
+                                    content_html=html,
+                                    content_text=text,
+                                    title=detail.get("title") or item.get("title"),
+                                    crawl_status="detail_ok",
+                                )
+                                try:
+                                    _parse_after_detail(session, raw, html=html, text=text)
+                                except Exception as exc:  # noqa: BLE001
+                                    raw.parse_status = "parse_fail"
+                                    raw.error_message = str(exc)[:1000]
                             except Exception as exc:  # noqa: BLE001
-                                raw.parse_status = "parse_fail"
-                                raw.error_message = str(exc)[:1000]
-                        except Exception as exc:  # noqa: BLE001
-                            upsert_raw(
-                                session,
-                                site_id=MALL_SITE,
-                                notice_key=notice_guid,
-                                crawl_status="detail_fail",
-                                error_message=str(exc),
-                            )
-                    _ = row
+                                upsert_raw(
+                                    session,
+                                    site_id=MALL_SITE,
+                                    notice_key=notice_guid,
+                                    crawl_status="detail_fail",
+                                    error_message=str(exc),
+                                )
+                        _ = row
 
-                session.commit()
-                save_cursor(session, MALL_SITE, cursor_key, page, total)
-                session.commit()
-                pbar.update(1)
-                if stop_category or page >= total_pages or not items:
-                    break
-                page += 1
-            pbar.close()
+                    session.commit()
+                    save_cursor(session, MALL_SITE, cursor_key, page, total)
+                    session.commit()
+                    pbar.update(1)
+                    if stop_category or page >= total_pages or not items:
+                        break
+                    page += 1
+            finally:
+                pbar.close()
     finally:
         session.close()
 

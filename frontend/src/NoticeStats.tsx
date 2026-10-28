@@ -43,12 +43,14 @@ const EMPTY_DATES: DateFilters = {
 
 const PERIODS = [
   { id: "today", label: "今日" },
+  { id: "last_30_days", label: "近30天" },
   { id: "this_week", label: "本周" },
   { id: "this_month", label: "当月" },
   { id: "last_month", label: "上月" },
   { id: "this_year", label: "本年" },
   { id: "custom", label: "自定义" },
 ];
+const STATS_MAX_SPAN_DAYS = 366;
 
 const DEAL_KIND_FILTERS = ["全部", "商品", "服务", "工程", "未识别"];
 
@@ -94,7 +96,7 @@ function StatsClearable({
 }
 
 export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success" | "error"; message: string }) => void }) {
-  const [period, setPeriod] = useState("this_month");
+  const [period, setPeriod] = useState("last_30_days");
   const [draftDates, setDraftDates] = useState<DateFilters>(EMPTY_DATES);
   const [appliedDates, setAppliedDates] = useState<DateFilters>(EMPTY_DATES);
   const [province, setProvince] = useState("");
@@ -129,19 +131,10 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
         return;
       }
     }
-    const params = new URLSearchParams({ period: effectivePeriod });
+    const params = new URLSearchParams({ period: hasPublishRange ? "custom" : period });
+    // 只传实际填写的一端；后端按「有起无止=从该日起」「有止无起=截至该日」处理
     if (appliedDates.publishDateFrom) params.set("publishDateFrom", appliedDates.publishDateFrom);
     if (appliedDates.publishDateTo) params.set("publishDateTo", appliedDates.publishDateTo);
-    if (appliedDates.publishDateFrom && appliedDates.publishDateTo) {
-      params.set("startDate", appliedDates.publishDateFrom);
-      params.set("endDate", appliedDates.publishDateTo);
-    } else if (appliedDates.publishDateFrom) {
-      params.set("startDate", appliedDates.publishDateFrom);
-      params.set("endDate", appliedDates.publishDateFrom);
-    } else if (appliedDates.publishDateTo) {
-      params.set("startDate", appliedDates.publishDateTo);
-      params.set("endDate", appliedDates.publishDateTo);
-    }
     if (appliedDates.startDateFrom) params.set("startDateFrom", appliedDates.startDateFrom);
     if (appliedDates.startDateTo) params.set("startDateTo", appliedDates.startDateTo);
     if (appliedDates.endDateFrom) params.set("endDateFrom", appliedDates.endDateFrom);
@@ -205,6 +198,17 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
         onNotice({ type: "error", message: "自定义周期请填写发布日期起止（可只填一端）。" });
         return;
       }
+      if (draftDates.publishDateFrom && draftDates.publishDateTo) {
+        const from = new Date(`${draftDates.publishDateFrom}T00:00:00`).getTime();
+        const to = new Date(`${draftDates.publishDateTo}T00:00:00`).getTime();
+        if (Number.isFinite(from) && Number.isFinite(to)) {
+          const days = Math.floor(Math.abs(to - from) / 86400000) + 1;
+          if (days > STATS_MAX_SPAN_DAYS) {
+            onNotice({ type: "error", message: `统计跨度最长 ${STATS_MAX_SPAN_DAYS} 天，请缩小发布日期范围。` });
+            return;
+          }
+        }
+      }
       setPeriod("custom");
     }
     setAppliedDates({ ...draftDates });
@@ -214,7 +218,7 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
   function clearDateFilters() {
     setDraftDates(EMPTY_DATES);
     setAppliedDates(EMPTY_DATES);
-    setPeriod("this_month");
+    setPeriod("last_30_days");
     setQueryNonce((value) => value + 1);
   }
 

@@ -189,6 +189,11 @@ import {
   type ServiceContractFileFormat,
   type ServiceContractPlatform,
 } from "./serviceContract";
+import {
+  buildServiceProjectDuplicateConfirmMessage,
+  findDuplicateServiceProjects,
+  normalizeServiceEndDate,
+} from "./serviceProjectDuplicate";
 import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, NavCategory, NavGroup, NavMenuItem, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
@@ -5328,9 +5333,33 @@ function Projects({
     }
     const periodValue = parseOptionNumber(newProject.servicePeriodValue) || 1;
     const giftValue = Math.max(Number(newProject.serviceGiftValue) || 0, 0);
+    if (projectType === "服务项目" && newProject.serviceType === "周期" && !newProject.serviceStartDate) {
+      window.alert("请填写开始日期。");
+      return;
+    }
     const serviceEndDate = newProject.serviceType === "周期"
       ? calculateServiceEndDate(newProject.serviceStartDate, newProject.servicePeriodUnit, periodValue, newProject.serviceGiftUnit, giftValue)
       : newProject.serviceEndDate || undefined;
+    if (projectType === "服务项目" && !normalizeServiceEndDate(serviceEndDate)) {
+      window.alert("请填写到期日期。");
+      return;
+    }
+    if (projectType === "服务项目" && product) {
+      const platform = (newProject.sourcePlatform || newProject.onboardingPlatform || "").trim();
+      const duplicates = findDuplicateServiceProjects(data.projects, {
+        customerOrgId: newProject.customerOrgId,
+        ownCompanyOrgId: newProject.ownCompanyOrgId,
+        sourcePlatform: platform,
+        serviceProductId: product.id,
+        serviceEndDate: serviceEndDate || "",
+      }, { excludeProjectId: editingProjectId || undefined });
+      if (duplicates.length > 0) {
+        const actionLabel = editingProjectId ? "保存" : "创建";
+        if (!window.confirm(buildServiceProjectDuplicateConfirmMessage(duplicates, actionLabel))) {
+          return;
+        }
+      }
+    }
     if (editingProjectId) {
       const existing = data.projects.find((item) => item.id === editingProjectId);
       if (!existing || existing.type !== "服务项目" || !product) return;
@@ -5340,7 +5369,7 @@ function Projects({
         name: generatedServiceProjectName || existing.name,
         customerOrgId: newProject.customerOrgId,
         ownCompanyOrgId: newProject.ownCompanyOrgId || undefined,
-        sourcePlatform: newProject.sourcePlatform,
+        sourcePlatform: newProject.sourcePlatform || newProject.onboardingPlatform || undefined,
         owner: selectedSalesUser?.name ?? existing.owner,
         totalAmount: serviceAmount,
         serviceProductId: product.id,
@@ -5449,7 +5478,7 @@ function Projects({
       customerOrgId: newProject.customerOrgId,
       usageUnitOrgId: newProject.usageUnitOrgId || undefined,
       ownCompanyOrgId: newProject.ownCompanyOrgId || undefined,
-      sourcePlatform: newProject.sourcePlatform,
+      sourcePlatform: newProject.sourcePlatform || newProject.onboardingPlatform || undefined,
       platformOrderNo: newProject.platformOrderNo || undefined,
       owner: projectType === "服务项目" ? selectedSalesUser?.name ?? newProject.owner : newProject.owner || "当前用户",
       status: projectType === "服务项目" ? "入驻中" : "初始化",
@@ -6970,7 +6999,9 @@ function Projects({
                 <div>
                   <h2>{editingProjectId ? `编辑${projectTab}` : `新建${projectTab}`}</h2>
                   <p>{projectTab === "服务项目"
-                    ? (editingProjectId ? "可修改客户、首次或续费、服务、周期、业务员和项目金额；金额会同步到对应服务订单。" : "选择客户、首次或续费、服务、周期和业务员；保存后自动创建服务订单。")
+                    ? (editingProjectId
+                      ? "可修改客户、签约主体、平台、服务、周期、业务员和项目金额；金额会同步到对应服务订单。同五要素撞车时会提示，可仍保存。"
+                      : "选择客户、签约主体、平台、服务、周期和业务员；签约主体与到期日必填。保存后自动创建服务订单；同五要素撞车时会提示，可仍创建。")
                     : "创建项目基础信息，商品和渠道在项目详情中继续维护。"}</p>
                 </div>
                 <button className="icon-button" onClick={closeCreateProjectModal} aria-label={editingProjectId ? "关闭编辑项目" : "关闭新建项目"}><X size={18} /></button>
@@ -7024,7 +7055,7 @@ function Projects({
                       value={newProject.ownCompanyOrgId}
                       options={ownCompanySelectOptions}
                       onChange={(value) => setNewProject({ ...newProject, ownCompanyOrgId: value })}
-                      placeholder="搜索并选择签约主体"
+                      placeholder="搜索并选择签约主体（必填）"
                       ariaLabel="选择签约主体"
                     />
                     <SearchableSelect
@@ -7072,10 +7103,10 @@ function Projects({
                           <option>天</option>
                         </select>
                         <input type="number" min="0" value={newProject.serviceGiftValue} onChange={(event) => setNewProject({ ...newProject, serviceGiftValue: event.target.value })} placeholder="赠送数量" />
-                        <input value={calculateServiceEndDate(newProject.serviceStartDate, newProject.servicePeriodUnit, Number(newProject.servicePeriodValue) || 1, newProject.serviceGiftUnit, Number(newProject.serviceGiftValue) || 0)} readOnly aria-label="到期日期" />
+                        <input value={calculateServiceEndDate(newProject.serviceStartDate, newProject.servicePeriodUnit, Number(newProject.servicePeriodValue) || 1, newProject.serviceGiftUnit, Number(newProject.serviceGiftValue) || 0)} readOnly aria-label="到期日期（必填，由周期自动计算）" placeholder="到期日期（必填）" />
                       </>
                     ) : (
-                      <DateTimeField value={newProject.serviceEndDate} onChange={(serviceEndDate) => setNewProject({ ...newProject, serviceEndDate })} ariaLabel="到期日期" placeholder="到期日期" />
+                      <DateTimeField value={newProject.serviceEndDate} onChange={(serviceEndDate) => setNewProject({ ...newProject, serviceEndDate })} ariaLabel="到期日期" placeholder="到期日期（必填）" />
                     )}
                     <input value={currentUser.name} readOnly aria-label="操作员" />
                     <textarea value={newProject.serviceRemark} onChange={(event) => setNewProject({ ...newProject, serviceRemark: event.target.value })} placeholder="备注" />

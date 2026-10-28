@@ -135,4 +135,30 @@ def _run_crawler(script: dict[str, Any], options: dict[str, Any]) -> dict[str, s
     }
     if completed.returncode != 0 and not result["stderr"]:
         result["stderr"] = f"采集命令退出码 {completed.returncode}"
+    # 采集成功后批量补标签（全量/一轮都需要；解析写入 notice_parsed 后才能识别）
+    if result["ok"] and script["key"] in {"notice_crawl_once", "notice_crawl_all"}:
+        tag_summary = _tag_after_crawl(batch_size=500, max_batches=200)
+        result["stdout"] = _clip((result["stdout"] or "") + "\n" + tag_summary)
     return result
+
+
+def _tag_after_crawl(*, batch_size: int = 500, max_batches: int = 200) -> str:
+    """采集完成后循环打标，直到本轮无可处理或达到上限。"""
+    from .notice_tagging import tag_result_notices
+
+    tagged_total = 0
+    skipped_total = 0
+    batches = 0
+    try:
+        for _ in range(max_batches):
+            batches += 1
+            outcome = tag_result_notices(limit=batch_size, rebuild=False)
+            tagged = int(outcome.get("tagged") or 0)
+            skipped = int(outcome.get("skipped") or 0)
+            tagged_total += tagged
+            skipped_total += skipped
+            if tagged <= 0:
+                break
+    except Exception as exc:  # noqa: BLE001
+        return f"[打标] 失败：{exc}（已打标 {tagged_total}）"
+    return f"[打标] 完成：新增/更新 {tagged_total}，跳过 {skipped_total}，批次 {batches}"

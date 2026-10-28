@@ -3,8 +3,13 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from clients.http_session import build_session
+from clients.http_session import build_session, request_with_retries
 from config import settings
+
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover
+    tqdm = None
 
 SITE_ID = "sd-ggzyjyzx"
 
@@ -45,6 +50,31 @@ class SdMallClient:
     def _sleep(self) -> None:
         time.sleep(settings.request_interval)
 
+    def _on_retry(self, attempt: int, attempts: int, reason: str, wait: float) -> None:
+        message = f"{SITE_ID} 请求重试 {attempt}/{attempts - 1}（{reason}），等待 {wait:.0f}s"
+        if tqdm is not None:
+            tqdm.write(message)
+        else:
+            print(message)
+
+    def _request(self, method: str, path: str, **kwargs) -> Any:
+        self._sleep()
+        resp = request_with_retries(
+            self.session,
+            method,
+            f"{self.base}{path}",
+            retries=6,
+            backoff=2.0,
+            timeout=45,
+            on_retry=self._on_retry,
+            **kwargs,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data.get("success"):
+            raise RuntimeError(data.get("message") or str(data))
+        return data.get("data") or {}
+
     def list_notices(
         self,
         *,
@@ -66,30 +96,17 @@ class SdMallClient:
             "endDate": end_date,
         }
         # 全省：不传 regionGuidList
-        self._sleep()
-        resp = self.session.post(
-            f"{self.base}/gateway/gpmall-bpoc/notice/v1/ignore/getNoticeList",
+        return self._request(
+            "POST",
+            "/gateway/gpmall-bpoc/notice/v1/ignore/getNoticeList",
             json=body,
-            timeout=30,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("success"):
-            raise RuntimeError(data.get("message") or str(data))
-        return data.get("data") or {}
 
     def get_detail(self, notice_guid: str) -> Dict[str, Any]:
-        self._sleep()
-        resp = self.session.get(
-            f"{self.base}/gateway/gpmall-bpoc/notice/v1/ignore/getNoticeDetail",
+        return self._request(
+            "GET",
+            "/gateway/gpmall-bpoc/notice/v1/ignore/getNoticeDetail",
             params={"noticeGuid": notice_guid},
-            timeout=30,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("success"):
-            raise RuntimeError(data.get("message") or str(data))
-        return data.get("data") or {}
-
     def iter_categories(self) -> Iterable[Tuple[int, int, str]]:
         return CATEGORIES
