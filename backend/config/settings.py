@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "apps.data_store",
+    "apps.assistant",
 ]
 
 MIDDLEWARE = [

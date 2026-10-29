@@ -840,6 +840,9 @@ export type PermissionKey =
   | "profit.view"
   | "dev.ops.view"
   | "dev.ops.manage"
+  | "assistant.view"
+  | "assistant.use"
+  | "assistant.manage"
   | "user.manage";
 
 export interface NavCategory {

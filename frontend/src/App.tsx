@@ -453,13 +453,16 @@ const permissionLabels: Record<PermissionKey, string> = {
   "profit.view": "查看利润",
   "dev.ops.view": "查看定时任务",
   "dev.ops.manage": "管理定时任务",
+  "assistant.view": "查看智能助手",
+  "assistant.use": "使用智能助手",
+  "assistant.manage": "管理智能助手",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
-  { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "user.manage"] },
+  { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "assistant.manage", "user.manage"] },
 ];
 
 function hasPermission(permissionSet: Set<PermissionKey>, permission: PermissionKey) {
@@ -504,6 +507,12 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "dev.ops.view") {
     return permissionSet.has("dev.ops.manage");
+  }
+  if (permission === "assistant.view") {
+    return permissionSet.has("assistant.use") || permissionSet.has("assistant.manage");
+  }
+  if (permission === "assistant.use") {
+    return permissionSet.has("assistant.manage");
   }
   if (permission === "site.view") {
     return permissionSet.has("site.manage");
