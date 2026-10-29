@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from apps.assistant.services.notice_query import get_notice_detail, search_notice_goods, search_notices
@@ -12,12 +13,31 @@ def _resolve_period(params: dict[str, Any]) -> tuple[str, str]:
     if publish_from or publish_to:
         return publish_from, publish_to
     period = str(params.get("relative_period") or "").strip()
+    today = date.today()
+    if period == "yesterday":
+        day = today - timedelta(days=1)
+        return day.isoformat(), day.isoformat()
+    if period == "today":
+        return today.isoformat(), today.isoformat()
+    if period == "day_before_yesterday":
+        day = today - timedelta(days=2)
+        return day.isoformat(), day.isoformat()
     if period == "last_30_days":
-        from datetime import date, timedelta
-
-        end = date.today()
-        start = end - timedelta(days=30)
-        return start.isoformat(), end.isoformat()
+        return (today - timedelta(days=30)).isoformat(), today.isoformat()
+    if period == "this_week":
+        start = today - timedelta(days=today.weekday())
+        return start.isoformat(), today.isoformat()
+    if period == "this_month":
+        start = today.replace(day=1)
+        return start.isoformat(), today.isoformat()
+    m = period.startswith("last_") and period.endswith("_days")
+    if m:
+        try:
+            days = int(period[len("last_") : -len("_days")])
+            days = max(1, min(days, 365))
+            return (today - timedelta(days=days)).isoformat(), today.isoformat()
+        except ValueError:
+            pass
     return "", ""
 
 
@@ -32,6 +52,7 @@ def _notice_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]
         notice_kind=str(params.get("notice_kind") or params.get("noticeKind") or "").strip(),
         publish_date_from=publish_from,
         publish_date_to=publish_to,
+        buyer_name=str(params.get("buyer_name") or params.get("buyerName") or "").strip(),
     )
     total = int(result.get("total") or 0)
     return {
@@ -90,11 +111,12 @@ def register() -> None:
     register_tool(
         ToolDefinition(
             name="notice.search",
-            description="搜索采购公告（关键词、站点、类型、发布日期）",
+            description="搜索采购公告（关键词、采购单位、站点、类型、发布日期）",
             input_schema={
                 "type": "object",
                 "properties": {
                     "search": {"type": "string", "description": "关键词"},
+                    "buyer_name": {"type": "string", "description": "采购单位"},
                     "site_id": {"type": "string"},
                     "notice_kind": {"type": "string"},
                     "publish_date_from": {"type": "string"},
@@ -149,9 +171,11 @@ def register() -> None:
                 "type": "object",
                 "properties": {
                     "search": {"type": "string"},
+                    "buyer_name": {"type": "string"},
                     "site_id": {"type": "string"},
                     "publish_date_from": {"type": "string"},
                     "publish_date_to": {"type": "string"},
+                    "relative_period": {"type": "string"},
                     "page": {"type": "integer"},
                     "page_size": {"type": "integer"},
                 },

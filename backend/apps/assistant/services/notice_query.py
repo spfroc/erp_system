@@ -22,6 +22,7 @@ def search_notices(
     notice_kind: str = "",
     publish_date_from: str = "",
     publish_date_to: str = "",
+    buyer_name: str = "",
     site_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """搜索公告列表（真实 ORM 查询）。"""
@@ -35,6 +36,7 @@ def search_notices(
             site_ids=site_ids,
             publish_date_from=publish_date_from,
             publish_date_to=publish_date_to,
+            buyer_name=buyer_name,
         )
     except ProgrammingError:
         return {"items": [], "total": 0, "page": page, "page_size": page_size, "detail": "公告表尚未创建"}

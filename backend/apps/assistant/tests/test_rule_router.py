@@ -8,6 +8,14 @@ class RuleRouterTests(SimpleTestCase):
         routed = route_intent("查找最近一个月济南市办公设备采购公告")
         self.assertEqual(routed["tool_name"], "notice.search")
         self.assertFalse(routed["needs_clarification"])
+        self.assertEqual(routed["params"].get("relative_period"), "last_30_days")
+
+    def test_notice_yesterday_buyer(self):
+        routed = route_intent("查询昨天 平度市财政局 发布的公告")
+        self.assertEqual(routed["tool_name"], "notice.search")
+        self.assertEqual(routed["params"].get("relative_period"), "yesterday")
+        self.assertEqual(routed["params"].get("buyer_name"), "平度市财政局")
+        self.assertNotIn("昨天", routed["params"].get("search") or "")
 
     def test_goods_search(self):
         routed = route_intent("查找惠普打印机相关采购记录")

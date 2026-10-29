@@ -6,6 +6,14 @@ import re
 from typing import Any
 
 
+_ORG_NAME_RE = re.compile(
+    r"([\u4e00-\u9fffA-Za-z0-9（）()]{2,40}(?:财政局|教育局|卫健委|管理局|采购中心|医院|大学|小学|中学|学院|委员会|局|院|校|中心|公司|部|处|办))"
+)
+_BUYER_RELEASE_RE = re.compile(
+    r"([\u4e00-\u9fffA-Za-z0-9（）()]{2,40}?)\s*(?:发布的|发布|的)?\s*公告"
+)
+
+
 def _has_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(key in text for key in keywords)
 
@@ -14,7 +22,6 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
     """返回 {intent, tool_name, params, confidence, needs_clarification, reason}。"""
     context = context or {}
     text = (message or "").strip()
-    lowered = text.lower()
     recent_ids = list((context.get("recent_result_ids") or [])[:20])
     last_intent = str(context.get("intent") or "")
     last_params = dict(context.get("params") or {})
@@ -47,7 +54,7 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
 
     # 多轮：追加筛选 / 排序（继承上次公告搜索）
     if last_intent in {"notice.search", "deal.search", "goods.search"} and (
-        _has_any(text, ("只看", "再筛", "追加", "预算", "两万元", "万元以上", "按时间", "倒序", "正序", "近"))
+        _has_any(text, ("只看", "再筛", "追加", "预算", "两万元", "万元以上", "按时间", "倒序", "正序", "近", "昨天", "今天"))
     ):
         params = dict(last_params)
         tool_name = "deal.search" if last_intent == "deal.search" else ("goods.search" if last_intent == "goods.search" else "notice.search")
@@ -55,12 +62,15 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             params["sort"] = "publish_time_desc"
         if "正序" in text:
             params["sort"] = "publish_time_asc"
+        period = _extract_relative_period(text)
+        if period:
+            params["relative_period"] = period
         budget = re.search(r"(\d+(?:\.\d+)?)\s*万", text)
         if budget:
             params["min_budget_wan"] = float(budget.group(1))
-            params["search"] = " ".join(
-                part for part in [params.get("search") or "", f"预算{budget.group(1)}万"] if part
-            ).strip()
+        buyer = _extract_buyer_name(text)
+        if buyer:
+            params["buyer_name"] = buyer
         if "济南" in text and "济南" not in str(params.get("search") or ""):
             params["search"] = f"{params.get('search') or ''} 济南".strip()
         return {
@@ -173,14 +183,11 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
 
     # 成交
     if _has_any(text, ("成交公告", "历史成交", "成交记录", "中标")):
+        params = _extract_notice_params(text)
         return {
             "intent": "deal.search",
             "tool_name": "deal.search",
-            "params": {
-                "search": _extract_keyword(text, ("查找", "查询", "成交", "公告", "历史", "记录")),
-                "page": 1,
-                "page_size": 20,
-            },
+            "params": params,
             "confidence": 0.85,
             "needs_clarification": False,
             "reason": "deal",
@@ -202,12 +209,8 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
         }
 
     # 采购公告
-    if _has_any(text, ("公告", "采购公告", "竞价", "询比", "济南", "办公设备")):
-        params = {
-            "search": _extract_keyword(text, ("查找", "查询", "搜索", "最近", "一个月", "采购", "公告")),
-            "page": 1,
-            "page_size": 20,
-        }
+    if _has_any(text, ("公告", "采购公告", "竞价", "询比", "济南", "办公设备", "发布的")):
+        params = _extract_notice_params(text)
         if "成交" in text:
             return {
                 "intent": "deal.search",
@@ -217,9 +220,6 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
                 "needs_clarification": False,
                 "reason": "deal_from_notice",
             }
-        if "一个月" in text or "近一个月" in text or "最近一个月" in text:
-            # 具体日期由前端/工具按自然日解释；此处仅标记
-            params["relative_period"] = "last_30_days"
         return {
             "intent": "notice.search",
             "tool_name": "notice.search",
@@ -238,6 +238,76 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
         "reason": "unrecognized",
         "clarification": "我还不能确定要执行的操作。你可以试试：查询采购公告、搜索采购商品、查询销售/采购订单、打开某个后台功能。",
     }
+
+
+def _extract_relative_period(text: str) -> str | None:
+    if _has_any(text, ("昨天", "昨日")):
+        return "yesterday"
+    if _has_any(text, ("今天", "今日")):
+        return "today"
+    if "前天" in text:
+        return "day_before_yesterday"
+    days = re.search(r"最近\s*(\d+)\s*天", text)
+    if days:
+        return f"last_{int(days.group(1))}_days"
+    if _has_any(text, ("一个月", "近一个月", "最近一个月", "近30天", "最近三十天", "最近30天")):
+        return "last_30_days"
+    if _has_any(text, ("本周", "这周")):
+        return "this_week"
+    if _has_any(text, ("本月", "这个月")):
+        return "this_month"
+    return None
+
+
+def _extract_buyer_name(text: str) -> str:
+    org = _ORG_NAME_RE.search(text or "")
+    if org:
+        return org.group(1).strip(" ：:，,。")
+    released = _BUYER_RELEASE_RE.search(text or "")
+    if released:
+        name = released.group(1).strip(" ：:，,。")
+        name = re.sub(r"^(查询|查找|搜索|昨天|昨日|今天|今日|前天|最近)", "", name)
+        return name.strip()[:40]
+    return ""
+
+
+def _extract_notice_params(text: str) -> dict[str, Any]:
+    """把自然语言拆成日期 / 采购单位 / 残余关键词，避免整句 LIKE。"""
+    params: dict[str, Any] = {"page": 1, "page_size": 20}
+    period = _extract_relative_period(text)
+    if period:
+        params["relative_period"] = period
+    buyer = _extract_buyer_name(text)
+    if buyer:
+        params["buyer_name"] = buyer
+    stopwords = (
+        "查找",
+        "查询",
+        "搜索",
+        "最近",
+        "一个月",
+        "采购",
+        "公告",
+        "昨天",
+        "昨日",
+        "今天",
+        "今日",
+        "前天",
+        "发布的",
+        "发布",
+        "本周",
+        "本月",
+        "近30天",
+        "最近三十天",
+        "最近30天",
+    )
+    residual = _extract_keyword(text, stopwords)
+    if buyer and buyer in residual:
+        residual = residual.replace(buyer, " ")
+    residual = re.sub(r"\s+", " ", residual).strip(" ，,。的")
+    if residual and residual not in {"的", "了", "吗"}:
+        params["search"] = residual[:80]
+    return params
 
 
 def _extract_keyword(text: str, stopwords: tuple[str, ...]) -> str:
