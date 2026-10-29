@@ -1324,6 +1324,8 @@ def query_crawled_notices(
     site_id: str = "",
     notice_kind: str = "",
     site_ids: list[str] | None = None,
+    publish_date_from: str = "",
+    publish_date_to: str = "",
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1346,18 +1348,23 @@ def query_crawled_notices(
     kinds = _parse_notice_kinds(notice_kind)
     if kinds:
         qs = qs.filter(_raw_ids_for_kinds(kinds, site_id))
+    day_q = _notice_day_filter_q(publish_from=publish_date_from, publish_to=publish_date_to)
+    if day_q is not None:
+        qs = qs.filter(day_q)
     keyword = (search or "").strip()
     if keyword:
         qs = qs.filter(
             Q(title__icontains=keyword)
             | Q(notice_key__icontains=keyword)
             | Q(
-                id__in=NoticeParsed.objects.filter(
-                    Q(project_code__icontains=keyword)
-                    | Q(project_name__icontains=keyword)
-                    | Q(buyer_name__icontains=keyword)
-                    | Q(notice_title__icontains=keyword)
-                ).values("notice_raw_id")
+                Exists(
+                    NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                        Q(project_code__icontains=keyword)
+                        | Q(project_name__icontains=keyword)
+                        | Q(buyer_name__icontains=keyword)
+                        | Q(notice_title__icontains=keyword)
+                    )
+                )
             )
         )
     total = qs.count()

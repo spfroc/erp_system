@@ -41,7 +41,15 @@ from .views import (
     upload_document,
     website_leads,
 )
-from .portal import portal_login, portal_logout, portal_me, portal_notices, portal_stats, portal_subscription
+from .portal import (
+    portal_login,
+    portal_logout,
+    portal_me,
+    portal_notice_detail,
+    portal_notices,
+    portal_stats,
+    portal_subscription,
+)
 
 
 urlpatterns = [
@@ -49,6 +57,7 @@ urlpatterns = [
     path("portal/logout/", portal_logout, name="portal-logout"),
     path("portal/me/", portal_me, name="portal-me"),
     path("portal/notices/", portal_notices, name="portal-notices"),
+    path("portal/notices/<int:notice_id>/", portal_notice_detail, name="portal-notice-detail"),
     path("portal/stats/", portal_stats, name="portal-stats"),
     path("portal/subscription/", portal_subscription, name="portal-subscription"),
     path("auth/login/", auth_login, name="auth-login"),

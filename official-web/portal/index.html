@@ -96,23 +96,27 @@
     .dropdown button:hover { background: #f6efe2; }
     .dropdown button.danger { color: #a33b2b; }
     .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 20px; }
-    #panel.stats-panel { overflow: auto; display: block; }
-    #panel.stats-panel .charts { flex: none; height: 320px; }
-    #panel.stats-panel .chart { height: 280px; }
+    #panel.stats-panel { overflow: auto; display: block; width: 100%; }
+    #panel.stats-panel > .charts { height: 320px; flex: none; }
+    #panel.stats-panel > .charts .chart { height: 280px; flex: none; }
     .home-intro { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-    .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
+    .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
     .stats-filters .segmented { flex: none; }
-    .stats-custom-range { display: inline-flex; align-items: center; gap: 8px; }
-    .stats-custom-range input[type="date"] { width: auto; min-width: 140px; margin-top: 0; padding: 7px 10px; }
-    .stats-custom-range span { color: var(--muted); font-size: 13px; }
-    .home-site-block { margin-top: 16px; }
+    .stats-custom-range { display: inline-flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+    .stats-custom-range label { margin: 0; min-width: 0; color: var(--muted); font-size: 12px; }
+    .stats-custom-range input[type="date"] { width: auto; min-width: 146px; margin-top: 4px; padding: 7px 10px; }
+    .stats-custom-range .range-sep { color: var(--muted); font-size: 13px; padding-bottom: 8px; }
+    .stats-custom-range .ghost { margin: 0; }
+    .home-site-block { margin-top: 16px; width: 100%; }
     .home-site-block > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
-    .home-site-block .charts { height: 280px; }
-    .home-site-block .chart { height: 240px; }
-    .home-site-grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    .home-site-block .charts-wrap { width: 100%; }
+    .home-site-block .charts { height: 300px; flex: none; }
+    .home-site-block .chart { height: 260px; flex: none; min-height: 0; }
+    .home-site-grid { display: grid; gap: 14px; grid-template-columns: 1fr; margin-top: 16px; width: 100%; }
     @media (min-width: 1280px) {
       .home-site-grid:has(> :nth-child(2)) { grid-template-columns: 1fr 1fr; }
     }
+    .home-site-grid > .home-site-block { margin-top: 0; }
     .tag-stats { margin-top: 16px; }
     .tag-stats > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
     .tag-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
@@ -135,17 +139,17 @@
     .metric.tone-teal::before { background: #2a9d8f; }
     .metric.tone-ink::before { background: #3d6b8a; }
     .metric span { color: var(--muted); font-size: 13px; }
-    .metric strong { display: block; margin-top: 8px; font-size: 24px; font-weight: 750; }
-    .metric.amount strong { font-size: 18px; }
+    .metric strong { display: block; margin-top: 8px; font-size: 24px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metric.amount strong { font-size: clamp(14px, 1.35vw, 18px); letter-spacing: -0.01em; overflow: visible; text-overflow: unset; }
     .metric.tone-jade strong { color: #0f6b40; }
     .metric.tone-gold strong { color: #8d6412; }
     .metric.tone-coral strong { color: #b24b2c; }
     .metric.tone-teal strong { color: #1d756c; }
     .metric.tone-ink strong { color: #2d5570; }
-    .charts { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; width: 100%; }
     .charts:has(> :only-child) { grid-template-columns: 1fr; }
     .charts > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-    .chart { flex: 1; width: 100%; min-height: 0; height: auto; }
+    .chart { width: 100%; min-height: 0; }
     .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
     .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, #1f8a56, #d7a441); }
     .toolbar { flex: none; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
@@ -153,9 +157,28 @@
     .list-card { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 4px 16px; }
     .notice { flex: 1 1 0; min-height: 0; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0e6d6; }
     .notice:last-child { border-bottom: 0; }
-    .notice-main { min-width: 0; flex: 1; }
+    .notice-main { min-width: 0; flex: 1; cursor: pointer; }
+    .notice-main:hover h3 { color: var(--green); }
     .notice h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .notice p { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .notice-actions { flex: none; display: flex; gap: 6px; }
+    .notice-actions .copy-link { background: transparent; border: 0; color: var(--green); padding: 4px 6px; font-size: 13px; }
+    .notice-actions .copy-link:hover { color: var(--green-dark); text-decoration: underline; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(36, 28, 20, .42); display: grid; place-items: center; padding: 20px; z-index: 40; }
+    .modal { width: min(760px, 100%); max-height: min(86vh, 900px); overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 60px rgba(48, 32, 12, .2); }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
+    .modal-head h3 { margin: 0; font-size: 17px; line-height: 1.4; }
+    .modal-head p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .icon-button { border: 0; background: #f4ebe0; color: var(--ink); width: 32px; height: 32px; border-radius: 10px; flex: none; }
+    .modal-body { padding: 8px 18px 18px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+    .detail-grid .info { min-width: 0; }
+    .detail-grid .info span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+    .detail-grid .info strong { display: block; font-size: 14px; font-weight: 650; word-break: break-word; }
+    .detail-grid .info.wide { grid-column: 1 / -1; }
+    .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .modal-actions .primary { width: auto; margin: 0; }
+    .panel-loading { color: var(--muted); padding: 24px 4px; font-size: 14px; }
     .kind { flex: none; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #e7f6ee; color: #0f6b40; }
     .kind.gold { background: #fbf3df; color: #8a6414; }
     .kind.coral { background: #fde8e1; color: #a3472c; }
@@ -179,9 +202,17 @@
         #f3eee4;
       color: var(--muted); font-size: 14px;
     }
-    #panel > .card:not(.list-card) { max-width: 720px; }
+    /* 仅账号/订阅等表单卡限宽；首页与统计需占满内容区 */
+    #panel > .card.account-card,
+    #panel > form.card { max-width: 720px; }
+    #panel > .card.home-site-block,
+    #panel > .home-site-grid,
+    #panel > .card.tag-stats,
+    #panel > .charts,
+    #panel > .metrics { max-width: none; width: 100%; }
+    .home-site-block .metrics { margin-top: 4px; width: 100%; }
     @media (max-width: 960px) {
-      .login, .app, .metrics, .charts, .tag-metrics, .tag-tables { grid-template-columns: 1fr; }
+      .login, .app, .metrics, .charts, .tag-metrics, .tag-tables, .detail-grid { grid-template-columns: 1fr; }
       .login-visual { height: 220px; }
       .login-visual img { height: 220px; }
       html, body { overflow: auto; }
@@ -248,23 +279,29 @@
     const dropdown = document.getElementById("dropdown");
     let me = null;
     let tab = "home";
-    let noticeQuery = { page: 1, search: "", siteId: "", noticeKind: "" };
+    let noticeQuery = { page: 1, search: "", siteId: "", noticeKind: "", publishDateFrom: "", publishDateTo: "" };
     function formatYmd(date) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
       return year + "-" + month + "-" + day;
     }
-    const monthStartYmd = formatYmd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    function daysAgoYmd(days) {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() - days);
+      return formatYmd(date);
+    }
     const todayYmd = formatYmd(new Date());
     let tagQuery = {
-      period: "this_month",
-      startDate: monthStartYmd,
+      period: "last_30_days",
+      startDate: daysAgoYmd(29),
       endDate: todayYmd,
       dealKind: "",
       province: "",
       buyer: "",
     };
+    let noticeDetail = null;
     let noticeRequest = 0;
     let noticeSearchTimer = 0;
     let tagSearchTimer = 0;
@@ -454,6 +491,7 @@
 
     function buildChartGrid(prefix, titles, { includeSite = true } = {}) {
       const wrap = document.createElement("div");
+      wrap.className = "charts-wrap";
       const topCards = includeSite
         ? '<section class="card"><h3>' + (titles[0] || "平台分布") + '</h3><div class="chart" id="' + prefix + '-site"></div></section>' +
           '<section class="card"><h3>' + (titles[1] || "公告类型") + '</h3><div class="chart" id="' + prefix + '-kind"></div></section>'
@@ -497,15 +535,17 @@
       box.className = "stats-filters";
       box.innerHTML =
         '<div class="segmented" data-role="period">' +
+        '<button type="button" data-period="last_30_days">近30天</button>' +
         '<button type="button" data-period="this_week">本周</button>' +
         '<button type="button" data-period="this_month">当月</button>' +
         '<button type="button" data-period="last_month">上月</button>' +
         '<button type="button" data-period="custom">自定义</button>' +
         "</div>" +
         '<div class="stats-custom-range" data-role="custom-range" hidden>' +
-        '<input type="date" data-role="start-date" />' +
-        "<span>至</span>" +
-        '<input type="date" data-role="end-date" />' +
+        '<label>发布开始<input type="date" data-role="start-date" /></label>' +
+        '<span class="range-sep">至</span>' +
+        '<label>发布结束<input type="date" data-role="end-date" /></label>' +
+        '<button class="ghost" type="button" data-role="apply-custom">查询</button>' +
         "</div>" +
         (showDealKinds ? '<div class="segmented" data-role="deal"></div>' : "") +
         (showTagFilters
@@ -547,19 +587,30 @@
       box.querySelectorAll("[data-period]").forEach((button) => {
         button.onclick = () => {
           tagQuery.period = button.dataset.period;
+          if (tagQuery.period === "last_30_days") {
+            tagQuery.startDate = daysAgoYmd(29);
+            tagQuery.endDate = formatYmd(new Date());
+          }
           syncActive();
-          onChange();
+          if (tagQuery.period !== "custom") onChange();
         };
       });
       const startInput = box.querySelector("[data-role=start-date]");
       const endInput = box.querySelector("[data-role=end-date]");
-      const onCustomChange = () => {
-        tagQuery.startDate = startInput.value || tagQuery.startDate;
-        tagQuery.endDate = endInput.value || tagQuery.endDate;
-        if (tagQuery.period === "custom" && tagQuery.startDate && tagQuery.endDate) onChange();
+      const applyCustom = () => {
+        tagQuery.startDate = startInput.value || "";
+        tagQuery.endDate = endInput.value || "";
+        tagQuery.period = "custom";
+        syncActive();
+        if (!tagQuery.startDate || !tagQuery.endDate) {
+          window.alert("请选择完整的发布起止日期。");
+          return;
+        }
+        onChange();
       };
-      startInput.onchange = onCustomChange;
-      endInput.onchange = onCustomChange;
+      box.querySelector("[data-role=apply-custom]").onclick = applyCustom;
+      startInput.onchange = () => { tagQuery.startDate = startInput.value || ""; };
+      endInput.onchange = () => { tagQuery.endDate = endInput.value || ""; };
 
       if (showTagFilters) {
         const provinceInput = box.querySelector("[name=province]");
@@ -583,11 +634,17 @@
     }
 
     async function renderHome(panel) {
-      if (tagQuery.period === "custom" && (!tagQuery.startDate || !tagQuery.endDate)) {
-        panel.innerHTML = '<p class="empty">请选择自定义起止日期（yyyy-mm-dd）</p>';
+      if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
+        panel.innerHTML = "";
+        mountStatsFilters(panel, { showDealKinds: false, onChange: () => openTab("home") });
+        const tip = document.createElement("p");
+        tip.className = "empty";
+        tip.textContent = "请选择自定义发布日期后点击「查询」。";
+        panel.appendChild(tip);
         return;
       }
-      const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeSites: "1" }).toString())).data;
+      panel.innerHTML = '<p class="panel-loading">正在加载首页统计…</p>';
+      const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeSites: "1", includeTags: "0" }).toString())).data;
       panel.innerHTML = "";
       const sites = data.siteStats || [];
       const siteLabels = (data.sites || []).map((site) => site.label).filter(Boolean);
@@ -609,6 +666,7 @@
       }
       panel.appendChild(intro);
 
+      // 多平台：合计区出图；各平台只出指标卡（避免 N 套图表 + 重复重查询）
       if (sites.length > 1) {
         const overview = document.createElement("section");
         overview.className = "card home-site-block";
@@ -617,26 +675,28 @@
         overview.appendChild(buildChartGrid("home-all", ["平台分布", "公告类型", "月成交金额", "发布量"], { includeSite: true }));
         panel.appendChild(overview);
         mountSiteCharts("home-all", data);
-      }
 
-      const grid = document.createElement("div");
-      grid.className = "home-site-grid";
-      const chartJobs = [];
-      sites.forEach((site, index) => {
+        const grid = document.createElement("div");
+        grid.className = "home-site-grid";
+        sites.forEach((site) => {
+          const block = document.createElement("section");
+          block.className = "card home-site-block";
+          block.innerHTML = "<h3></h3>";
+          block.querySelector("h3").textContent = (site.label || site.siteId) + " · 明细";
+          appendMetricRow(block, overviewMetricRows(site));
+          grid.appendChild(block);
+        });
+        panel.appendChild(grid);
+      } else {
         const block = document.createElement("section");
         block.className = "card home-site-block";
-        const prefix = "home-site-" + index;
         block.innerHTML = "<h3></h3>";
-        block.querySelector("h3").textContent =
-          sites.length === 1 ? (site.label || site.siteId) : (site.label || site.siteId) + " · 明细";
-        appendMetricRow(block, overviewMetricRows(site));
-        // 单个平台不展示「平台分布」
-        block.appendChild(buildChartGrid(prefix, ["平台分布", "公告类型", "月成交金额", "发布量"], { includeSite: false }));
-        grid.appendChild(block);
-        chartJobs.push([prefix, site]);
-      });
-      panel.appendChild(grid);
-      chartJobs.forEach(([prefix, site]) => mountSiteCharts(prefix, site));
+        block.querySelector("h3").textContent = sites[0].label || sites[0].siteId;
+        appendMetricRow(block, overviewMetricRows(sites[0]));
+        block.appendChild(buildChartGrid("home-site-0", ["平台分布", "公告类型", "月成交金额", "发布量"], { includeSite: false }));
+        panel.appendChild(block);
+        mountSiteCharts("home-site-0", sites[0]);
+      }
       fitCharts();
     }
 
@@ -654,15 +714,15 @@
     function formatMoney(value) {
       const amount = Number(value || 0);
       if (Math.abs(amount) >= 10000) {
-        return (amount / 10000).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " 万";
+        return (amount / 10000).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0万";
       }
-      return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " 元";
+      return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0元";
     }
 
     function moneyLabel(value) {
       const amount = Number(value);
       if (!Number.isFinite(amount)) return "0.00";
-      if (Math.abs(amount) >= 10000) return (amount / 10000).toFixed(2) + "万";
+      if (Math.abs(amount) >= 10000) return (amount / 10000).toFixed(2) + "\u00a0万";
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
@@ -724,11 +784,21 @@
     }
 
     async function renderStats(panel) {
-      if (tagQuery.period === "custom" && (!tagQuery.startDate || !tagQuery.endDate)) {
-        panel.innerHTML = '<p class="empty">请选择自定义起止日期（yyyy-mm-dd）</p>';
+      if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
+        panel.innerHTML = "";
+        mountStatsFilters(panel, {
+          showTagFilters: true,
+          onChange: () => openTab("stats"),
+        });
+        const tip = document.createElement("p");
+        tip.className = "empty";
+        tip.textContent = "请选择自定义发布日期后点击「查询」。";
+        panel.appendChild(tip);
         return;
       }
-      const data = (await api("/api/portal/stats/?" + statsQueryParams().toString())).data;
+      panel.innerHTML = '<p class="panel-loading">正在加载统计数据…</p>';
+      // 先出图表指标（不含标签），标签分析二次加载，避免整页卡在标签聚合上
+      const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeTags: "0" }).toString())).data;
       panel.innerHTML = "";
       mountStatsFilters(panel, {
         showTagFilters: true,
@@ -768,19 +838,19 @@
       tagBlock.className = "card tag-stats";
       tagBlock.innerHTML =
         "<h3>成交标签分析</h3>" +
-        '<div class="tag-metrics">' +
+        '<p class="panel-loading" data-tag="loading">正在加载标签分析…</p>' +
+        '<div class="tag-metrics" hidden>' +
         '<div class="metric tone-jade"><span>结果公告数</span><strong data-tag="noticeCount">—</strong></div>' +
         '<div class="metric tone-gold amount"><span>成交金额</span><strong data-tag="dealAmount">—</strong></div>' +
         '<div class="metric tone-teal"><span>采购人数</span><strong data-tag="buyerCount">—</strong></div>' +
         '<div class="metric tone-ink"><span>商品行数</span><strong data-tag="goodsCount">—</strong></div>' +
         "</div>" +
-        '<div class="tag-tables">' +
+        '<div class="tag-tables" hidden>' +
         '<div><h3 style="margin:0 0 8px;font-size:14px">按成交类型</h3><table class="tag-table"><thead><tr><th>类型</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="dealBody"></tbody></table></div>' +
         '<div><h3 style="margin:0 0 8px;font-size:14px">按省份</h3><table class="tag-table"><thead><tr><th>省份</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="regionBody"></tbody></table></div>' +
         '<div><h3 style="margin:0 0 8px;font-size:14px">按采购人</h3><table class="tag-table"><thead><tr><th>采购人</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="buyerBody"></tbody></table></div>' +
         "</div>";
       panel.appendChild(tagBlock);
-      fillTagStats(tagBlock, data);
 
       const axis = { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
       const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
@@ -823,6 +893,21 @@
         series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(31,138,86,.28)" }, { offset: 1, color: "rgba(224,177,90,.05)" }]) }, data: (data.daily || []).map((row) => row.count) }],
       });
       fitCharts();
+
+      try {
+        const tagData = (await api("/api/portal/stats/?" + statsQueryParams({
+          includeTags: "1",
+          includeNoticeStats: "0",
+        }).toString())).data;
+        const loading = tagBlock.querySelector("[data-tag=loading]");
+        if (loading) loading.remove();
+        tagBlock.querySelector(".tag-metrics")?.removeAttribute("hidden");
+        tagBlock.querySelector(".tag-tables")?.removeAttribute("hidden");
+        fillTagStats(tagBlock, tagData);
+      } catch (error) {
+        const loading = tagBlock.querySelector("[data-tag=loading]");
+        if (loading) loading.textContent = "标签分析加载失败：" + (error.message || "请稍后重试");
+      }
     }
 
     function kindTone(kind) {
@@ -831,6 +916,88 @@
       if (kind === "询比公告" || kind === "竞价公告") return "teal";
       if (kind && kind !== "采购公告") return "ink";
       return "";
+    }
+
+    function closeNoticeDetail() {
+      noticeDetail = null;
+      const backdrop = document.getElementById("notice-detail-backdrop");
+      if (backdrop) backdrop.remove();
+    }
+
+    function openSourceUrl(url) {
+      if (!url) return;
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    function showNoticeDetail(detail) {
+      closeNoticeDetail();
+      noticeDetail = detail;
+      const backdrop = document.createElement("div");
+      backdrop.id = "notice-detail-backdrop";
+      backdrop.className = "modal-backdrop";
+      backdrop.innerHTML =
+        '<div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-head"><div><h3></h3><p></p></div><button class="icon-button" type="button" aria-label="关闭">×</button></div>' +
+        '<div class="modal-body">' +
+        '<div class="detail-grid"></div>' +
+        '<div class="modal-actions">' +
+        '<button class="primary" type="button" data-role="open-source">打开原文</button>' +
+        '<button class="ghost" type="button" data-role="close">关闭</button>' +
+        "</div></div></div>";
+      const meta = [detail.siteLabel, detail.noticeKind, detail.publishTime].filter(Boolean).join(" · ");
+      backdrop.querySelector("h3").textContent = detail.title || "公告详情";
+      backdrop.querySelector(".modal-head p").textContent = meta || "—";
+      const grid = backdrop.querySelector(".detail-grid");
+      const fields = [
+        ["项目编号", detail.projectCode],
+        ["项目名称", detail.projectName],
+        ["采购人", detail.buyerName],
+        ["地区", detail.regionName],
+        ["预算金额", detail.budgetAmount != null ? formatMoney(detail.budgetAmount) : ""],
+        ["成交金额", detail.dealAmount != null ? formatMoney(detail.dealAmount) : ""],
+        ["成交供应商", detail.dealSupplier],
+        ["进度", detail.progressLabel],
+        ["开始时间", detail.startTime],
+        ["结束时间", detail.endTime],
+      ];
+      fields.forEach(([label, value]) => {
+        if (value == null || value === "") return;
+        const info = document.createElement("div");
+        info.className = "info";
+        info.innerHTML = "<span></span><strong></strong>";
+        info.querySelector("span").textContent = label;
+        info.querySelector("strong").textContent = String(value);
+        grid.appendChild(info);
+      });
+      if (detail.contentText) {
+        const info = document.createElement("div");
+        info.className = "info wide";
+        info.innerHTML = "<span>正文摘要</span><strong></strong>";
+        info.querySelector("strong").textContent = String(detail.contentText).slice(0, 800);
+        grid.appendChild(info);
+      }
+      const sourceBtn = backdrop.querySelector("[data-role=open-source]");
+      if (!detail.sourceUrl) {
+        sourceBtn.disabled = true;
+        sourceBtn.textContent = "暂无原文链接";
+      } else {
+        sourceBtn.onclick = () => openSourceUrl(detail.sourceUrl);
+      }
+      backdrop.querySelector("[data-role=close]").onclick = closeNoticeDetail;
+      backdrop.querySelector(".icon-button").onclick = closeNoticeDetail;
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) closeNoticeDetail();
+      });
+      document.body.appendChild(backdrop);
+    }
+
+    async function openNoticeDetail(id) {
+      try {
+        const detail = await api("/api/portal/notices/" + id + "/");
+        showNoticeDetail(detail);
+      } catch (error) {
+        window.alert(error.message || "加载详情失败");
+      }
     }
 
     function fillNoticeList(list, body) {
@@ -842,13 +1009,31 @@
       body.items.forEach((item) => {
         const article = document.createElement("article");
         article.className = "notice";
-        article.innerHTML = '<div class="notice-main"><h3></h3><p></p></div><span class="kind"></span>';
+        article.innerHTML =
+          '<div class="notice-main"><h3></h3><p></p></div>' +
+          '<div class="notice-actions">' +
+          '<button class="copy-link" type="button" data-role="detail">详情</button>' +
+          '<button class="copy-link" type="button" data-role="source">原文</button>' +
+          "</div>" +
+          '<span class="kind"></span>';
         article.querySelector("h3").textContent = item.title || "未命名公告";
         article.querySelector("p").textContent = [item.siteLabel, item.regionName, item.progressLabel, item.publishTime].filter(Boolean).join(" · ");
         const badge = article.querySelector(".kind");
         badge.textContent = item.noticeKind || "公告";
         const tone = kindTone(item.noticeKind);
         if (tone) badge.classList.add(tone);
+        article.querySelector(".notice-main").onclick = () => void openNoticeDetail(item.id);
+        article.querySelector("[data-role=detail]").onclick = () => void openNoticeDetail(item.id);
+        const sourceBtn = article.querySelector("[data-role=source]");
+        if (!item.sourceUrl) {
+          sourceBtn.disabled = true;
+          sourceBtn.style.opacity = "0.45";
+        } else {
+          sourceBtn.onclick = (event) => {
+            event.stopPropagation();
+            openSourceUrl(item.sourceUrl);
+          };
+        }
         list.appendChild(article);
       });
     }
@@ -876,6 +1061,11 @@
         siteId: noticeQuery.siteId,
         noticeKind: noticeQuery.noticeKind,
       });
+      if (noticeQuery.publishDateFrom) params.set("publishDateFrom", noticeQuery.publishDateFrom);
+      if (noticeQuery.publishDateTo) params.set("publishDateTo", noticeQuery.publishDateTo);
+      if (!panel.querySelector(".list-card")) {
+        panel.innerHTML = '<p class="panel-loading">正在加载公告列表…</p>';
+      }
       const body = await api("/api/portal/notices/?" + params.toString());
       if (requestId !== noticeRequest) return;
 
@@ -886,7 +1076,14 @@
         panel.innerHTML = "";
         toolbar = document.createElement("div");
         toolbar.className = "toolbar";
-        toolbar.innerHTML = '<label>搜索<input name="search" placeholder="标题、项目、采购人" /></label><label>平台<select name="siteId"><option value="">全部</option></select></label><label>类型<select name="noticeKind"><option value="">全部</option></select></label>';
+        toolbar.innerHTML =
+          '<label>搜索<input name="search" placeholder="标题、项目、采购人" /></label>' +
+          '<label>平台<select name="siteId"><option value="">全部</option></select></label>' +
+          '<label>类型<select name="noticeKind"><option value="">全部</option></select></label>' +
+          '<label>发布开始<input name="publishDateFrom" type="date" /></label>' +
+          '<label>发布结束<input name="publishDateTo" type="date" /></label>' +
+          '<button class="ghost" type="button" data-role="apply-dates">查询</button>' +
+          '<button class="ghost" type="button" data-role="clear-dates">清空日期</button>';
         const searchInput = toolbar.querySelector("[name=search]");
         searchInput.value = noticeQuery.search;
         searchInput.oninput = (event) => {
@@ -925,6 +1122,24 @@
           noticeQuery.page = 1;
           renderNotices(panel);
         };
+        const fromInput = toolbar.querySelector("[name=publishDateFrom]");
+        const toInput = toolbar.querySelector("[name=publishDateTo]");
+        fromInput.value = noticeQuery.publishDateFrom;
+        toInput.value = noticeQuery.publishDateTo;
+        toolbar.querySelector("[data-role=apply-dates]").onclick = () => {
+          noticeQuery.publishDateFrom = fromInput.value || "";
+          noticeQuery.publishDateTo = toInput.value || "";
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
+        toolbar.querySelector("[data-role=clear-dates]").onclick = () => {
+          fromInput.value = "";
+          toInput.value = "";
+          noticeQuery.publishDateFrom = "";
+          noticeQuery.publishDateTo = "";
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
         list = document.createElement("div");
         list.className = "card list-card";
         pager = document.createElement("div");
@@ -932,6 +1147,9 @@
         panel.appendChild(toolbar);
         panel.appendChild(list);
         panel.appendChild(pager);
+      } else {
+        toolbar.querySelector("[name=publishDateFrom]").value = noticeQuery.publishDateFrom;
+        toolbar.querySelector("[name=publishDateTo]").value = noticeQuery.publishDateTo;
       }
       fillNoticeList(list, body);
       fillNoticePager(pager, panel, body);
@@ -963,7 +1181,7 @@
     function renderAccount(panel) {
       panel.innerHTML = "";
       const card = document.createElement("section");
-      card.className = "card";
+      card.className = "card account-card";
       const tags = (me.permissions || []).map((id) => PERMISSION_LABELS[id] || id);
       const sites = (me.allowedSites || []).map((site) => site.label || site.id);
       const siteText = me.siteScope === "limited" ? (sites.length ? sites.join("、") : "无平台") : "全部平台";

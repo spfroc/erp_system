@@ -1,10 +1,12 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import hashlib
 
 from django.contrib.auth.hashers import check_password, is_password_usable
 from django.core import signing
+from django.core.cache import cache
 from django.db import OperationalError, ProgrammingError
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth
 from django.http import JsonResponse
 from django.utils import timezone
@@ -12,11 +14,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import CustomerAccountRecord
-from .notice_models import NoticeParsed, NoticeRaw
+from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
 from .notice_tagging import DEAL_KINDS, normalize_stats_period, period_bounds, safe_stats
-from .notice_views import NOTICE_TYPE_LABELS, SITE_LABELS, _raw_ids_for_kind, query_crawled_notices
-from .notices import list_public_notices
-
+from .notice_views import (
+    NOTICE_TYPE_LABELS,
+    SITE_LABELS,
+    _serialize_detail,
+    query_crawled_notices,
+)
 PORTAL_COOKIE = "portal_session"
 PORTAL_SALT = "portal-account"
 PORTAL_MAX_AGE = 60 * 60 * 12
@@ -205,14 +210,109 @@ def _raw_base_qs(site_ids: list[str] | None = None):
     return qs
 
 
+def _publish_dt_bounds(start: date, end: date) -> tuple[str, str]:
+    """公告 publish_time 为上海墙钟 naive DATETIME；返回 [start, end) 字符串以便走索引。"""
+    return f"{start.isoformat()} 00:00:00", f"{end.isoformat()} 00:00:00"
+
+
 def _kind_amount(kind: str, field: str, start: date, end: date, site_ids: list[str] | None = None) -> float:
-    raw_ids = _raw_base_qs(site_ids).filter(
-        _raw_ids_for_kind(kind, ""),
-        publish_time__date__gte=start,
-        publish_time__date__lt=end,
-    ).values("id")
-    total = NoticeParsed.objects.filter(notice_raw_id__in=raw_ids).aggregate(total=Sum(field))["total"]
-    return _money(total)
+    """按解析表 notice_kind + publish_time 汇总金额（可走 site/publish 索引）。"""
+    lo, hi = _publish_dt_bounds(start, end)
+    qs = NoticeParsed.objects.filter(notice_kind=kind, publish_time__gte=lo, publish_time__lt=hi)
+    if site_ids is not None:
+        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
+    return _money(qs.aggregate(total=Sum(field))["total"])
+
+
+def _parsed_qs(site_ids: list[str] | None, lo: str, hi: str):
+    qs = NoticeParsed.objects.filter(publish_time__gte=lo, publish_time__lt=hi)
+    if site_ids is not None:
+        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
+    return qs
+
+
+def build_site_metric_stats(
+    sites: list[dict],
+    *,
+    start: date,
+    end: date,
+    range_counts: dict[str, int] | None = None,
+    today_counts: dict[str, int] | None = None,
+    week_counts: dict[str, int] | None = None,
+    purchase_map: dict[str, float] | None = None,
+    deal_map: dict[str, float] | None = None,
+) -> list[dict]:
+    """分平台指标卡。可传入已算好的聚合结果，避免重复扫表。"""
+    if not sites:
+        return []
+    today = timezone.localdate()
+    lo, hi = _publish_dt_bounds(start, end)
+    today_lo, today_hi = _publish_dt_bounds(today, today + timedelta(days=1))
+    week_lo, _ = _publish_dt_bounds(today - timedelta(days=6), end)
+    site_ids = [str(site["id"]) for site in sites]
+
+    def _count_map(qs) -> dict[str, int]:
+        return {str(row["site_id"] or ""): int(row["c"] or 0) for row in qs.values("site_id").annotate(c=Count("id"))}
+
+    try:
+        if range_counts is None or today_counts is None or week_counts is None:
+            base = _raw_base_qs(site_ids)
+            range_counts = range_counts if range_counts is not None else _count_map(
+                base.filter(publish_time__gte=lo, publish_time__lt=hi)
+            )
+            today_counts = today_counts if today_counts is not None else _count_map(
+                base.filter(publish_time__gte=today_lo, publish_time__lt=today_hi)
+            )
+            week_counts = week_counts if week_counts is not None else _count_map(
+                base.filter(publish_time__gte=week_lo, publish_time__lt=today_hi)
+            )
+        if purchase_map is None or deal_map is None:
+            purchase_map, deal_map = {}, {}
+            for row in (
+                _parsed_qs(site_ids, lo, hi)
+                .filter(notice_kind__in=["采购公告", "成交公告"])
+                .values("site_id", "notice_kind")
+                .annotate(budget=Sum("budget_amount"), deal=Sum("deal_amount"))
+            ):
+                sid = str(row["site_id"] or "")
+                if row["notice_kind"] == "采购公告":
+                    purchase_map[sid] = _money(row["budget"])
+                elif row["notice_kind"] == "成交公告":
+                    deal_map[sid] = _money(row["deal"])
+    except (ProgrammingError, OperationalError):
+        range_counts = range_counts or {}
+        today_counts = today_counts or {}
+        week_counts = week_counts or {}
+        purchase_map = purchase_map or {}
+        deal_map = deal_map or {}
+
+    start_date = start.isoformat()
+    end_date = (end - timedelta(days=1)).isoformat()
+    result: list[dict] = []
+    for site in sites:
+        sid = str(site["id"])
+        purchase = (purchase_map or {}).get(sid, 0.0)
+        deal = (deal_map or {}).get(sid, 0.0)
+        result.append(
+            {
+                "siteId": sid,
+                "label": site.get("label") or SITE_LABELS.get(sid, sid),
+                "publicNoticeTotal": (range_counts or {}).get(sid, 0),
+                "todayCount": (today_counts or {}).get(sid, 0),
+                "weekCount": (week_counts or {}).get(sid, 0),
+                "purchaseAmount": purchase,
+                "dealAmount": deal,
+                "lastMonthPurchaseAmount": purchase,
+                "lastMonthDealAmount": deal,
+                "monthlyDeal": [],
+                "daily": [],
+                "bySite": [],
+                "byKind": [],
+                "startDate": start_date,
+                "endDate": end_date,
+            }
+        )
+    return result
 
 
 def _month_keys_between(start: date, end_exclusive: date) -> list[str]:
@@ -248,18 +348,16 @@ def _monthly_deal_amounts(
 ) -> list[dict]:
     keys = _month_keys_between(start, end) or _recent_month_keys(timezone.localdate(), 6)
     chart_start = date.fromisoformat(keys[0] + "-01")
-    raw_ids = _raw_base_qs(site_ids).filter(
-        _raw_ids_for_kind("成交公告", ""),
-        publish_time__date__gte=start,
-        publish_time__date__lt=end,
-    ).values("id")
+    lo, hi = _publish_dt_bounds(start, end)
+    qs = NoticeParsed.objects.filter(
+        notice_kind="成交公告",
+        publish_time__gte=lo,
+        publish_time__lt=hi,
+    )
+    if site_ids is not None:
+        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
     rows = (
-        NoticeParsed.objects.filter(
-            notice_raw_id__in=raw_ids,
-            publish_time__date__gte=start,
-            publish_time__date__lt=end,
-        )
-        .annotate(month=TruncMonth("publish_time"))
+        qs.annotate(month=TruncMonth("publish_time"))
         .values("month")
         .annotate(total=Sum("deal_amount"))
     )
@@ -319,54 +417,99 @@ def build_notice_stats(
     *,
     start: date | None = None,
     end: date | None = None,
+    light: bool = False,
+    with_site_maps: bool = False,
 ) -> dict:
-    """公告库汇总。start/end 为 [start, end) 的 date；缺省则按近况窗口。"""
+    """公告库汇总。start/end 为 [start, end) 的 date；缺省则按近况窗口。
+
+    light=True：只算指标卡所需字段，跳过图表序列。
+    with_site_maps=True：附带 _siteMaps 供分平台指标卡复用，避免二次扫表。
+    """
     today = timezone.localdate()
     range_start = start or (today - timedelta(days=13))
     range_end = end or (today + timedelta(days=1))
     stats = _empty_notice_stats(site_ids, start=range_start, end=range_end)
     try:
         week_start = today - timedelta(days=6)
-        raw_qs = _raw_base_qs(site_ids).filter(
-            publish_time__date__gte=range_start,
-            publish_time__date__lt=range_end,
+        lo, hi = _publish_dt_bounds(range_start, range_end)
+        today_lo, today_hi = _publish_dt_bounds(today, today + timedelta(days=1))
+        week_lo, _ = _publish_dt_bounds(week_start, today + timedelta(days=1))
+        raw_qs = _raw_base_qs(site_ids).filter(publish_time__gte=lo, publish_time__lt=hi)
+
+        # 1) 一次按站点聚合：区间总量 + 今日 + 近7日（条件计数，只扫区间内行）
+        site_count_rows = list(
+            raw_qs.values("site_id").annotate(
+                total=Count("id"),
+                today=Count("id", filter=Q(publish_time__gte=today_lo, publish_time__lt=today_hi)),
+                week=Count("id", filter=Q(publish_time__gte=week_lo, publish_time__lt=today_hi)),
+            )
         )
-        stats["publicNoticeTotal"] = raw_qs.count()
-        stats["todayCount"] = raw_qs.filter(publish_time__date=today).count()
-        stats["weekCount"] = raw_qs.filter(publish_time__date__gte=week_start).count()
-        purchase = _kind_amount("采购公告", "budget_amount", range_start, range_end, site_ids)
-        deal = _kind_amount("成交公告", "deal_amount", range_start, range_end, site_ids)
-        stats["purchaseAmount"] = purchase
-        stats["dealAmount"] = deal
-        # 兼容旧字段名（前端逐步改为区间语义标签）
-        stats["lastMonthPurchaseAmount"] = purchase
-        stats["lastMonthDealAmount"] = deal
-        stats["monthlyDeal"] = _monthly_deal_amounts(site_ids, start=range_start, end=range_end)
+        range_counts = {str(row["site_id"] or ""): int(row["total"] or 0) for row in site_count_rows}
+        today_counts = {str(row["site_id"] or ""): int(row["today"] or 0) for row in site_count_rows}
+        week_counts = {str(row["site_id"] or ""): int(row["week"] or 0) for row in site_count_rows}
+        stats["publicNoticeTotal"] = sum(range_counts.values())
+        stats["todayCount"] = sum(today_counts.values())
+        stats["weekCount"] = sum(week_counts.values())
         stats["bySite"] = [
             {
-                "siteId": row["site_id"] or "",
-                "label": SITE_LABELS.get(row["site_id"] or "", row["site_id"] or "未标注"),
-                "count": row["count"],
+                "siteId": sid,
+                "label": SITE_LABELS.get(sid, sid or "未标注"),
+                "count": range_counts[sid],
             }
-            for row in raw_qs.values("site_id").annotate(count=Count("id")).order_by("-count")
+            for sid in sorted(range_counts.keys(), key=lambda key: (-range_counts[key], key))
         ]
+
+        # 2) 解析表一次按站点+类型聚合：类型分布 + 采购/成交金额
+        purchase = 0.0
+        deal = 0.0
+        purchase_map: dict[str, float] = {}
+        deal_map: dict[str, float] = {}
         kind_counts: dict[str, int] = {}
-        for row in raw_qs.values("site_id", "notice_type").annotate(count=Count("id")):
-            label = _kind_label(row["site_id"], row["notice_type"])
-            kind_counts[label] = kind_counts.get(label, 0) + row["count"]
+        for row in (
+            _parsed_qs(site_ids, lo, hi)
+            .values("site_id", "notice_kind")
+            .annotate(count=Count("id"), budget=Sum("budget_amount"), deal_sum=Sum("deal_amount"))
+        ):
+            sid = str(row["site_id"] or "")
+            kind = (row["notice_kind"] or "").strip() or "其他"
+            kind_counts[kind] = kind_counts.get(kind, 0) + int(row["count"] or 0)
+            if kind == "采购公告":
+                amount = _money(row["budget"])
+                purchase += amount
+                purchase_map[sid] = purchase_map.get(sid, 0.0) + amount
+            elif kind == "成交公告":
+                amount = _money(row["deal_sum"])
+                deal += amount
+                deal_map[sid] = deal_map.get(sid, 0.0) + amount
+
+        stats["purchaseAmount"] = purchase
+        stats["dealAmount"] = deal
+        stats["lastMonthPurchaseAmount"] = purchase
+        stats["lastMonthDealAmount"] = deal
+        stats["startDate"] = range_start.isoformat()
+        stats["endDate"] = (range_end - timedelta(days=1)).isoformat()
         stats["byKind"] = [
             {"kind": kind, "count": count}
             for kind, count in sorted(kind_counts.items(), key=lambda item: (-item[1], item[0]))
         ]
+
+        if with_site_maps:
+            stats["_siteMaps"] = {
+                "range_counts": range_counts,
+                "today_counts": today_counts,
+                "week_counts": week_counts,
+                "purchase_map": purchase_map,
+                "deal_map": deal_map,
+            }
+
+        if light:
+            stats["monthlyDeal"] = []
+            stats["daily"] = []
+            return stats
+
+        # 3) 日发布量
         daily_map = {item["date"]: 0 for item in stats["daily"]}
-        chart_start = date.fromisoformat(stats["daily"][0]["date"]) if stats["daily"] else range_start
-        rows = (
-            raw_qs.filter(publish_time__date__gte=chart_start)
-            .annotate(day=TruncDate("publish_time"))
-            .values("day")
-            .annotate(count=Count("id"))
-        )
-        for row in rows:
+        for row in raw_qs.annotate(day=TruncDate("publish_time")).values("day").annotate(count=Count("id")):
             day = row["day"]
             if not day:
                 continue
@@ -374,8 +517,9 @@ def build_notice_stats(
             if key in daily_map:
                 daily_map[key] = row["count"]
         stats["daily"] = [{"date": key, "count": daily_map[key]} for key in daily_map]
-        stats["startDate"] = range_start.isoformat()
-        stats["endDate"] = (range_end - timedelta(days=1)).isoformat()
+
+        # 4) 月成交
+        stats["monthlyDeal"] = _monthly_deal_amounts(site_ids, start=range_start, end=range_end)
     except (ProgrammingError, OperationalError):
         return _empty_notice_stats(site_ids, start=range_start, end=range_end)
     return stats
@@ -398,12 +542,34 @@ def portal_notices(request):
             site_id=(request.GET.get("siteId") or "").strip(),
             notice_kind=(request.GET.get("noticeKind") or "").strip(),
             site_ids=scope,
+            publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
+            publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
         payload = {"items": [], "total": 0, "page": page, "page_size": page_size}
     payload["sites"] = site_options(scope)
     payload["noticeKinds"] = PORTAL_NOTICE_KINDS
     return JsonResponse(payload)
+
+
+@require_http_methods(["GET"])
+def portal_notice_detail(request, notice_id: int):
+    record, error = require_portal(request, "portal.notice.view")
+    if error:
+        return error
+    account = public_account(record)
+    scope = account_site_scope(account)
+    try:
+        raw = NoticeRaw.objects.filter(id=notice_id).first()
+        if not raw:
+            return JsonResponse({"detail": "公告不存在"}, status=404)
+        if scope is not None and raw.site_id not in scope:
+            return JsonResponse({"detail": "无权查看该公告"}, status=403)
+        parsed = NoticeParsed.objects.filter(notice_raw_id=raw.id).first()
+        goods = list(NoticeGoods.objects.filter(notice_raw_id=raw.id).order_by("line_no", "id"))
+        return JsonResponse(_serialize_detail(raw, parsed, goods))
+    except (ProgrammingError, OperationalError):
+        return JsonResponse({"detail": "公告表尚未创建"}, status=503)
 
 
 @csrf_exempt
@@ -474,6 +640,42 @@ def portal_stats_view(request):
     return portal_stats(request)
 
 
+PORTAL_STATS_CACHE_SECONDS = 45
+
+
+def _portal_stats_cache_key(
+    *,
+    account_id: str,
+    effective_scope: list[str] | None,
+    period: str,
+    start_date: str,
+    end_date: str,
+    include_notice: bool,
+    include_tags: bool,
+    include_sites: bool,
+    province: str,
+    buyer: str,
+    deal_kind: str,
+) -> str:
+    scope_part = "all" if effective_scope is None else ",".join(sorted(effective_scope))
+    raw = "|".join(
+        [
+            str(account_id),
+            scope_part,
+            period,
+            start_date,
+            end_date,
+            "1" if include_notice else "0",
+            "1" if include_tags else "0",
+            "1" if include_sites else "0",
+            province,
+            buyer,
+            deal_kind,
+        ]
+    )
+    return "portal_stats:" + hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
 def portal_stats(request):
     record, error = require_portal(request, "portal.stats.view")
     if error:
@@ -491,26 +693,65 @@ def portal_stats(request):
     start_date = (request.GET.get("startDate") or request.GET.get("start_date") or "").strip()
     end_date = (request.GET.get("endDate") or request.GET.get("end_date") or "").strip()
     period = normalize_stats_period(
-        (request.GET.get("period") or "this_month").strip(),
+        (request.GET.get("period") or "last_30_days").strip(),
         start_date,
         end_date,
     )
     bound_start, bound_end = period_bounds(period, start_date=start_date, end_date=end_date)
     range_start = bound_start.date()
     range_end = bound_end.date()
-    stats = build_notice_stats(site_ids=effective_scope, start=range_start, end=range_end)
-    if stats["publicNoticeTotal"] == 0 and effective_scope is None and period == "this_month":
-        legacy_total = list_public_notices(page=1, page_size=1, search="", notice_kind="").get("total", 0)
-        if legacy_total and not stats["bySite"]:
-            stats["publicNoticeTotal"] = legacy_total
-    tag_stats = safe_stats(
+    include_notice = (request.GET.get("includeNoticeStats") or "1").strip().lower() not in {"0", "false", "no"}
+    include_tags = (request.GET.get("includeTags") or "1").strip().lower() not in {"0", "false", "no"}
+    include_sites = (request.GET.get("includeSites") or "") in {"1", "true", "yes"}
+    province = (request.GET.get("province") or "").strip()
+    buyer = (request.GET.get("buyer") or "").strip()
+    deal_kind = (request.GET.get("deal_kind") or request.GET.get("dealKind") or "").strip()
+
+    cache_key = _portal_stats_cache_key(
+        account_id=str(record.id),
+        effective_scope=effective_scope,
         period=period,
-        province=(request.GET.get("province") or "").strip(),
-        buyer=(request.GET.get("buyer") or "").strip(),
-        deal_kind=(request.GET.get("deal_kind") or request.GET.get("dealKind") or "").strip(),
-        site_ids=effective_scope,
         start_date=start_date,
         end_date=end_date,
+        include_notice=include_notice,
+        include_tags=include_tags,
+        include_sites=include_sites,
+        province=province,
+        buyer=buyer,
+        deal_kind=deal_kind,
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse({"data": cached})
+
+    sites = site_options(scope)
+    need_site_maps = include_sites and len(sites) > 1
+    if include_notice:
+        stats = build_notice_stats(
+            site_ids=effective_scope,
+            start=range_start,
+            end=range_end,
+            with_site_maps=need_site_maps,
+        )
+    else:
+        stats = {
+            **_empty_notice_stats(effective_scope, start=range_start, end=range_end),
+            "sites": sites,
+        }
+    site_maps = stats.pop("_siteMaps", None) if isinstance(stats, dict) else None
+
+    tag_stats = (
+        safe_stats(
+            period=period,
+            province=province,
+            buyer=buyer,
+            deal_kind=deal_kind,
+            site_ids=effective_scope,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if include_tags
+        else {}
     )
     payload = {
         "customerName": account["customerName"] or account["name"],
@@ -522,14 +763,31 @@ def portal_stats(request):
         "tagStats": tag_stats,
     }
     # 首页：附带各可查看平台的独立统计（单平台时前端只展示一块）
-    if (request.GET.get("includeSites") or "") in {"1", "true", "yes"}:
-        sites = site_options(scope)
-        payload["siteStats"] = [
-            {
-                "siteId": site["id"],
-                "label": site["label"],
-                **build_notice_stats(site_ids=[site["id"]], start=range_start, end=range_end),
-            }
-            for site in sites
-        ]
+    if include_sites:
+        if len(sites) <= 1:
+            payload["siteStats"] = [
+                {
+                    "siteId": site["id"],
+                    "label": site["label"],
+                    **build_notice_stats(
+                        site_ids=[site["id"]],
+                        start=range_start,
+                        end=range_end,
+                        light=False,
+                    ),
+                }
+                for site in sites
+            ]
+        else:
+            payload["siteStats"] = build_site_metric_stats(
+                sites,
+                start=range_start,
+                end=range_end,
+                range_counts=(site_maps or {}).get("range_counts"),
+                today_counts=(site_maps or {}).get("today_counts"),
+                week_counts=(site_maps or {}).get("week_counts"),
+                purchase_map=(site_maps or {}).get("purchase_map"),
+                deal_map=(site_maps or {}).get("deal_map"),
+            )
+    cache.set(cache_key, payload, PORTAL_STATS_CACHE_SECONDS)
     return JsonResponse({"data": payload})

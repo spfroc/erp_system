@@ -23,6 +23,8 @@ CALL add_notice_list_index('notice_raw', 'idx_raw_site_id', 'site_id, id');
 CALL add_notice_list_index('notice_raw', 'idx_raw_site_notice_type', 'site_id, notice_type');
 CALL add_notice_list_index('notice_raw', 'idx_raw_region', 'region_name');
 CALL add_notice_list_index('notice_raw', 'idx_raw_parse_site', 'parse_status, site_id, id');
+CALL add_notice_list_index('notice_raw', 'idx_raw_publish_id', 'publish_time, id');
+CALL add_notice_list_index('notice_raw', 'idx_raw_site_publish', 'site_id, publish_time');
 
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_site_kind', 'site_id, notice_kind');
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_region', 'region_name');
@@ -30,5 +32,8 @@ CALL add_notice_list_index('notice_parsed', 'idx_parsed_project_name', 'project_
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_end_time', 'end_time');
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_start_time', 'start_time');
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_site_project', 'site_id, project_code');
+CALL add_notice_list_index('notice_parsed', 'idx_parsed_publish_time', 'publish_time');
+CALL add_notice_list_index('notice_parsed', 'idx_parsed_publish_raw', 'publish_time, notice_raw_id');
+CALL add_notice_list_index('notice_parsed', 'idx_parsed_site_publish', 'site_id, publish_time');
 
 DROP PROCEDURE IF EXISTS add_notice_list_index;

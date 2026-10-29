@@ -1,8 +1,10 @@
-# one?182.168.1.120???????? 3306 ?? center/admin ? MariaDB ???MySQL ???? 13306?
+# one@182.168.1.120 — 宿主机 3306 给 center/admin MariaDB 占用，本栈 MySQL 映射 13306。
+# 时区：统一 Asia/Shanghai（东八区）。Alpine 镜像仅挂 /etc/localtime 不够，需同时挂 zoneinfo。
 x-timezone-env: &timezone-env
   TZ: Asia/Shanghai
 
-x-localtime: &localtime /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+x-vol-localtime: &vol-localtime /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+x-vol-zoneinfo: &vol-zoneinfo /usr/share/zoneinfo:/usr/share/zoneinfo:ro
 
 services:
   frontend:
@@ -12,7 +14,7 @@ services:
     command: sh -c "test -d node_modules && npm run dev -- --host 0.0.0.0 || (npm install && npm run dev -- --host 0.0.0.0)"
     environment:
       <<: *timezone-env
-      # one ????? 8000?? docker-compose.dev.yml ? 18080 ???
+      # one 后端映射宿主机 8000；docker-compose.dev.yml 用 18080
       VITE_BACKEND_PORT: "8000"
       VITE_OCR_PORT: "8100"
     ports:
@@ -20,7 +22,8 @@ services:
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       - backend
 
@@ -37,7 +40,8 @@ services:
       - "18083:5180"
     volumes:
       - ../official-web:/app
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       - backend
 
@@ -59,7 +63,7 @@ services:
       MYSQL_PORT: "3306"
       REDIS_URL: redis://redis:6379/0
       OCR_SERVICE_URL: http://ocr-service:8100
-      # ??? center?php artisan serve :8899??? 172.18.0.1 = compose ?? bridge?
+      # 对接 center（php artisan serve :8899）；172.18.0.1 = compose 默认 bridge
       CENTER_SMS_BASE_URL: http://172.18.0.1:8899/api/sms
       CENTER_SMS_DRY_RUN: "0"
     extra_hosts:
@@ -68,7 +72,8 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/app
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       mysql:
         condition: service_healthy
@@ -88,7 +93,8 @@ services:
       - "8100:8100"
     volumes:
       - ../ocr-service:/app
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
 
   mysql:
     image: mysql:8.0.21
@@ -103,7 +109,8 @@ services:
       - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
@@ -117,9 +124,10 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
 
-  # ??????????????? python:3.10.13????? Docker Hub?
+  # 公告采集：固定 python:3.10.13，避免 Docker Hub latest 漂移
   notice-crawler:
     image: python:3.10.13
     working_dir: /app
@@ -148,13 +156,14 @@ services:
     volumes:
       - ../notice_crawler:/app
       - notice_crawler_data:/app/data
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       mysql:
         condition: service_healthy
 
   celery-worker:
-    # ???? backend ????? one ? Docker Hub ?????? volume ??
+    # 复用 backend 镜像；one 上 Docker Hub 拉取慢时靠 volume 挂代码
     image: yzc-erp-backend:latest
     working_dir: /app
     command: celery -A config worker -l info -Q default -c 2
@@ -173,7 +182,8 @@ services:
     volumes:
       - ../backend:/app
       - ../notice_crawler:/opt/notice_crawler
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       mysql:
         condition: service_healthy
@@ -197,7 +207,8 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ../backend:/app
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       mysql:
         condition: service_healthy
@@ -207,7 +218,7 @@ services:
   celery-crawler-worker:
     image: yzc-erp-backend:latest
     working_dir: /app
-    # ????????????????? notice_crawl_*
+    # 独立 crawler 队列，承接 notice_crawl_*
     command: >
       bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-docker.txt
       && exec celery -A config worker -l info -Q crawler -c 1 -n crawler@%h"
@@ -228,7 +239,8 @@ services:
     volumes:
       - ../backend:/app
       - ../notice_crawler:/opt/notice_crawler
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
     depends_on:
       mysql:
         condition: service_healthy
@@ -247,7 +259,8 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-      - *localtime
+      - *vol-localtime
+      - *vol-zoneinfo
 
 volumes:
   frontend_node_modules:

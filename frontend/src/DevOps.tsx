@@ -49,9 +49,25 @@ function scheduleLabel(job: JobItem) {
   return "手动";
 }
 
+/** 运维任务时间统一按东八区展示（后端存 UTC aware）。 */
 function formatRunTime(value?: string | null) {
   if (!value) return "—";
-  return value.replace("T", " ").slice(0, 19);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.replace("T", " ").slice(0, 19);
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
 }
 
 export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage: boolean }) {
@@ -251,8 +267,8 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
                 <span>{scheduleLabel(job)}</span>
                 <span>{job.enabled ? "是" : "否"}</span>
                 <span>
-                  <em>{job.lastRunAt ? job.lastRunAt.replace("T", " ").slice(0, 19) : "—"}</em>
-                  <em>{job.nextRunAt ? job.nextRunAt.replace("T", " ").slice(0, 19) : "—"}</em>
+                  <em>{formatRunTime(job.lastRunAt)}</em>
+                  <em>{formatRunTime(job.nextRunAt)}</em>
                 </span>
                 <div className="option-actions">
                   {canManage && (
