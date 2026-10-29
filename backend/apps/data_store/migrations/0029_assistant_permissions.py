@@ -49,7 +49,6 @@ def noop_reverse(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("data_store", "0028_notice_deal_kind"),
-        ("data_store", "0025_rename_mall_customer_menu"),
     ]
 
     operations = [
