@@ -103,6 +103,7 @@ def update_context(conversation: AssistantConversation, patch: dict[str, Any]) -
         "selected_entity": context.get("selected_entity") or {},
         "last_tool_status": context.get("last_tool_status") or "",
         "mode": context.get("mode") or "rule_only",
+        "pending_execution_id": context.get("pending_execution_id"),
     }
     conversation.context_json = trimmed
     conversation.save(update_fields=["context_json", "updated_at"])

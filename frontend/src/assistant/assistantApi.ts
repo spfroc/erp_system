@@ -83,3 +83,22 @@ export async function sendChatMessage(
   }
   return data as AssistantChatResponse;
 }
+
+export async function confirmAssistantAction(executionId: number, confirmationToken: string) {
+  const response = await assistantFetch(`/api/assistant/actions/${executionId}/confirm/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmation_token: confirmationToken }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || "确认执行失败");
+  }
+  return data as {
+    execution_id: number;
+    status: string;
+    content: string;
+    blocks: AssistantChatResponse["blocks"];
+    idempotent?: boolean;
+  };
+}

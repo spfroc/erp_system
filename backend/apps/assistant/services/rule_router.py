@@ -86,6 +86,20 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "reason": "navigation",
         }
 
+    # 受控写操作：运行安全任务（需确认；仅白名单脚本）
+    run_job = re.search(r"(?:运行|执行).{0,12}(?:任务|定时任务|打标).*?(?:id\s*[:=]?\s*|编号\s*)?(\d+)", text, re.I)
+    if not run_job:
+        run_job = re.search(r"(?:运行|执行)\s*(?:安全)?任务\s*(\d+)", text)
+    if run_job and _has_any(text, ("运行", "执行")) and _has_any(text, ("任务", "打标", "定时")):
+        return {
+            "intent": "devops.run_safe_job",
+            "tool_name": "devops.run_safe_job",
+            "params": {"job_id": int(run_job.group(1))},
+            "confidence": 0.9,
+            "needs_clarification": False,
+            "reason": "devops_run",
+        }
+
     # 运维状态
     if _has_any(text, ("采集任务", "定时任务", "任务失败", "运行失败", "任务状态")):
         return {

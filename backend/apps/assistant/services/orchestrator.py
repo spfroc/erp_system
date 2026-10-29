@@ -117,6 +117,7 @@ def handle_chat(
     data = result.get("data") if isinstance(result.get("data"), dict) else {}
     content = str(result.get("content") or result.get("summary") or "已完成。")
     blocks = [{"type": block_type, "data": data}]
+    status = str(result.get("status") or "completed")
 
     recent_ids = _extract_result_ids(block_type, data)
     update_context(
@@ -126,7 +127,8 @@ def handle_chat(
             "intent": tool_name,
             "params": params,
             "recent_result_ids": recent_ids or context.get("recent_result_ids") or [],
-            "last_tool_status": "completed",
+            "last_tool_status": status,
+            "pending_execution_id": result.get("execution_id") if status == "awaiting_confirmation" else None,
         },
     )
     assistant_msg = append_message(
@@ -141,7 +143,7 @@ def handle_chat(
         "message_id": assistant_msg.id,
         "mode": mode,
         "intent": tool_name,
-        "status": "completed",
+        "status": status,
         "content": content,
         "blocks": blocks,
         "errors": [],

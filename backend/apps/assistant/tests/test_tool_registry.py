@@ -20,6 +20,7 @@ REQUIRED_TOOLS = [
     "erp.purchase_order.search",
     "navigation.find",
     "devops.get_status",
+    "devops.run_safe_job",
 ]
 
 

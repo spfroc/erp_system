@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import type { PermissionKey } from "../types";
 import {
+  confirmAssistantAction,
   createConversation,
   deleteConversation,
   fetchAssistantStatus,
@@ -57,6 +58,7 @@ export function AssistantPage({
   const [context, setContext] = useState<Record<string, unknown>>({});
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [booting, setBooting] = useState(true);
 
   const prompts = useMemo(
@@ -129,6 +131,24 @@ export function AssistantPage({
     if (!next?.trim()) return;
     await renameConversation(id, next.trim());
     await refreshConversations();
+  }
+
+  async function handleConfirm(executionId: number, token: string) {
+    if (!canUse || confirming) return;
+    setConfirming(true);
+    try {
+      const result = await confirmAssistantAction(executionId, token);
+      setMessages((prev) => [
+        ...prev,
+        localMessage("assistant", result.content || "已执行。", result.blocks || []),
+      ]);
+    } catch (error) {
+      const errText = error instanceof Error ? error.message : "确认失败";
+      setMessages((prev) => [...prev, localMessage("assistant", errText, [{ type: "error", data: { text: errText } }])]);
+      onNotice?.(errText);
+    } finally {
+      setConfirming(false);
+    }
   }
 
   async function submit(text: string) {
@@ -233,6 +253,8 @@ export function AssistantPage({
                         blocks={msg.payload.blocks}
                         onNavigate={onNavigate}
                         onFollowUp={(text) => void submit(text)}
+                        onConfirmAction={(executionId, token) => void handleConfirm(executionId, token)}
+                        confirming={confirming}
                       />
                     ) : null}
                   </div>

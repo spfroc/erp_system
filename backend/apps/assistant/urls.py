@@ -12,4 +12,10 @@ urlpatterns = [
         views.assistant_conversation_detail,
         name="assistant-conversation-detail",
     ),
+    path("assistant/actions/<int:execution_id>/", views.assistant_action_detail, name="assistant-action-detail"),
+    path(
+        "assistant/actions/<int:execution_id>/confirm/",
+        views.assistant_action_confirm,
+        name="assistant-action-confirm",
+    ),
 ]

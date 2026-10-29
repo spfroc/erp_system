@@ -9,10 +9,14 @@ export function AssistantResultRenderer({
   blocks,
   onNavigate,
   onFollowUp,
+  onConfirmAction,
+  confirming,
 }: {
   blocks: AssistantBlock[];
   onNavigate?: (viewId: string) => void;
   onFollowUp?: (text: string) => void;
+  onConfirmAction?: (executionId: number, token: string) => void;
+  confirming?: boolean;
 }) {
   if (!blocks?.length) return null;
 
@@ -167,6 +171,29 @@ export function AssistantResultRenderer({
                     打开「{String(item.label || item.id)}」
                   </button>
                 ))}
+              </div>
+            </div>
+          );
+        }
+
+        if (block.type === "tool_preview") {
+          const executionId = Number(block.data?.execution_id || 0);
+          const token = String(block.data?.confirmation_token || "");
+          return (
+            <div key={key} className="assistant-block assistant-block-preview">
+              <p>
+                待确认操作：<strong>{String(block.data?.description || block.data?.tool_name || "")}</strong>
+              </p>
+              <pre className="assistant-json">{JSON.stringify(block.data?.params || {}, null, 2)}</pre>
+              <div className="option-actions">
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!executionId || !token || confirming}
+                  onClick={() => onConfirmAction?.(executionId, token)}
+                >
+                  {confirming ? "执行中…" : "确认执行"}
+                </button>
               </div>
             </div>
           );

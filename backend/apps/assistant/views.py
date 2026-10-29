@@ -165,3 +165,51 @@ def assistant_chat(request):
         elif code == "empty_message":
             status_code = 400
     return JsonResponse(result, status=status_code)
+
+
+@require_http_methods(["GET"])
+def assistant_action_detail(request, execution_id: int):
+    user_data, error = _require_permission(request, ASSISTANT_USE)
+    if error:
+        return error
+    from apps.assistant.services.confirmation import get_action
+
+    row = get_action(str(user_data["id"]), execution_id)
+    if not row:
+        return JsonResponse({"detail": "操作不存在"}, status=404)
+    return JsonResponse(
+        {
+            "id": row.id,
+            "tool_name": row.tool_name,
+            "status": row.status,
+            "parameters": row.parameters_json or {},
+            "result_summary": row.result_summary,
+            "error_code": row.error_code,
+            "created_at": row.created_at.isoformat() if row.created_at else "",
+            "completed_at": row.completed_at.isoformat() if row.completed_at else "",
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def assistant_action_confirm(request, execution_id: int):
+    user_data, error = _require_permission(request, ASSISTANT_USE)
+    if error:
+        return error
+    from apps.assistant.services.confirmation import confirm_action
+    from apps.assistant.services.tool_executor import ToolExecutionError
+
+    payload = _parse_json(request)
+    token = str(payload.get("confirmation_token") or payload.get("token") or "").strip()
+    if not token:
+        return JsonResponse({"detail": "缺少 confirmation_token"}, status=400)
+    try:
+        result = confirm_action(
+            user_data=user_data,
+            execution_id=execution_id,
+            confirmation_token=token,
+        )
+        return JsonResponse(result)
+    except ToolExecutionError as exc:
+        return JsonResponse({"detail": exc.message, "code": exc.code}, status=exc.status)
