@@ -26,3 +26,5 @@ coverage/
 .playwright-cli/
 imports/
 backend/imports/
+
+customers.sql

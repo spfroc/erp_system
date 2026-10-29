@@ -39,6 +39,7 @@ class Command(BaseCommand):
                         "notice.nature.view", "notice.nature.manage",
                         "site.view", "site.manage",
                         "library.view", "library.manage",
+                        "mallCustomer.view", "mallCustomer.manage",
                         "sms.view", "sms.manage",
                         "customerAccount.view", "customerAccount.manage",
                         "menu.view", "menu.manage",

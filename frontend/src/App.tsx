@@ -59,6 +59,7 @@ import {
 import { MenuSettingsPanel } from "./MenuSettings";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
 import { LibraryContactsPanel } from "./LibraryContacts";
+import { MallCustomersPanel } from "./MallCustomers";
 import { Notices } from "./Notices";
 import { NoticeStats } from "./NoticeStats";
 import { NoticeDictAdmin } from "./NoticeDictAdmin";
@@ -439,6 +440,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   "site.manage": "管理前端网站配置",
   "library.view": "查看政企客户资料库",
   "library.manage": "管理政企客户资料库",
+  "mallCustomer.view": "查看资料库",
+  "mallCustomer.manage": "管理资料库",
   "sms.view": "查看短信日志",
   "sms.manage": "短信管理",
   "customerAccount.view": "查看登录账号",
@@ -453,8 +456,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "user.manage"] },
 ];
@@ -507,6 +510,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "library.view") {
     return permissionSet.has("library.manage");
+  }
+  if (permission === "mallCustomer.view") {
+    return permissionSet.has("mallCustomer.manage");
   }
   if (permission === "customerAccount.view") {
     return permissionSet.has("customerAccount.manage");
@@ -3793,6 +3799,9 @@ export default function App() {
               setView("sms");
             }}
           />
+        )}
+        {view === "mallCustomers" && (
+          <MallCustomersPanel onNotice={setNotice} can={can} currentUser={currentUser} />
         )}
         {view === "sms" && (
           <SmsPanel

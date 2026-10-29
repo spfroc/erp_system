@@ -186,16 +186,34 @@ class JdQuanClient:
 
     def extract_attachments(self, detail: Dict[str, Any]) -> List[Dict[str, str]]:
         files: List[Dict[str, str]] = []
-        for item in detail.get("attachmentInfoList") or []:
-            url = ensure_https(item.get("url") or "")
-            if not url:
-                continue
+        seen = set()
+
+        def add(item: Any) -> None:
+            if not isinstance(item, dict):
+                return
+            url = ensure_https(
+                item.get("url") or item.get("fileUrl") or item.get("attachmentUrl") or ""
+            )
+            if not url or url in seen:
+                return
+            seen.add(url)
             files.append(
                 {
-                    "file_name": item.get("attachmentName") or url.rsplit("/", 1)[-1],
+                    "file_name": (
+                        item.get("attachmentName")
+                        or item.get("fileName")
+                        or url.rsplit("/", 1)[-1]
+                    ),
                     "file_url": url,
                 }
             )
+
+        for item in detail.get("attachmentInfoList") or []:
+            add(item)
+        nested = detail.get("detail")
+        if isinstance(nested, dict):
+            for item in nested.get("attachmentInfoList") or []:
+                add(item)
         return files
 
     def iter_categories(self) -> Iterable[Tuple[str, str, str, str]]:

@@ -36,6 +36,7 @@ DEFAULT_NAV_ITEMS = [
     {"id": "nav-item-entities", "viewId": "entities", "label": "客户基础信息管理", "categoryKey": "business", "groupKey": "customers", "permission": "entity.view", "iconKey": "Building2", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-customerAccounts", "viewId": "customerAccounts", "label": "登录账号管理", "categoryKey": "business", "groupKey": "customers", "permission": "customerAccount.view", "iconKey": "Users", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-libraryContacts", "viewId": "libraryContacts", "label": "政企客户资料库", "categoryKey": "business", "groupKey": "customers", "permission": "library.view", "iconKey": "BookUser", "sortOrder": 30, "enabled": True},
+    {"id": "nav-item-mallCustomers", "viewId": "mallCustomers", "label": "资料库", "categoryKey": "business", "groupKey": "customers", "permission": "mallCustomer.view", "iconKey": "LayoutList", "sortOrder": 40, "enabled": True},
     {"id": "nav-item-contracts", "viewId": "contracts", "label": "合同管理", "categoryKey": "business", "groupKey": "finance", "permission": "project.view", "iconKey": "FileText", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-invoices", "viewId": "invoices", "label": "发票管理", "categoryKey": "business", "groupKey": "finance", "permission": "invoice.manage", "iconKey": "FileText", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-transactions", "viewId": "transactions", "label": "交易流水", "categoryKey": "business", "groupKey": "finance", "permission": "finance.view", "iconKey": "WalletCards", "sortOrder": 30, "enabled": True},

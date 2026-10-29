@@ -85,6 +85,7 @@ services:
       no_proxy: localhost,127.0.0.1
     volumes:
       - notice-crawler-data:/app/data
+      - ../notice_crawler/models:/app/models:ro
       - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
 
   official-web:

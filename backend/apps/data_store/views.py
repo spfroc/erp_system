@@ -651,6 +651,7 @@ PERMISSION_ALIASES = {
     "serviceOrder.view": ("serviceOrder.view", "serviceOrder.manage", "project.view", "onboarding.manage"),
     "serviceOrder.manage": ("serviceOrder.manage", "project.edit", "onboarding.manage", "finance.manage"),
     "menu.view": ("menu.view", "menu.manage"),
+    "mallCustomer.view": ("mallCustomer.view", "mallCustomer.manage"),
 }
 
 
@@ -709,10 +710,15 @@ def _customer_account_conflict(data: dict, existing) -> JsonResponse | None:
 def _password_matches(stored_password: str, raw_password: str) -> bool:
     if not stored_password:
         return raw_password == "123456"
-    # Hash 存储只走 check_password；失败不得再回退明文比对。
-    if is_password_usable(stored_password):
-        return check_password(raw_password, stored_password)
-    return stored_password == raw_password
+    if not is_password_usable(stored_password):
+        return False
+    # 已是 Django 哈希：只走 check_password，失败不得回退成「明文==哈希串」。
+    # 历史明文密码（如 hky_123）不是合法哈希，identify_hasher 会失败，再比明文。
+    try:
+        identify_hasher(stored_password)
+    except ValueError:
+        return stored_password == raw_password
+    return check_password(raw_password, stored_password)
 
 
 def _active_user_queryset():

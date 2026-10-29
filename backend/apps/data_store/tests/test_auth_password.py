@@ -43,6 +43,34 @@ class AuthPasswordTests(TestCase):
             },
         )
 
+    def test_legacy_plaintext_password_still_logs_in(self):
+        UserRecord.objects.create(
+            id="user-plain",
+            name="hky",
+            phone="",
+            status="启用",
+            data={
+                "id": "user-plain",
+                "name": "hky",
+                "phone": "",
+                "password": "hky_123",
+                "roleIds": ["role-admin"],
+                "status": "启用",
+            },
+        )
+        ok = self.client.post(
+            "/api/auth/login/",
+            data={"identifier": "hky", "password": "hky_123"},
+            content_type="application/json",
+        )
+        self.assertEqual(ok.status_code, 200)
+        bad = self.client.post(
+            "/api/auth/login/",
+            data={"identifier": "hky", "password": "wrong"},
+            content_type="application/json",
+        )
+        self.assertEqual(bad.status_code, 401)
+
     def test_old_password_rejected_after_user_table_password_change(self):
         user = UserRecord.objects.get(id=self.user_id)
         data = dict(user.data)

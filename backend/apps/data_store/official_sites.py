@@ -547,7 +547,7 @@ _YICAI_FOOTER = {
         {"name": "齐鲁云采", "url": "http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001"},
         {"name": "框架协议", "url": "https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001"},
         {"name": "济南市公共资源交易中心", "url": "https://jnggzy.jinan.gov.cn/"},
-        {"name": "山东省政府采购信息公开平台", "url": "http://www.ccgp-shandong.gov.cn/#/home"},
+        {"name": "山东省政府采购信息公开平台", "url": "https://www.ccgp-shandong.gov.cn/xxgk"},
     ],
     "services": [
         {"title": "采购公告", "contentHtml": "", "url": "/notices"},
@@ -575,7 +575,7 @@ _QHC_FOOTER = {
         {"name": "青岛市公共资源交易网", "url": "http://ggzy.qingdao.gov.cn"},
         {"name": "齐鲁云采", "url": "http://ggzyjyzx.shandong.gov.cn:8282/gpmall-main-web/index?regionguid=1487001"},
         {"name": "框架协议", "url": "https://ggzyjyzx.shandong.gov.cn:8182/gpfa-main-web/index?regionguid=1487001"},
-        {"name": "山东省政府采购信息公开平台", "url": "http://www.ccgp-shandong.gov.cn/#/home"},
+        {"name": "山东省政府采购信息公开平台", "url": "https://www.ccgp-shandong.gov.cn/xxgk"},
     ],
     "services": [
         {"title": "平台介绍", "contentHtml": "", "url": "#intro"},

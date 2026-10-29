@@ -15,6 +15,7 @@ from db import NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
 from utils import (
     END_TIME_KEYS,
     START_TIME_KEYS,
+    extract_district_name,
     extract_time_window,
     normalize_region_name,
     pick_time_value,
@@ -202,10 +203,133 @@ def extract_fields(
     return get_extractor(backend).extract(text, title=title)
 
 
+def extract_attachment_with_local_model(text: str, title: str = "") -> Dict[str, Any]:
+    """附件产品抽取：表格规则优先，长文聚焦清单段落后再跑本地 GGUF。
+
+    货物/工程/服务/租赁/项目等一律进 goods，字段与 notice_goods 一致。
+    """
+    from pathlib import Path
+
+    from pipeline.extractors import get_extractor
+    from pipeline.extractors.jd_attachment import (
+        focus_product_sections,
+        goods_are_placeholder,
+        parse_jd_attachment_goods,
+    )
+
+    body = (text or "").strip()
+    table_goods = normalize_goods(parse_jd_attachment_goods(body))
+    # 清单表已够用：跳过本地模型（CPU 上每件要数分钟）
+    if len(table_goods) >= 2:
+        return {
+            "goods": table_goods,
+            "extra": {
+                "extractor": "jd_attachment_table",
+                "table_goods_count": len(table_goods),
+                "model_goods_count": 0,
+            },
+            "confidence": 0.8,
+        }
+
+    focused = focus_product_sections(body, max_chars=14000)
+    model_path = Path(settings.local_model_path)
+    if not model_path.is_file():
+        if table_goods:
+            return {
+                "goods": table_goods,
+                "extra": {
+                    "extractor": "jd_attachment_table",
+                    "table_goods_count": len(table_goods),
+                    "model_missing": str(model_path),
+                },
+                "confidence": 0.7,
+            }
+        return {
+            "goods": [],
+            "extra": {
+                "extractor": "local_model_missing",
+                "model_missing": str(model_path),
+            },
+            "confidence": 0.0,
+        }
+
+    try:
+        extractor = get_extractor("local_gguf")
+        model_parsed = extractor.extract_attachment(focused or body, title=title)
+    except Exception as exc:  # noqa: BLE001
+        if table_goods:
+            return {
+                "goods": table_goods,
+                "extra": {
+                    "extractor": "jd_attachment_table",
+                    "table_goods_count": len(table_goods),
+                    "local_model_error": str(exc)[:500],
+                },
+                "confidence": 0.7,
+            }
+        return {
+            "goods": [],
+            "extra": {
+                "extractor": "local_model_fail",
+                "local_model_error": str(exc)[:500],
+            },
+            "confidence": 0.0,
+        }
+
+    if not isinstance(model_parsed, dict):
+        model_parsed = {"goods": [], "extra": {}, "confidence": 0.0}
+    raw_model_rows = (
+        model_parsed.get("goods") if isinstance(model_parsed.get("goods"), list) else []
+    )
+    model_goods = normalize_goods(raw_model_rows)
+    for dst, src in zip(model_goods, raw_model_rows):
+        if isinstance(src, dict) and not dst.get("category"):
+            dst["category"] = src.get("category") or src.get("item_type")
+
+    extra = model_parsed.get("extra") if isinstance(model_parsed.get("extra"), dict) else {}
+    if not goods_are_placeholder(model_goods):
+        chosen, source = model_goods, str(extra.get("extractor") or "local_gguf_attachment")
+    elif table_goods:
+        chosen, source = table_goods, "jd_attachment_table"
+    else:
+        return {
+            "goods": [],
+            "extra": {
+                **extra,
+                "extractor": extra.get("extractor") or "local_gguf_attachment",
+                "table_goods_count": 0,
+                "model_goods_count": 0,
+                "focused_chars": len(focused or ""),
+            },
+            "confidence": 0.1,
+        }
+
+    return {
+        "goods": chosen,
+        "extra": {
+            **extra,
+            "extractor": source,
+            "table_goods_count": len(table_goods),
+            "model_goods_count": len(model_goods),
+            "focused_chars": len(focused or ""),
+        },
+        "confidence": 0.75 if chosen else float(model_parsed.get("confidence") or 0.1),
+    }
+
+
 def _raw_html_and_meta(raw: NoticeRaw) -> tuple[str, dict, dict]:
     detail = raw.detail_json if isinstance(raw.detail_json, dict) else {}
     list_item = raw.list_json if isinstance(raw.list_json, dict) else {}
-    html = (raw.content_html or "").strip() or str(detail.get("content") or "").strip()
+    html = (raw.content_html or "").strip() or str(detail.get("content") or detail.get("body") or "").strip()
+    if raw.site_id == "sd-ccgp" or (html and not html.lstrip().startswith("<")):
+        try:
+            from clients.sd_ccgp import decode_notice_body
+
+            decoded = decode_notice_body(html)
+            if decoded and decoded != html:
+                html = decoded
+        except Exception:  # noqa: BLE001
+            pass
     return html, detail, list_item
 
 
@@ -307,24 +431,47 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             jd_base.get("auctionName"),
             parsed.get("notice_title"),
         )
-    if not parsed.get("region_name"):
-        parsed["region_name"] = _pick(
-            raw.region_name,
-            (detail or {}).get("regionFullName"),
-            (detail or {}).get("regionName"),
-            (list_item or {}).get("regionFullName"),
-            (list_item or {}).get("regionName"),
+    raw_region = _pick(
+        (detail or {}).get("regionFullName"),
+        (detail or {}).get("regionName"),
+        (detail or {}).get("areaName"),
+        (list_item or {}).get("regionFullName"),
+        (list_item or {}).get("regionName"),
+        (list_item or {}).get("areaName"),
+    )
+    if not parsed.get("district_name"):
+        parsed["district_name"] = getattr(raw, "district_name", None) or extract_district_name(
+            raw_region
         )
-    parsed["region_name"] = normalize_region_name(raw.site_id, parsed.get("region_name"))
+        if parsed.get("district_name") in ("本级", "市本级"):
+            parsed["district_name"] = None
+    if not parsed.get("region_guid"):
+        parsed["region_guid"] = getattr(raw, "region_guid", None) or _pick(
+            (detail or {}).get("regionGuid"),
+            (list_item or {}).get("regionGuid"),
+            (detail or {}).get("regionId"),
+            (list_item or {}).get("regionId"),
+            (detail or {}).get("areaCode"),
+            (list_item or {}).get("areaCode"),
+        )
+    if not parsed.get("region_name"):
+        parsed["region_name"] = _pick(raw.region_name, raw_region)
+    parsed["region_name"] = normalize_region_name(raw.site_id, parsed.get("region_name") or raw_region)
+    if not parsed.get("district_name"):
+        parsed["district_name"] = extract_district_name(raw_region)
+    if parsed.get("district_name") in ("本级", "市本级"):
+        parsed["district_name"] = None
     if not parsed.get("publish_time"):
         parsed["publish_time"] = _pick(
             raw.publish_time,
             (detail or {}).get("publishTime"),
             (detail or {}).get("createDate"),
             (detail or {}).get("createTime"),
+            (detail or {}).get("date"),
             (list_item or {}).get("publishTime"),
             (list_item or {}).get("createDate"),
             (list_item or {}).get("createTime"),
+            (list_item or {}).get("date"),
         )
 
     # 时间：结构化字段 + 正文「报价时间：A至B」补洞
@@ -370,6 +517,44 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             (list_item or {}).get("buyerName"),
             jd_base.get("purchaseUnitName"),
         )
+    if raw.site_id == "sd-ccgp":
+        import re as _re
+
+        body = "\n".join(x for x in (raw.content_text, raw.content_html) if x)
+        # 误抽短词（如「信息」）清掉
+        buyer = str(parsed.get("buyer_name") or "").strip()
+        if buyer and (len(buyer) < 4 or buyer in {"信息", "名称", "单位", "采购人", "采购单位"}):
+            parsed["buyer_name"] = None
+        if not parsed.get("buyer_name"):
+            m = _re.search(
+                r"(?:采购人(?:名称|单位)?|采购单位)\s*[:：]?\s*\n?\s*"
+                r"([^\n\r]{4,80}?(?:大学|学院|医院|中心|局|厅|委|办|学校|研究院|公司|政府|办公室))",
+                body,
+            )
+            if m:
+                parsed["buyer_name"] = _re.sub(r"\s+", "", m.group(1))[:256]
+            elif raw.title:
+                # 意向公开等：标题常以采购人开头
+                m2 = _re.match(
+                    r"^([\u4e00-\u9fffA-Za-z0-9（）()]{4,40}?"
+                    r"(?:大学|学院|医院|中心|局|厅|委|办|学校|研究院|办公室))",
+                    raw.title,
+                )
+                if m2:
+                    parsed["buyer_name"] = m2.group(1)
+        if not parsed.get("budget_amount"):
+            wan = _re.search(
+                r"(?:预算金额|最高限价)\s*[:：]?\s*\n?\s*([0-9,.]+)\s*万\s*元?",
+                body,
+            )
+            if wan:
+                try:
+                    parsed["budget_amount"] = round(
+                        float(wan.group(1).replace(",", "").replace("，", "")) * 10000,
+                        2,
+                    )
+                except ValueError:
+                    pass
     # 京东泉E采/青慧采：项目名称规则优先；空/平台服务商名再本地模型短抽
     if is_jd_site(raw.site_id):
         from pipeline.extractors.jd_buyer import _clean_api_buyer, resolve_jd_buyer_name
@@ -485,6 +670,19 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
         gpfa_kind = {"0": "采购公告", "1": "成交公告", "10": "终止公告"}
         if nt in gpfa_kind:
             parsed["notice_kind"] = gpfa_kind[nt]
+    elif raw.site_id == "sd-ccgp":
+        ccgp_kind = {
+            "2500": "意向公开",
+            "0301": "采购公告",
+            "0305": "更正公告",
+            "0302": "结果公告",
+            "0306": "终止公告",
+            "2502": "合同公告",
+            "2503": "验收公告",
+            "2102": "单一来源公示",
+        }
+        if nt in ccgp_kind:
+            parsed["notice_kind"] = ccgp_kind[nt]
     else:
         kind = str(parsed.get("notice_kind") or "").strip()
         if not kind or kind.isdigit():
@@ -538,6 +736,12 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 if token in title:
                     parsed["procurement_mode"] = label
                     break
+        elif raw.site_id == "sd-ccgp":
+            parsed["procurement_mode"] = _pick(
+                (list_item or {}).get("buyKindCode"),
+                (list_item or {}).get("buyKind"),
+                (detail or {}).get("buyKindCode"),
+            )
 
     # 京东成交 / 商品
     if is_jd_site(raw.site_id) and nested:
@@ -590,6 +794,8 @@ def parsed_row_to_dict(row: NoticeParsed, goods_rows: Optional[list] = None) -> 
         "buyer_address": row.buyer_address,
         "buyer_contact": row.buyer_contact,
         "region_name": row.region_name,
+        "district_name": getattr(row, "district_name", None),
+        "region_guid": getattr(row, "region_guid", None),
         "budget_amount": row.budget_amount,
         "deal_amount": row.deal_amount,
         "deal_supplier": row.deal_supplier,
@@ -818,9 +1024,21 @@ def save_parsed(session, raw: NoticeRaw, parsed: Dict[str, Any]) -> NoticeParsed
     row.buyer_phone = buyer_phone
     row.buyer_address = buyer_address
     row.buyer_contact = buyer_contact
-    row.region_name = normalize_region_name(
-        raw.site_id, parsed.get("region_name") or raw.region_name
+    region_source = parsed.get("region_name") or raw.region_name
+    row.region_name = normalize_region_name(raw.site_id, region_source)
+    row.district_name = (
+        parsed.get("district_name")
+        or getattr(raw, "district_name", None)
+        or extract_district_name(region_source)
     )
+    if row.district_name in ("本级", "市本级"):
+        row.district_name = None
+    row.region_guid = parsed.get("region_guid") or getattr(raw, "region_guid", None)
+    # 回写 raw，避免仅解析路径漏掉区县
+    if row.district_name and not getattr(raw, "district_name", None):
+        raw.district_name = row.district_name
+    if row.region_guid and not getattr(raw, "region_guid", None):
+        raw.region_guid = str(row.region_guid)[:64]
     row.budget_amount = _to_decimal(parsed.get("budget_amount"))
     row.deal_amount = _to_decimal(parsed.get("deal_amount"))
     row.deal_supplier = parsed.get("deal_supplier")
@@ -1046,8 +1264,16 @@ def reparse_existing(
 def html_fallback(raw: NoticeRaw) -> str:
     from utils import html_to_text
 
-    if raw.content_html:
-        return html_to_text(raw.content_html)
+    html = raw.content_html or ""
+    if raw.site_id == "sd-ccgp" or (html and not str(html).lstrip().startswith("<")):
+        try:
+            from clients.sd_ccgp import decode_notice_body
+
+            html = decode_notice_body(html)
+        except Exception:  # noqa: BLE001
+            pass
+    if html:
+        return html_to_text(html)
     if raw.detail_json:
         return json.dumps(raw.detail_json, ensure_ascii=False)
     return ""

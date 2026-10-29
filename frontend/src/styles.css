@@ -3412,6 +3412,72 @@ nav button:hover {
   align-items: start;
 }
 
+.table-row.mall-customer-table {
+  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.55fr 0.45fr 0.45fr 0.75fr;
+  align-items: start;
+}
+
+.mall-customer-main-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.mall-customer-main-cell em,
+.table-row.mall-customer-table em {
+  display: block;
+  color: #64748b;
+  font-style: normal;
+  font-size: 0.85em;
+}
+
+.mall-customer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mall-customer-badges em {
+  display: inline;
+  margin-left: 0.15rem;
+}
+
+.mall-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mall-badge.is-empty {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.mall-customer-badges .copyable-line {
+  max-width: 100%;
+}
+
+.mall-customer-name {
+  color: #2563eb;
+}
+
+.mall-phone-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .library-main-cell {
   display: flex;
   flex-direction: column;

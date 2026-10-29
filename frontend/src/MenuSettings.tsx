@@ -54,6 +54,8 @@ const PERMISSION_OPTIONS: Array<{ id: PermissionKey; label: string }> = [
   { id: "site.manage", label: "管理官网站点" },
   { id: "library.view", label: "查看政企客户资料库" },
   { id: "library.manage", label: "管理政企客户资料库" },
+  { id: "mallCustomer.view", label: "查看资料库" },
+  { id: "mallCustomer.manage", label: "管理资料库" },
   { id: "sms.view", label: "查看短信日志" },
   { id: "sms.manage", label: "管理短信" },
   { id: "customerAccount.view", label: "查看登录账号" },

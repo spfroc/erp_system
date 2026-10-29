@@ -4,7 +4,8 @@
 
 | site_id | 说明 |
 |---------|------|
-| `sd-ggzyjyzx` | 山东网上商城采购公告（全省） |
+| `sd-ggzyjyzx` / `sd-mall` | 山东网上商城采购公告（全省）；CLI `--site sd-mall` |
+| `sd-ccgp` | 山东政府采购网（省级 + 市区县公开信息） |
 | `jd-quan-yicai` | 京东泉易采（普通竞价/反拍/询比）+ 附件 |
 | `jd-qing-huicai` | 京东青慧采（同一套接口，合同号 `JD_QHC_CONTRACT_NUM`） |
 
@@ -30,7 +31,7 @@ LLM 解析 → notice_parsed（项目编号、采购单位、成交金额、商�
 - `notice_parsed`：模型抽取关键字段 + `goods_json` / `quotes_json`
 - `notice_attachment`：附件文件与解析
 - `crawl_cursor`：分页游标
-- `mall_customer`：山东商城供应商（TouchCustomer）
+- `mall_customer`：山东商城供应商（TouchCustomer）；也可从旧库 `customers.sql` 导入供后台「资料库展示列表」使用
 
 ## 准备
 
@@ -83,7 +84,10 @@ python cli.py ping
 
 ## Docker
 
-`deploy/docker-compose.dev.yml` 与 `deploy/docker-compose.prod.yml` 含 `notice-crawler`。容器启动后立刻抓一轮，然后每 3 小时循环：公告（近 2 天 + `--stop-dup 5`）、京东附件、供应商。
+`deploy/docker-compose.dev.yml` 与 `deploy/docker-compose.prod.yml` 含 `notice-crawler`。容器启动后立刻抓一轮，然后：
+
+- **公告/供应商**：按 3 小时窗口（`CRAWL_INTERVAL_SECONDS`）对齐：`sd-mall`、`sd-ccgp`、`jd`、供应商。各站点独立；`sd-ccgp` 临时去掉 SOCKS。超时则跳过已错过窗口。
+- **京东附件**：独立后台循环，默认每 30 分钟（`CRAWL_ATT_INTERVAL_SECONDS=1800`）跑 `download-att` + `parse-att`；`flock` 保证同时只跑一个，上轮未结束则跳过本轮。
 
 ```bash
 docker compose -f deploy/docker-compose.dev.yml up -d --build notice-crawler
@@ -112,7 +116,9 @@ python cli.py parse --site sd-ggzyjyzx --limit 100
 # 结构化字段补洞（接口自带的 endTime/预算等）
 python cli.py enrich --limit 500
 
-# 京东附件（正文常在 PDF 里）
+# 京东 crawl 会下载附件；标的（货物/服务）用本地 GGUF 解析，不用表格规则
+# 扫描件用 RapidOCR；需 models/*.gguf
+# crawl 默认不跑模型（快）；解析请用 parse-att，或 CRAWL_PARSE_ATT=1
 python cli.py download-att --site jd-quan-yicai --limit 20
 python cli.py download-att --site jd-qing-huicai --limit 20
 python cli.py parse-att --site jd-quan-yicai --limit 20
@@ -124,6 +130,11 @@ cd js && npm install && cd ..
 # .env 填 SD_ACCOUNT / SD_PASSWORD
 python cli.py login-qlyc
 python cli.py crawl-supplier --type 2 --max-pages 1 --page-size 50
+
+# 旧库 customers.sql → mall_customer（后台「资料库展示列表」）
+# 先补列：python cli.py init-db
+python cli.py import-customers --sql ../customers.sql
+# 试跑：python cli.py import-customers --sql ../customers.sql --limit 100 --dry-run
 ```
 
 ## 解析字段（notice_parsed）

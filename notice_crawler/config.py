@@ -67,6 +67,13 @@ class Settings:
     local_n_gpu_layers: int = int(os.getenv("LOCAL_N_GPU_LAYERS", "0"))
     attachment_dir: Path = Path(os.getenv("ATTACHMENT_DIR", str(ROOT / "data" / "attachments")))
     request_interval: float = float(os.getenv("REQUEST_INTERVAL", "0.4"))
+    # 山东政府采购网：更接近人工翻页，降低 WAF/blackIp 风险
+    ccgp_request_interval: float = float(os.getenv("CCGP_REQUEST_INTERVAL", "1.8"))
+    ccgp_request_jitter: float = float(os.getenv("CCGP_REQUEST_JITTER", "1.2"))
+    ccgp_page_pause_min: float = float(os.getenv("CCGP_PAGE_PAUSE_MIN", "2.5"))
+    ccgp_page_pause_max: float = float(os.getenv("CCGP_PAGE_PAUSE_MAX", "5.5"))
+    ccgp_category_pause_min: float = float(os.getenv("CCGP_CATEGORY_PAUSE_MIN", "4.0"))
+    ccgp_category_pause_max: float = float(os.getenv("CCGP_CATEGORY_PAUSE_MAX", "9.0"))
 
 
 settings = Settings()

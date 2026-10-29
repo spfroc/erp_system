@@ -407,14 +407,28 @@ class HeuristicExtractor(BaseExtractor):
                 full,
                 flags=re.M,
             )
-        out["budget_amount"] = _money(
-            [
-                r"预算金额[（(]?元[)）]?[:：]?\s*\n?\s*([0-9,.]+)",
-                r"预算[:：]\s*([0-9,.]+)\s*元",
-                r"最高限价[（(]?元[)）]?[:：]?\s*([0-9,.]+)",
-            ],
+        # 山东政府采购网正文常为「预算金额：\n32.16万元」
+        wan = re.search(
+            r"(?:预算金额|最高限价)\s*[:：]?\s*\n?\s*([0-9,.]+)\s*万\s*元?",
             full,
         )
+        if wan:
+            try:
+                out["budget_amount"] = round(
+                    float(wan.group(1).replace(",", "").replace("，", "")) * 10000, 2
+                )
+            except ValueError:
+                out["budget_amount"] = None
+        if not out.get("budget_amount"):
+            out["budget_amount"] = _money(
+                [
+                    r"预算金额[（(]?元[)）]?[:：]?\s*\n?\s*([0-9,.]+)",
+                    r"预算金额\s*[:：]?\s*\n?\s*([0-9,.]+)\s*元",
+                    r"预算[:：]\s*([0-9,.]+)\s*元",
+                    r"最高限价[（(]?元[)）]?[:：]?\s*\n?\s*([0-9,.]+)",
+                ],
+                full,
+            )
         out["deal_amount"] = _money(
             [
                 r"成交金额\s*[:：]\s*([0-9,.]+)",

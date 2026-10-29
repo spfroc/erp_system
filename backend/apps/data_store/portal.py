@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
 
-from django.contrib.auth.hashers import check_password, is_password_usable
+from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable
 from django.core import signing
 from django.core.cache import cache
 from django.db import OperationalError, ProgrammingError
@@ -122,9 +122,13 @@ def account_defaults(payload: dict) -> dict:
 def _password_matches(stored_password: str, raw_password: str) -> bool:
     if not stored_password:
         return False
-    if is_password_usable(stored_password):
-        return check_password(raw_password, stored_password)
-    return stored_password == raw_password
+    if not is_password_usable(stored_password):
+        return False
+    try:
+        identify_hasher(stored_password)
+    except ValueError:
+        return stored_password == raw_password
+    return check_password(raw_password, stored_password)
 
 
 def find_portal_account(phone: str, password: str) -> CustomerAccountRecord | None:

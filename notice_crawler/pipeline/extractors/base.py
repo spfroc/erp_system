@@ -69,12 +69,56 @@ goods 必须是数组：公告里有几条产品就输出几条，不要合并�
 """ + json.dumps(EXTRACT_SCHEMA, ensure_ascii=False, indent=2)
 
 
+# 附件只抽产品明细，统一按 goods 入库（货物/工程/服务/租赁/项目等）
+ATTACHMENT_EXTRACT_SCHEMA: Dict[str, Any] = {
+    "goods": [
+        {
+            "name": None,
+            "category": None,  # 货物/工程/服务/租赁/项目/其他
+            "quantity": None,
+            "unit": None,
+            "brand": None,
+            "model": None,
+            "unit_price": None,
+            "spec": None,
+            "amount": None,
+        }
+    ],
+}
+
+ATTACHMENT_SYSTEM_PROMPT = """你是采购附件「产品清单」抽取助手。
+只抽取可入库的产品/标的行，全部放进 goods 数组。不要抽联系人、公告正文、评分办法。
+禁止编造；正文没有的字段填 null。
+
+产品包含：货物、耗材、设备、工程分项、服务项、租赁项、项目包等，一律当商品行。
+规则：
+- 有几条就输出几条，禁止合并成一条项目总称
+- category 填：货物 / 工程 / 服务 / 租赁 / 项目 / 其他
+- name=产品或分项名称；规格参数放 spec；品牌/型号有则填
+- 数量、单价、金额只输出纯数字
+- 纯评分/资质且无清单时 goods=[]
+
+只输出一个 JSON 对象，不要 Markdown。
+字段模板：
+""" + json.dumps(ATTACHMENT_EXTRACT_SCHEMA, ensure_ascii=False, indent=2)
+
+
 def build_prompt(title: str, text: str, max_chars: int = 12000) -> str:
     body = (text or "")[:max_chars]
     return (
         f"{SYSTEM_PROMPT}\n\n"
         f"公告标题: {title or ''}\n\n"
         f"正文:\n{body}\n\n"
+        "请输出 JSON："
+    )
+
+
+def build_attachment_prompt(title: str, text: str, max_chars: int = 4500) -> str:
+    body = (text or "")[:max_chars]
+    return (
+        f"{ATTACHMENT_SYSTEM_PROMPT}\n\n"
+        f"附件标题: {title or ''}\n\n"
+        f"附件正文:\n{body}\n\n"
         "请输出 JSON："
     )
 

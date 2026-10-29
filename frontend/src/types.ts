@@ -827,6 +827,8 @@ export type PermissionKey =
   | "site.manage"
   | "library.view"
   | "library.manage"
+  | "mallCustomer.view"
+  | "mallCustomer.manage"
   | "sms.view"
   | "sms.manage"
   | "customerAccount.view"

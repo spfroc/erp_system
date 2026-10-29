@@ -14,7 +14,7 @@ Services:
 - `mysql` - MySQL 8.0.21 on host port `13306` (container `3306`).
 - `redis` - Redis on host port `16379` (container `6379`).
 - `minio` - Object storage API on host `19000`, console on `19001`.
-- `notice-crawler` - 公告/供应商抓取。容器启动时先 `init-db` + `migrate-list-indexes`（补列表筛选索引，已存在则跳过），再抓一轮；之后每 3 小时（`CRAWL_INTERVAL_SECONDS=10800`）再执行。开发环境数据库由 compose 覆盖为内部 `mysql`；账号写在 `notice_crawler/.env`（`SD_ACCOUNT` / `SD_PASSWORD`、京东 `JD_CONTRACT_NUM` 泉易采、`JD_QHC_CONTRACT_NUM` 青慧采）。生产环境读取 `.env.prod` 的 `MYSQL_*` 和 `CRAWL_*`，不读取带本机地址的 `notice_crawler/.env`。
+- `notice-crawler` - 公告/供应商抓取。容器启动时先 `init-db` + `migrate-list-indexes`（补列表筛选索引，已存在则跳过），再抓一轮；之后按 3 小时窗口（`CRAWL_INTERVAL_SECONDS=10800`）对齐执行：`sd-mall`、`sd-ccgp`（直连不走 SOCKS）、`jd`、供应商。京东附件下载+解析另有独立循环（默认 30 分钟，`CRAWL_ATT_INTERVAL_SECONDS`），`flock` 同时只跑一个。开发环境数据库由 compose 覆盖为内部 `mysql`；账号写在 `notice_crawler/.env`（`SD_ACCOUNT` / `SD_PASSWORD`、京东 `JD_CONTRACT_NUM` 泉易采、`JD_QHC_CONTRACT_NUM` 青慧采）。生产环境读取 `.env.prod` 的 `MYSQL_*` 和 `CRAWL_*`，不读取带本机地址的 `notice_crawler/.env`。
   - **只部署抓取**（无需 Traefik / `prod.host` 网络）：
     ```bash
     docker compose -f deploy/docker-compose.prod.crawler.yml up -d --build

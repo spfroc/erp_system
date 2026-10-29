@@ -34,6 +34,7 @@ from .notice_dict_views import notice_dict_detail, notice_dict_list, notice_dict
 from .notice_tag_views import notice_result_stats, notice_tag_batch, notice_tag_detail, notice_tag_identify, notice_tag_list
 from .notice_views import notice_detail as crawled_notice_detail
 from .notice_views import notice_list as crawled_notice_list
+from .mall_customer_views import mall_customer_detail, mall_customer_list
 from .views import (
     sms_center_records,
     sms_center_status,
@@ -114,4 +115,8 @@ urlpatterns = [
     path("sms/send", sms_send, name="sms-send-no-slash"),
     path("sms/center-records/", sms_center_records, name="sms-center-records"),
     path("sms/center-records", sms_center_records, name="sms-center-records-no-slash"),
+    path("mall-customers/", mall_customer_list, name="mall-customer-list"),
+    path("mall-customers", mall_customer_list, name="mall-customer-list-no-slash"),
+    path("mall-customers/<int:customer_id>/", mall_customer_detail, name="mall-customer-detail"),
+    path("mall-customers/<int:customer_id>", mall_customer_detail, name="mall-customer-detail-no-slash"),
 ]

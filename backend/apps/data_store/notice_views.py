@@ -70,6 +70,8 @@ def _cached_options(key: str, builder):
 
 SITE_LABELS = {
     "sd-ggzyjyzx": "山东网上商城",
+    "sd-gpfa-frame": "框架协议",
+    "sd-ccgp": "山东政府采购网",
     "jd-quan-yicai": "京东泉易采",
     "jd-qing-huicai": "京东青慧采",
 }
@@ -176,6 +178,16 @@ NOTICE_TYPE_LABELS = {
         "0": "采购公告",
         "1": "成交公告",
         "10": "终止公告",
+    },
+    "sd-ccgp": {
+        "2500": "意向公开",
+        "0301": "采购公告",
+        "0305": "更正公告",
+        "0302": "结果公告",
+        "0306": "终止公告",
+        "2502": "合同公告",
+        "2503": "验收公告",
+        "2102": "单一来源公示",
     },
 }
 
@@ -772,6 +784,10 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
         "noticeKind": kind,
         "procurementMode": parsed.procurement_mode if parsed else None,
         "regionName": _resolve_region(raw, parsed),
+        "districtName": (getattr(parsed, "district_name", None) if parsed else None)
+        or getattr(raw, "district_name", None),
+        "regionGuid": (getattr(parsed, "region_guid", None) if parsed else None)
+        or getattr(raw, "region_guid", None),
         "publishTime": _dt(_from_notice_db(publish)),
         "startTime": _dt(start),
         "endTime": _dt(end),

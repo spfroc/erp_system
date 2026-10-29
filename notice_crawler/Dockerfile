@@ -9,7 +9,7 @@ RUN set -eux; \
       sed -i 's/security.debian.org/mirrors.huaweicloud.com/g' /etc/apt/sources.list; \
     fi; \
     apt-get update \
-    && apt-get install -y --no-install-recommends nodejs npm ca-certificates \
+    && apt-get install -y --no-install-recommends nodejs npm ca-certificates util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,6 +26,7 @@ RUN chmod +x /app/docker/entrypoint.sh \
 
 ENV PYTHONUNBUFFERED=1 \
     EXTRACTOR_BACKEND=heuristic \
+    LOCAL_MODEL_PATH=/app/models/qwen2.5-1.5b-instruct-q4_k_m.gguf \
     REQUEST_INTERVAL=0.4
 
 CMD ["/app/docker/entrypoint.sh"]

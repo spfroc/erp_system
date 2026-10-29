@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import argparse
 
-from db import ensure_list_indexes, init_db, ping
+from db import backfill_district_from_list_json, ensure_list_indexes, init_db, ping
 from pipeline.attachments import download_pending, parse_attachments
-from pipeline.crawl import crawl_jd, crawl_sd_mall
+from pipeline.crawl import crawl_jd, crawl_sd_ccgp, crawl_sd_mall, repair_ccgp_bodies
 from clients.qlyc_login import ensure_access_token
 from pipeline.crawl_supplier import crawl_suppliers
 from pipeline.parse_llm import parse_pending, reenrich_parsed, reparse_existing
@@ -25,7 +25,7 @@ def main() -> None:
     p_crawl = sub.add_parser("crawl", help="抓取列表+详情到 notice_raw")
     p_crawl.add_argument(
         "--site",
-        choices=["all", "sd-mall", "jd"],
+        choices=["all", "sd-mall", "sd-ccgp", "jd"],
         default="all",
     )
     p_crawl.add_argument("--max-pages", type=int, default=None, help="每类最多页数，调试用")
@@ -109,6 +109,32 @@ def main() -> None:
     )
     p_login.add_argument("--force", action="store_true", help="忽略缓存强制重新登录")
 
+    p_dist = sub.add_parser(
+        "backfill-district",
+        help="从 list_json 回填 notice_raw/notice_parsed 的 district_name、region_guid",
+    )
+    p_dist.add_argument("--limit", type=int, default=None)
+    p_dist.add_argument("--batch", type=int, default=500)
+
+    p_ccgp = sub.add_parser(
+        "repair-ccgp",
+        help="解码 sd-ccgp 误存的 base64/GBK 正文，并重置为 pending 便于 parse --force",
+    )
+    p_ccgp.add_argument("--limit", type=int, default=None)
+
+    p_imp = sub.add_parser(
+        "import-customers",
+        help="将 customers.sql（旧库 dump）转换写入 mall_customer",
+    )
+    p_imp.add_argument(
+        "--sql",
+        default="../customers.sql",
+        help="customers.sql 路径，默认 ../customers.sql",
+    )
+    p_imp.add_argument("--batch", type=int, default=500)
+    p_imp.add_argument("--limit", type=int, default=None)
+    p_imp.add_argument("--dry-run", action="store_true")
+
     p_sup = sub.add_parser(
         "crawl-supplier",
         help="抓取山东商城供应商到 mall_customer（TouchCustomer Python 版）",
@@ -164,10 +190,23 @@ def main() -> None:
             end_date=args.end_date,
             stop_dup=args.stop_dup,
         )
+
+        def _run(label: str, fn) -> None:
+            try:
+                fn(**common)
+            except Exception as exc:  # noqa: BLE001
+                # --site all 时单站失败不阻断后续站点
+                if args.site == "all":
+                    print(f"crawl {label} failed: {exc}")
+                else:
+                    raise
+
         if args.site in ("all", "sd-mall"):
-            crawl_sd_mall(**common)
+            _run("sd-mall", crawl_sd_mall)
+        if args.site in ("all", "sd-ccgp"):
+            _run("sd-ccgp", crawl_sd_ccgp)
         if args.site in ("all", "jd"):
-            crawl_jd(**common)
+            _run("jd", crawl_jd)
         print("crawl done")
         return
     if args.cmd == "parse":
@@ -204,6 +243,33 @@ def main() -> None:
         token = ensure_access_token(force_login=args.force)
         print(f"login ok, access_token length={len(token)}")
         print("cached at data/qlyc_access_token.json")
+        return
+    if args.cmd == "backfill-district":
+        n = backfill_district_from_list_json(limit=args.limit, batch=args.batch)
+        print(f"backfill-district updated fields on {n} rows")
+        return
+    if args.cmd == "repair-ccgp":
+        n = repair_ccgp_bodies(limit=args.limit)
+        print(f"repair-ccgp fixed {n} rows (parse_status -> pending)")
+        return
+    if args.cmd == "import-customers":
+        import importlib.util
+        from pathlib import Path
+
+        mod_path = Path(__file__).resolve().parent / "scripts" / "import_customers_sql.py"
+        spec = importlib.util.spec_from_file_location("import_customers_sql", mod_path)
+        if spec is None or spec.loader is None:
+            raise SystemExit(f"cannot load {mod_path}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sql_path = Path(args.sql).expanduser().resolve()
+        if not sql_path.is_file():
+            raise SystemExit(f"file not found: {sql_path}")
+        read_n, write_n, skip_n = mod.import_customers(
+            sql_path, batch=args.batch, limit=args.limit, dry_run=args.dry_run
+        )
+        mode = "dry-run" if args.dry_run else "imported"
+        print(f"import-customers {mode}: read={read_n} upserted={write_n} skipped={skip_n}")
         return
     if args.cmd == "crawl-supplier":
         n = crawl_suppliers(

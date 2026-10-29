@@ -45,6 +45,7 @@ export type CatalogViewId =
   | "noticeTags"
   | "noticeDict"
   | "libraryContacts"
+  | "mallCustomers"
   | "customerAccounts"
   | "sms"
   | "officialSites"
@@ -121,6 +122,7 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "entities", label: "客户基础信息管理", iconKey: "Building2", permission: "entity.view" },
   { viewId: "customerAccounts", label: "登录账号管理", iconKey: "Users", permission: "customerAccount.view" },
   { viewId: "libraryContacts", label: "政企客户资料库", iconKey: "BookUser", permission: "library.view" },
+  { viewId: "mallCustomers", label: "资料库", iconKey: "LayoutList", permission: "mallCustomer.view" },
   { viewId: "officialSites", label: "官网站点", iconKey: "Globe", permission: "site.view" },
   { viewId: "officialSeo", label: "SEO配置", iconKey: "Search", permission: "site.view" },
   { viewId: "invoices", label: "发票管理", iconKey: "FileText", permission: "invoice.manage" },
@@ -203,6 +205,7 @@ export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-entities", "entities", "business", "customers", 10),
   item("nav-item-customerAccounts", "customerAccounts", "business", "customers", 20),
   item("nav-item-libraryContacts", "libraryContacts", "business", "customers", 30),
+  item("nav-item-mallCustomers", "mallCustomers", "business", "customers", 40),
   item("nav-item-contracts", "contracts", "business", "finance", 10),
   item("nav-item-invoices", "invoices", "business", "finance", 20),
   item("nav-item-transactions", "transactions", "business", "finance", 30),

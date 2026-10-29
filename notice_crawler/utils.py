@@ -316,6 +316,37 @@ def extract_buyer_from_project_name(project_name: str | None) -> str | None:
     return best
 
 
+def extract_district_name(region_name: str | None) -> str | None:
+    """从接口 regionName 抽出区县（地市之后的部分）。
+
+    例：
+    - 聊城市东昌府区 → 东昌府区
+    - 临沂市沂水县 → 沂水县
+    - 青岛市胶州市 → 胶州市
+    - 淄博市 / 山东省 / 淄博市本级 → None
+    """
+    text = (region_name or "").strip()
+    if not text:
+        return None
+    text = _PROVINCE_PREFIX_RE.sub("", text).strip() or text
+    for city in SHANDONG_CITIES:
+        for prefix in (f"{city}市", city):
+            if text.startswith(prefix):
+                rest = text[len(prefix) :].strip()
+                if rest in ("本级", "市本级"):
+                    return None
+                return rest or None
+            idx = text.find(prefix)
+            if idx >= 0:
+                rest = text[idx + len(prefix) :].strip()
+                if rest in ("本级", "市本级"):
+                    return None
+                if rest:
+                    return rest
+    # 非标准地市前缀（如驻鲁专区）不拆区县
+    return None
+
+
 def normalize_region_name(site_id: str | None, region_name: str | None) -> str | None:
     """统一区域展示：站点固定值优先，其余压成地级市短名（去掉「市」等后缀）。"""
     fixed = SITE_FIXED_REGIONS.get((site_id or "").strip())
