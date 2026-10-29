@@ -41,18 +41,33 @@ def _resolve_period(params: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
+def _clean_search(search: str, buyer_name: str = "") -> str:
+    """去掉日期/发布等噪声，以及与 buyer_name 重复的片段。"""
+    text = (search or "").strip()
+    if not text:
+        return ""
+    noise = ("昨天", "昨日", "今天", "今日", "前天", "发布的", "发布", "公告", "查询", "查找", "搜索", "最近", "采购")
+    for word in noise:
+        text = text.replace(word, " ")
+    if buyer_name:
+        text = text.replace(buyer_name, " ")
+    return " ".join(text.split()).strip(" ，,。的")
+
+
 def _notice_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
     del user_data
     publish_from, publish_to = _resolve_period(params)
+    buyer_name = str(params.get("buyer_name") or params.get("buyerName") or "").strip()
+    search = _clean_search(str(params.get("search") or params.get("keyword") or ""), buyer_name)
     result = search_notices(
         page=int(params.get("page") or 1),
         page_size=int(params.get("page_size") or params.get("pageSize") or 20),
-        search=str(params.get("search") or params.get("keyword") or "").strip(),
+        search=search,
         site_id=str(params.get("site_id") or params.get("siteId") or "").strip(),
         notice_kind=str(params.get("notice_kind") or params.get("noticeKind") or "").strip(),
         publish_date_from=publish_from,
         publish_date_to=publish_to,
-        buyer_name=str(params.get("buyer_name") or params.get("buyerName") or "").strip(),
+        buyer_name=buyer_name,
     )
     total = int(result.get("total") or 0)
     return {

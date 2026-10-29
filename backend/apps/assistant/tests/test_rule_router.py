@@ -17,6 +17,22 @@ class RuleRouterTests(SimpleTestCase):
         self.assertEqual(routed["params"].get("buyer_name"), "平度市财政局")
         self.assertNotIn("昨天", routed["params"].get("search") or "")
 
+    def test_fresh_query_does_not_keep_dirty_search(self):
+        routed = route_intent(
+            "查询昨天 平度市财政局 发布的公告",
+            {
+                "intent": "notice.search",
+                "params": {
+                    "search": "昨天 平度市财政局 发布的",
+                    "page": 1,
+                    "page_size": 20,
+                },
+            },
+        )
+        self.assertEqual(routed["reason"], "notice")
+        self.assertNotIn("search", routed["params"])
+        self.assertEqual(routed["params"].get("buyer_name"), "平度市财政局")
+
     def test_goods_search(self):
         routed = route_intent("查找惠普打印机相关采购记录")
         self.assertEqual(routed["tool_name"], "goods.search")

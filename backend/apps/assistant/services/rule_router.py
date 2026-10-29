@@ -52,12 +52,21 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "reason": "open_notice_id",
         }
 
-    # 多轮：追加筛选 / 排序（继承上次公告搜索）
-    if last_intent in {"notice.search", "deal.search", "goods.search"} and (
-        _has_any(text, ("只看", "再筛", "追加", "预算", "两万元", "万元以上", "按时间", "倒序", "正序", "近", "昨天", "今天"))
+    # 多轮：若用户重新发起完整查询，不继承旧 search（避免脏条件 AND 成 0 条）
+    fresh_notice_query = _has_any(text, ("查询", "查找", "搜索")) and _has_any(
+        text, ("公告", "采购公告", "成交", "发布的")
+    )
+    if (
+        not fresh_notice_query
+        and last_intent in {"notice.search", "deal.search", "goods.search"}
+        and _has_any(text, ("只看", "再筛", "追加", "预算", "两万元", "万元以上", "按时间", "倒序", "正序", "近"))
     ):
         params = dict(last_params)
-        tool_name = "deal.search" if last_intent == "deal.search" else ("goods.search" if last_intent == "goods.search" else "notice.search")
+        tool_name = (
+            "deal.search"
+            if last_intent == "deal.search"
+            else ("goods.search" if last_intent == "goods.search" else "notice.search")
+        )
         if "倒序" in text:
             params["sort"] = "publish_time_desc"
         if "正序" in text:
@@ -71,6 +80,8 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
         buyer = _extract_buyer_name(text)
         if buyer:
             params["buyer_name"] = buyer
+            # 旧 search 若含整句/日期噪声，清掉，改由 buyer_name 精确筛
+            params.pop("search", None)
         if "济南" in text and "济南" not in str(params.get("search") or ""):
             params["search"] = f"{params.get('search') or ''} 济南".strip()
         return {

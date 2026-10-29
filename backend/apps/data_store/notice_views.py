@@ -82,6 +82,22 @@ def _cached_raw_total() -> int:
 
 
 _ORG_SUFFIX_RE = re.compile(r"(局|院|校|中心|公司|部|处|办|医院|大学|小学|中学|委员会|管理局|财政局|采购中心)$")
+_SEARCH_NOISE_TOKENS = {
+    "昨天",
+    "昨日",
+    "今天",
+    "今日",
+    "前天",
+    "发布的",
+    "发布",
+    "公告",
+    "采购",
+    "查询",
+    "查找",
+    "搜索",
+    "最近",
+    "的",
+}
 
 
 def _keyword_search_q(keyword: str) -> Q:
@@ -92,7 +108,7 @@ def _keyword_search_q(keyword: str) -> Q:
 
     def one_token(token: str) -> Q:
         token = token.strip()
-        if not token:
+        if not token or token in _SEARCH_NOISE_TOKENS:
             return Q()
         if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
             return Q(
@@ -120,15 +136,19 @@ def _keyword_search_q(keyword: str) -> Q:
             )
         )
 
-    tokens = [part for part in re.split(r"[\s,，、]+", text) if part]
-    if len(tokens) <= 1:
-        return one_token(text)
+    tokens = [part for part in re.split(r"[\s,，、]+", text) if part and part not in _SEARCH_NOISE_TOKENS]
+    if not tokens:
+        return Q()
+    if len(tokens) == 1:
+        return one_token(tokens[0])
     combined = Q()
+    applied = False
     for token in tokens[:4]:
         part = one_token(token)
         if part:
             combined &= part
-    return combined
+            applied = True
+    return combined if applied else Q()
 
 
 SITE_LABELS = {
