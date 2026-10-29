@@ -72,11 +72,11 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "reason": "followup_refine",
         }
 
-    # 导航
-    if _has_any(text, ("打开", "进入", "跳转", "去", "查找后台", "功能")) and _has_any(
+    # 导航（避免把「过去」中的「去」误判为跳转）
+    if _has_any(text, ("打开", "进入", "跳转", "前往", "查找后台", "后台功能")) and _has_any(
         text, ("订单", "公告", "商品", "财务", "菜单", "权限", "定时", "任务", "总览", "管理")
     ):
-        keyword = re.sub(r"(打开|进入|跳转到?|去|查找|后台|功能|页面|模块)", "", text).strip() or text
+        keyword = re.sub(r"(打开|进入|跳转到?|前往|查找|后台|功能|页面|模块)", "", text).strip() or text
         return {
             "intent": "navigation.find",
             "tool_name": "navigation.find",

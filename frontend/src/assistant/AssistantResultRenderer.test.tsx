@@ -41,4 +41,26 @@ describe("AssistantResultRenderer", () => {
     screen.getByText("打开「销售订单」").click();
     expect(onNavigate).toHaveBeenCalledWith("salesOrders");
   });
+
+  it("renders tool preview confirm button", () => {
+    const onConfirmAction = vi.fn();
+    render(
+      <AssistantResultRenderer
+        blocks={[
+          {
+            type: "tool_preview",
+            data: {
+              description: "运行助手白名单内的已授权安全定时任务（需确认）",
+              execution_id: 8,
+              confirmation_token: "tok",
+              params: { job_id: 3 },
+            },
+          },
+        ]}
+        onConfirmAction={onConfirmAction}
+      />
+    );
+    screen.getByText("确认执行").click();
+    expect(onConfirmAction).toHaveBeenCalledWith(8, "tok");
+  });
 });
