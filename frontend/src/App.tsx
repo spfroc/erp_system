@@ -65,6 +65,7 @@ import { NoticeStats } from "./NoticeStats";
 import { NoticeDictAdmin } from "./NoticeDictAdmin";
 import { NoticeTags } from "./NoticeTags";
 import { DevOps } from "./DevOps";
+import { AssistantPage } from "./assistant/AssistantPage";
 import { CustomerAccountsPanel } from "./CustomerAccounts";
 import { OfficialSeoPanel } from "./OfficialSeo";
 import { OfficialSitesPanel } from "./OfficialSites";
@@ -3775,6 +3776,13 @@ export default function App() {
         </header>
 
         {view === "dashboard" && <Dashboard data={data} commit={commit} currentUser={currentUser} />}
+        {view === "assistant" && (
+          <AssistantPage
+            can={can}
+            onNavigate={(viewId) => setView(viewId as View)}
+            onNotice={(message) => setNotice({ type: "error", message })}
+          />
+        )}
         {view === "productProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="商品项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
         {view === "serviceProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="服务项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
         {view === "serviceOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="服务订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}

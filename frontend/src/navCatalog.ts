@@ -61,6 +61,7 @@ export type CatalogViewId =
   | "collectionAccounts"
   | "optionSettings"
   | "devOps"
+  | "assistant"
   | "menuSettings"
   | "access";
 
@@ -104,6 +105,7 @@ export interface ViewCatalogEntry {
 
 export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "dashboard", label: "总览", iconKey: "Home", permission: "dashboard.view" },
+  { viewId: "assistant", label: "智能助手", iconKey: "MessageCircle", permission: "assistant.view" },
   { viewId: "productProjects", label: "商品项目", iconKey: "ClipboardList", permission: "project.view" },
   { viewId: "serviceProjects", label: "服务项目", iconKey: "ShieldCheck", permission: "project.view" },
   { viewId: "contracts", label: "合同管理", iconKey: "FileText", permission: "project.view" },
@@ -189,6 +191,7 @@ function item(
 
 export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-dashboard", "dashboard", "overview", "", 10),
+  item("nav-item-assistant", "assistant", "overview", "", 20),
   // 服务项目管理
   item("nav-item-websiteLeads", "websiteLeads", "business", "serviceProjects", 10),
   item("nav-item-serviceProjects", "serviceProjects", "business", "serviceProjects", 20),
@@ -239,4 +242,4 @@ export function catalogEntryForView(viewId: string): ViewCatalogEntry | undefine
 }
 
 /** 防锁死：菜单管理 / 用户权限在配置被关掉时仍对有权限用户显示。 */
-export const CRITICAL_NAV_VIEW_IDS = new Set<CatalogViewId>(["menuSettings", "access"]);
+export const CRITICAL_NAV_VIEW_IDS = new Set<CatalogViewId>(["menuSettings", "access", "assistant"]);

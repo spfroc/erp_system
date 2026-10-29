@@ -7149,4 +7149,147 @@ nav button:hover {
   .progress-line {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .assistant-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.assistant-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.assistant-sidebar {
+  border: 1px solid #e8eaee;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fafbfc;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.assistant-sidebar-title {
+  font-size: 13px;
+  color: #667085;
+  margin-bottom: 8px;
+}
+
+.assistant-session {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+.assistant-session.active {
+  background: #eef8f1;
+}
+
+.assistant-session-main {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  width: 100%;
+}
+
+.assistant-session-main em {
+  font-style: normal;
+  color: #98a2b3;
+  font-size: 12px;
+}
+
+.assistant-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.assistant-messages {
+  border: 1px solid #e8eaee;
+  border-radius: 12px;
+  padding: 14px;
+  min-height: 360px;
+  max-height: calc(100vh - 360px);
+  overflow: auto;
+  background: #fff;
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-message {
+  display: flex;
+}
+
+.assistant-message-user {
+  justify-content: flex-end;
+}
+
+.assistant-message-assistant {
+  justify-content: flex-start;
+}
+
+.assistant-bubble {
+  max-width: min(720px, 100%);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f6f8;
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-message-user .assistant-bubble {
+  background: #e8f6ec;
+}
+
+.assistant-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.assistant-input-row input {
+  width: 100%;
+}
+
+.assistant-blocks {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-block {
+  display: grid;
+  gap: 6px;
+}
+
+.table-row.assistant-result-table {
+  grid-template-columns: minmax(0, 2.2fr) minmax(80px, 0.8fr) minmax(110px, 0.9fr) auto;
+  align-items: start;
+}
+
+.assistant-json {
+  margin: 0;
+  padding: 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 240px;
+}
+
+.assistant-meta {
+  font-size: 12px;
+}
+
+.spin {
+  animation: assistant-spin 0.9s linear infinite;
+}
+
+@keyframes assistant-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

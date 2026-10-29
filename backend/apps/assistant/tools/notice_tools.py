@@ -6,16 +6,32 @@ from apps.assistant.services.notice_query import get_notice_detail, search_notic
 from apps.assistant.services.tool_registry import ToolDefinition, register_tool
 
 
+def _resolve_period(params: dict[str, Any]) -> tuple[str, str]:
+    publish_from = str(params.get("publish_date_from") or params.get("publishDateFrom") or "").strip()
+    publish_to = str(params.get("publish_date_to") or params.get("publishDateTo") or "").strip()
+    if publish_from or publish_to:
+        return publish_from, publish_to
+    period = str(params.get("relative_period") or "").strip()
+    if period == "last_30_days":
+        from datetime import date, timedelta
+
+        end = date.today()
+        start = end - timedelta(days=30)
+        return start.isoformat(), end.isoformat()
+    return "", ""
+
+
 def _notice_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
     del user_data
+    publish_from, publish_to = _resolve_period(params)
     result = search_notices(
         page=int(params.get("page") or 1),
         page_size=int(params.get("page_size") or params.get("pageSize") or 20),
         search=str(params.get("search") or params.get("keyword") or "").strip(),
         site_id=str(params.get("site_id") or params.get("siteId") or "").strip(),
         notice_kind=str(params.get("notice_kind") or params.get("noticeKind") or "").strip(),
-        publish_date_from=str(params.get("publish_date_from") or params.get("publishDateFrom") or "").strip(),
-        publish_date_to=str(params.get("publish_date_to") or params.get("publishDateTo") or "").strip(),
+        publish_date_from=publish_from,
+        publish_date_to=publish_to,
     )
     total = int(result.get("total") or 0)
     return {
@@ -83,6 +99,7 @@ def register() -> None:
                     "notice_kind": {"type": "string"},
                     "publish_date_from": {"type": "string"},
                     "publish_date_to": {"type": "string"},
+                    "relative_period": {"type": "string"},
                     "page": {"type": "integer"},
                     "page_size": {"type": "integer"},
                 },

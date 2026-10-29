@@ -21,6 +21,7 @@ def _navigation_find(*, params: dict[str, Any], user_data: dict) -> dict[str, An
             continue
         matches.append(
             {
+                "id": item.get("viewId"),
                 "viewId": item.get("viewId"),
                 "label": item.get("label"),
                 "permission": permission,
