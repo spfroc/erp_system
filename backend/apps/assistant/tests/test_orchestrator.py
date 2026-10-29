@@ -3,9 +3,13 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase
 
 from apps.assistant.services.orchestrator import handle_chat
+from apps.assistant.tools import reset_registration_for_tests
 
 
 class OrchestratorTests(SimpleTestCase):
+    def setUp(self):
+        reset_registration_for_tests()
+
     def _user(self):
         return {"id": "u1", "permissions": ["assistant.use", "notice.view", "dashboard.view", "salesOrder.view"]}
 

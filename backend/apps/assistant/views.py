@@ -17,17 +17,9 @@ from apps.data_store.views import _require_login, _require_permission
 
 
 def _llm_status() -> dict:
-    enabled = (os.getenv("ASSISTANT_LLM_ENABLED") or "false").strip().lower() in {"1", "true", "yes"}
-    base_url = (os.getenv("ASSISTANT_LLM_BASE_URL") or "").strip()
-    return {
-        "enabled": enabled,
-        "configured": bool(base_url),
-        "baseUrl": base_url or None,
-        "model": (os.getenv("ASSISTANT_LLM_MODEL") or "").strip() or None,
-        "online": False,
-        "fallbackEnabled": (os.getenv("ASSISTANT_FALLBACK_ENABLED") or "true").strip().lower()
-        not in {"0", "false", "no"},
-    }
+    from apps.assistant.services.llm_adapter import probe_llm
+
+    return probe_llm()
 
 
 def _parse_json(request) -> dict:
@@ -48,12 +40,19 @@ def assistant_status(request):
         or user_has_permission(user_data, ASSISTANT_MANAGE)
     ):
         return JsonResponse({"detail": "当前账号没有执行此操作的权限。", "permission": ASSISTANT_VIEW}, status=403)
+    llm = _llm_status()
+    if llm.get("enabled") and llm.get("online"):
+        mode = "llm_assisted"
+    elif llm.get("enabled"):
+        mode = "degraded"
+    else:
+        mode = "rule_only"
     return JsonResponse(
         {
             "enabled": (os.getenv("ASSISTANT_ENABLED") or "true").strip().lower()
             not in {"0", "false", "no"},
-            "mode": "rule_only",
-            "llm": _llm_status(),
+            "mode": mode,
+            "llm": llm,
             "permissions": {
                 "view": user_has_permission(user_data, ASSISTANT_VIEW),
                 "use": user_has_permission(user_data, ASSISTANT_USE),

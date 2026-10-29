@@ -178,7 +178,11 @@ export function AssistantPage({
           <div className="panel-title-buttons">
             <span className="muted">
               模式：{status?.mode || "rule_only"}
-              {status?.llm?.enabled ? (status.llm.online ? " · 模型在线" : " · 模型离线") : " · 未启用模型"}
+              {status?.llm?.enabled
+                ? status.llm.online
+                  ? " · 模型在线"
+                  : " · 模型离线（已降级）"
+                : " · 未启用模型（规则优先）"}
             </span>
             {canUse && (
               <button type="button" className="primary" onClick={() => void handleNewChat()}>

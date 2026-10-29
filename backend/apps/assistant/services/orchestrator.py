@@ -12,8 +12,10 @@ from apps.assistant.services.conversation import (
     get_conversation,
     update_context,
 )
-from apps.assistant.services.rule_router import route_intent
+from apps.assistant.permissions import user_has_permission
+from apps.assistant.services.intent_router import resolve_intent
 from apps.assistant.services.tool_executor import ToolExecutionError, execute_tool
+from apps.assistant.services.tool_registry import list_tools
 
 
 def handle_chat(
@@ -48,7 +50,13 @@ def handle_chat(
 
     append_message(conversation, role=AssistantMessage.ROLE_USER, content=text, message_type="text")
     context = dict(conversation.context_json or {})
-    routed = route_intent(text, context)
+    allowed = {
+        tool.name
+        for tool in list_tools()
+        if user_has_permission(user_data, tool.permission)
+    }
+    routed = resolve_intent(text, context, allowed_tool_names=allowed)
+    mode = str(routed.get("mode") or "rule_only")
 
     if routed.get("needs_clarification") or not routed.get("tool_name"):
         content = str(routed.get("clarification") or "请补充更具体的业务指令。")
@@ -60,11 +68,11 @@ def handle_chat(
             message_type="clarification",
             payload=payload,
         )
-        update_context(conversation, {"mode": "rule_only", "last_tool_status": "clarification"})
+        update_context(conversation, {"mode": mode, "last_tool_status": "clarification"})
         return {
             "conversation_id": conversation.id,
             "message_id": assistant_msg.id,
-            "mode": "rule_only",
+            "mode": mode,
             "intent": "clarification",
             "status": "completed",
             "content": content,
@@ -92,11 +100,11 @@ def handle_chat(
             message_type="error",
             payload={"blocks": blocks, "route": routed},
         )
-        update_context(conversation, {"mode": "rule_only", "last_tool_status": "failed", "intent": tool_name, "params": params})
+        update_context(conversation, {"mode": mode, "last_tool_status": "failed", "intent": tool_name, "params": params})
         return {
             "conversation_id": conversation.id,
             "message_id": assistant_msg.id,
-            "mode": "rule_only",
+            "mode": mode,
             "intent": tool_name,
             "status": "failed",
             "content": content,
@@ -114,7 +122,7 @@ def handle_chat(
     update_context(
         conversation,
         {
-            "mode": "rule_only",
+            "mode": mode,
             "intent": tool_name,
             "params": params,
             "recent_result_ids": recent_ids or context.get("recent_result_ids") or [],
@@ -131,7 +139,7 @@ def handle_chat(
     return {
         "conversation_id": conversation.id,
         "message_id": assistant_msg.id,
-        "mode": "rule_only",
+        "mode": mode,
         "intent": tool_name,
         "status": "completed",
         "content": content,
