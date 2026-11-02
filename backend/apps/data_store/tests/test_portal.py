@@ -1,8 +1,22 @@
 from django.contrib.auth.hashers import make_password
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 
 from apps.data_store.models import CustomerAccountRecord, NoticeRecord
 from apps.data_store.portal import PORTAL_COOKIE
+from apps.data_store.portal_enterprise import portal_format_datetime
+
+
+class PortalDatetimeFormatTests(SimpleTestCase):
+    def test_utc_iso_converts_to_shanghai_wall_clock(self):
+        self.assertEqual(portal_format_datetime("2026-09-09T05:35:00.000Z"), "2026-09-09 13:35")
+        self.assertEqual(
+            portal_format_datetime("2026-09-09T05:35:00.000Z", seconds=True),
+            "2026-09-09 13:35:00",
+        )
+
+    def test_naive_wall_clock_kept_as_shanghai(self):
+        self.assertEqual(portal_format_datetime("2026-09-09 13:35:00"), "2026-09-09 13:35")
+        self.assertEqual(portal_format_datetime("2026-09-09"), "2026-09-09")
 
 
 class PortalAccountTests(TestCase):
@@ -31,6 +45,15 @@ class PortalAccountTests(TestCase):
             is_public=True,
             data={"id": "notice-portal-1", "title": "门户可见公告", "isPublic": True},
         )
+
+    def test_public_crawled_notices_is_anonymous_and_capped(self):
+        client = Client()
+        response = client.get("/api/public/crawled-notices/", {"page": 1, "page_size": 50})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("items", body)
+        self.assertLessEqual(body.get("page_size") or 0, 10)
+        self.assertLessEqual(len(body.get("items") or []), 10)
 
     def test_login_cookie_can_read_notices_and_blocks_subscription(self):
         client = Client()

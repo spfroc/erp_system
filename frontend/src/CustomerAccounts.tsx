@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { SearchableSelect } from "./App";
 import { createCollectionItem, createId, patchCollectionItem, queryCollection, AuthExpiredError } from "./db";
 import { CopyableLine, Pagination, SearchField } from "./listUi";
-import type { PermissionKey } from "./types";
+import type { Organization, PermissionKey } from "./types";
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
@@ -12,6 +13,11 @@ export const PORTAL_PERMISSION_OPTIONS = [
   { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
   { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、成交标签分析与近两周趋势" },
   { id: "portal.notice.subscribe", label: "订阅消息", hint: "按关键词保存订阅（短信发送后续开通）" },
+  { id: "portal.order.view", label: "企业订单", hint: "查看本企业销售/服务订单" },
+  { id: "portal.invoice.view", label: "企业发票", hint: "查看本企业作为买方的发票" },
+  { id: "portal.contract.view", label: "企业合同", hint: "查看本企业相关合同附件" },
+  { id: "portal.account.view", label: "查看企业账号", hint: "查看同企业可登录门户的账号" },
+  { id: "portal.account.manage", label: "管理企业账号", hint: "新增/编辑/停用同企业门户账号" },
 ] as const;
 
 export const PORTAL_SITE_OPTIONS = [
@@ -40,6 +46,7 @@ const emptyForm = {
   name: "",
   phone: "",
   password: "",
+  customerOrgId: "",
   customerName: "",
   status: "启用" as "启用" | "停用",
   permissions: ["portal.notice.view"] as PortalPermission[],
@@ -64,9 +71,11 @@ function useDebounced(value: string, delay = 300) {
 }
 
 export function CustomerAccountsPanel({
+  organizations,
   onNotice,
   can,
 }: {
+  organizations: Organization[];
   onNotice: (notice: { type: "success" | "error"; message: string }) => void;
   can: CanAccess;
 }) {
@@ -77,11 +86,30 @@ export function CustomerAccountsPanel({
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<CustomerAccount[]>([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [editing, setEditing] = useState<CustomerAccount | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  const orgOptions = useMemo(
+    () =>
+      [...organizations]
+        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "") || a.name.localeCompare(b.name, "zh"))
+        .map((org) => ({
+          value: org.id,
+          label: org.name,
+          detail: [org.unifiedCreditCode, org.legalPerson, org.phone].filter(Boolean).join(" / "),
+        })),
+    [organizations],
+  );
+
+  const orgNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const org of organizations) map.set(org.id, org.name);
+    return map;
+  }, [organizations]);
 
   useEffect(() => {
     setPage(1);
@@ -89,6 +117,7 @@ export function CustomerAccountsPanel({
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     void queryCollection<CustomerAccount>("customerAccounts", {
       page,
       pageSize: PAGE_SIZE,
@@ -102,7 +131,12 @@ export function CustomerAccountsPanel({
       })
       .catch((error) => {
         if (cancelled || error instanceof AuthExpiredError) return;
+        setItems([]);
+        setTotal(0);
         onNotice({ type: "error", message: error instanceof Error ? error.message : "客户账号加载失败" });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -110,6 +144,13 @@ export function CustomerAccountsPanel({
   }, [page, debouncedSearch, status, reloadTick, onNotice]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function displayCustomerName(item: CustomerAccount) {
+    if (item.customerOrgId && orgNameById.get(item.customerOrgId)) {
+      return orgNameById.get(item.customerOrgId) || item.customerName || "—";
+    }
+    return item.customerName || (item.customerOrgId ? "未匹配企业" : "未绑定企业");
+  }
 
   function openCreate() {
     setEditing(null);
@@ -120,17 +161,28 @@ export function CustomerAccountsPanel({
   function openEdit(item: CustomerAccount) {
     setEditing(item);
     const limited = Array.isArray(item.allowedSiteIds);
+    const orgId = item.customerOrgId || "";
     setForm({
       name: item.name,
       phone: item.phone,
       password: "",
-      customerName: item.customerName || "",
+      customerOrgId: orgId,
+      customerName: (orgId && orgNameById.get(orgId)) || item.customerName || "",
       status: item.status,
       permissions: item.permissions || [],
       siteScope: limited ? "limited" : "all",
       allowedSiteIds: limited ? [...(item.allowedSiteIds || [])] : PORTAL_SITE_OPTIONS.map((site) => site.id),
     });
     setShowForm(true);
+  }
+
+  function selectOrg(orgId: string) {
+    const org = organizations.find((item) => item.id === orgId);
+    setForm((current) => ({
+      ...current,
+      customerOrgId: orgId,
+      customerName: org?.name || "",
+    }));
   }
 
   function togglePermission(id: PortalPermission) {
@@ -152,14 +204,32 @@ export function CustomerAccountsPanel({
   }
 
   async function save() {
+    if (!form.customerOrgId.trim()) {
+      onNotice({ type: "error", message: "请选择关联客户企业" });
+      return;
+    }
+    if (!form.name.trim() || !form.phone.trim()) {
+      onNotice({ type: "error", message: "请填写账号名称和手机号" });
+      return;
+    }
+    if (!editing && !form.password.trim()) {
+      onNotice({ type: "error", message: "请设置登录密码" });
+      return;
+    }
+    const org = organizations.find((item) => item.id === form.customerOrgId);
+    const customerName = org?.name || form.customerName.trim();
+    if (!customerName) {
+      onNotice({ type: "error", message: "所选企业无效，请重新选择" });
+      return;
+    }
     setSaving(true);
     try {
       const payload: CustomerAccount & { password?: string } = {
         id: editing?.id || createId("portal-user"),
         name: form.name.trim(),
         phone: form.phone.trim(),
-        customerName: form.customerName.trim(),
-        customerOrgId: editing?.customerOrgId || "",
+        customerName,
+        customerOrgId: form.customerOrgId,
         status: form.status,
         permissions: form.permissions,
         allowedSiteIds: form.siteScope === "all" ? null : form.allowedSiteIds,
@@ -186,7 +256,7 @@ export function CustomerAccountsPanel({
         <div className="panel-title action-title">
           <div>
             <h2>登录账号管理</h2>
-            <p>统计平台（portal.qlyc.co）客户账号。可配置门户模块与可查看采集平台，未勾选的接口也会拒绝。</p>
+            <p>统计平台（portal.qlyc.co）客户账号。须关联客户企业；可配置门户模块与可查看采集平台。</p>
           </div>
           <div className="panel-title-buttons">
             {canManage && (
@@ -209,21 +279,32 @@ export function CustomerAccountsPanel({
         <div className="table">
           <div className="table-row customer-account-table head">
             <span>账号</span>
-            <span>客户</span>
+            <span>客户企业</span>
             <span>手机号</span>
             <span>门户权限</span>
             <span>可查看平台</span>
             <span>状态</span>
             <span>操作</span>
           </div>
-          {items.map((item) => (
+          {items.map((item) => {
+            const customerLabel = displayCustomerName(item);
+            const bound = Boolean(item.customerOrgId) && customerLabel !== "未匹配企业" && customerLabel !== "未绑定企业";
+            return (
             <div className="table-row customer-account-table" key={item.id}>
               <div className="customer-account-main-cell">
                 <CopyableLine text={item.name} label="账号名称">
                   <strong>{item.name}</strong>
                 </CopyableLine>
               </div>
-              <span>{item.customerName || "—"}</span>
+              <span>
+                {bound ? (
+                  <CopyableLine text={customerLabel} label="客户企业">
+                    {customerLabel}
+                  </CopyableLine>
+                ) : (
+                  <em>{customerLabel}</em>
+                )}
+              </span>
               <span>{item.phone}</span>
               <span>{PORTAL_PERMISSION_OPTIONS.filter((option) => item.permissions?.includes(option.id)).map((option) => option.label).join("、") || "—"}</span>
               <span>{siteScopeLabel(item)}</span>
@@ -236,8 +317,10 @@ export function CustomerAccountsPanel({
                 )}
               </div>
             </div>
-          ))}
-          {items.length === 0 && <div className="table-empty">暂无客户账号</div>}
+            );
+          })}
+          {loading && items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!loading && items.length === 0 && <div className="table-empty">暂无客户账号</div>}
         </div>
         <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
       </div>
@@ -251,6 +334,16 @@ export function CustomerAccountsPanel({
               </button>
             </div>
             <div className="form-grid customer-account-form">
+              <label className="span-12">
+                客户企业
+                <SearchableSelect
+                  value={form.customerOrgId}
+                  options={orgOptions}
+                  onChange={selectOrg}
+                  placeholder="输入名称、信用代码或联系人搜索"
+                  ariaLabel="搜索并选择客户企业"
+                />
+              </label>
               <label>
                 账号名称
                 <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -258,10 +351,6 @@ export function CustomerAccountsPanel({
               <label>
                 手机号
                 <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-              </label>
-              <label>
-                客户名称
-                <input value={form.customerName} onChange={(event) => setForm({ ...form, customerName: event.target.value })} />
               </label>
               <label>
                 {editing ? "重置密码（留空则不改）" : "登录密码"}

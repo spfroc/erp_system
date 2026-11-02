@@ -23,6 +23,7 @@ OBSOLETE_NAV_GROUP_IDS = ["nav-group-projects", "nav-group-orders"]
 
 DEFAULT_NAV_ITEMS = [
     {"id": "nav-item-dashboard", "viewId": "dashboard", "label": "总览", "categoryKey": "overview", "groupKey": "", "permission": "dashboard.view", "iconKey": "Home", "sortOrder": 10, "enabled": True},
+    {"id": "nav-item-assistant", "viewId": "assistant", "label": "智能助手", "categoryKey": "overview", "groupKey": "", "permission": "assistant.view", "iconKey": "MessageCircle", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-websiteLeads", "viewId": "websiteLeads", "label": "商机管理", "categoryKey": "business", "groupKey": "serviceProjects", "permission": "lead.manage", "iconKey": "MessageSquare", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-serviceProjects", "viewId": "serviceProjects", "label": "服务项目", "categoryKey": "business", "groupKey": "serviceProjects", "permission": "project.view", "iconKey": "ShieldCheck", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-serviceOrders", "viewId": "serviceOrders", "label": "服务订单", "categoryKey": "business", "groupKey": "serviceProjects", "permission": "serviceOrder.view", "iconKey": "ShieldCheck", "sortOrder": 30, "enabled": True},

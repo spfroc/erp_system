@@ -419,6 +419,13 @@
             flex-wrap: wrap;
         }
 
+        .hero .home-notices {
+            margin-top: 36px;
+            max-width: 860px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
         /* 数据展示部分 */
         .stats {
             background: white;
@@ -986,12 +993,12 @@
                 <li><a href="./qhc-index.html">青慧采</a></li>
                 <li><a href="qiluyuncai/index.html">齐鲁云采</a></li>
                 <li><a href="/notices">采购公告</a></li>
-                <li><a href="https://portal.qlyc.co/">客户登录</a></li>
                 <li><a href="#platforms">政企采购平台</a></li>
 	            <li><a href="#industries">常见行业</a></li>
                 <li><a href="#services">我们的服务</a></li>
                 <li><a href="#process">服务流程</a></li>
                 <li><a href="#contact">联系我们</a></li>
+                <li><a href="/portal/?from=site" data-portal-entry>会员登录</a></li>
             </ul>
         </div>
     </header>
@@ -1005,6 +1012,17 @@
             <div class="hero-btns">
                 <a href="#contact" class="btn">立即咨询入驻</a>
                 <a href="#platforms" class="btn btn-secondary">了解平台详情</a>
+            </div>
+            <div id="home-notices" class="home-notices is-on-hero" data-notice-detail="public" aria-label="最新公告">
+                <div class="home-notices-inner">
+                    <div class="home-notices-label">公告</div>
+                    <div class="home-notices-viewport">
+                        <ul class="home-notices-track" id="home-notices-track">
+                            <li>公告加载中…</li>
+                        </ul>
+                    </div>
+                    <a href="/portal/?from=site#notices" class="home-notices-more" data-notices-more>查看更多</a>
+                </div>
             </div>
         </div>
     </section>
@@ -1524,6 +1542,7 @@
         });
     </script>
     <script src="js/sendMessage.js?v=20260916a"></script>
+    <script src="/js/portal-home.js?v=20261102a"></script>
     <script>
         // 调用封装方法
         handleFormSubmit(

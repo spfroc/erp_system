@@ -5,6 +5,7 @@ from decimal import Decimal
 from urllib.parse import quote
 
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable, make_password
+from django.core.exceptions import SuspiciousFileOperation
 from django.db import transaction
 from django.db.models import CharField, Q, Value
 from django.db.models.fields.json import KeyTextTransform
@@ -138,8 +139,15 @@ COLLECTIONS = {
 }
 
 APP_DATA_OPERATION_LOG_LIMIT = 300
-# 大表已走 /api/collections 分页，禁止打进启动包（one 上资料库 14 万+、短信 5 万+）。
-APP_DATA_BOOTSTRAP_SKIP = frozenset({"libraryContacts", "smsRecords"})
+# 大表已走 /api/collections 分页，禁止打进启动包（one 上资料库/短信/公告/日志等）。
+APP_DATA_BOOTSTRAP_SKIP = frozenset({
+    "libraryContacts",
+    "smsRecords",
+    "notices",
+    "noticeCollectionSources",
+    "noticeCollectionRuns",
+    "operationLogs",
+})
 
 COLLECTION_PERMISSIONS = {
     "roles": {"read": "user.manage", "write": "user.manage"},
@@ -641,6 +649,9 @@ PERMISSION_ALIASES = {
     "notice.nature.manage": ("notice.nature.manage", "notice.manage"),
     "dev.ops.view": ("dev.ops.view", "dev.ops.manage"),
     "dev.ops.manage": ("dev.ops.manage",),
+    "assistant.view": ("assistant.view", "assistant.use", "assistant.manage"),
+    "assistant.use": ("assistant.use", "assistant.manage"),
+    "assistant.manage": ("assistant.manage",),
     "site.view": ("site.view", "site.manage"),
     "library.view": ("library.view", "library.manage"),
     "sms.view": ("sms.view", "sms.manage"),
@@ -695,10 +706,13 @@ def _collection_permission(collection: str, action: str) -> str:
 def _customer_account_conflict(data: dict, existing) -> JsonResponse | None:
     phone = str(data.get("phone") or "").strip()
     name = str(data.get("name") or "").strip()
+    org_id = str(data.get("customerOrgId") or "").strip()
     if not name:
         return JsonResponse({"detail": "请填写账号名称。"}, status=400)
     if not phone:
         return JsonResponse({"detail": "请填写手机号。"}, status=400)
+    if not org_id:
+        return JsonResponse({"detail": "请选择关联客户企业。"}, status=400)
     if not existing and not data.get("password"):
         return JsonResponse({"detail": "请设置登录密码。"}, status=400)
     duplicate = CustomerAccountRecord.objects.filter(is_deleted=False, phone=phone).exclude(id=data.get("id")).exists()
@@ -1839,15 +1853,14 @@ def _apply_collection_list_query(collection: str, queryset, request):
         if customer_type and customer_type != "全部":
             queryset = queryset.filter(customer_type=customer_type)
         if search:
+            # 列表搜索优先走列字段，避免 data__* JSON icontains 全表扫描拖慢分页。
             queryset = queryset.filter(
                 Q(name__icontains=search)
                 | Q(mobile__icontains=search)
                 | Q(license_code__icontains=search)
-                | Q(data__legalPerson__icontains=search)
-                | Q(data__email__icontains=search)
-                | Q(data__address__icontains=search)
-                | Q(data__sellUserName__icontains=search)
-                | Q(data__tags__icontains=search)
+                | Q(customer_type__icontains=search)
+                | Q(origin__icontains=search)
+                | Q(signed__icontains=search)
             )
     elif collection == "smsTemplates":
         if search:
@@ -1908,10 +1921,62 @@ def _apply_collection_list_query(collection: str, queryset, request):
         queryset = queryset.order_by("sort_order", "id")
     elif collection == "platformAccounts":
         queryset = _created_desc_order(queryset)
+    elif collection == "libraryContacts":
+        # 用主键倒序，避免对 10 万+ 行按 created_at 全表排序。
+        queryset = queryset.order_by("-id")
     else:
         # Prefer JSON createdAt (legacy payloads), then DB created_at, then id.
         queryset = queryset.order_by("-data__createdAt", "-created_at", "-id")
     return queryset
+
+
+def _library_contacts_paged_items(queryset, start: int, page_size: int, can_view_sensitive: bool) -> list[dict]:
+    """列表只读列字段，不加载 data JSON（含 communicationRecords），避免大行 I/O。
+
+    法人/标签等仅存 JSON 的字段列表页可为空；编辑/详情走单条 GET 仍返回全量。
+    """
+    page_qs = list(
+        queryset.only(
+            "id",
+            "name",
+            "mobile",
+            "license_code",
+            "signed",
+            "origin",
+            "customer_type",
+            "sell_user_id",
+            "created_at",
+            "updated_at",
+        )[start : start + page_size]
+    )
+    sell_ids = [row.sell_user_id for row in page_qs if row.sell_user_id]
+    sell_names = {}
+    if sell_ids:
+        sell_names = {
+            item.id: item.name
+            for item in UserRecord.objects.filter(id__in=sell_ids, is_deleted=False).only("id", "name")
+        }
+    items = []
+    for row in page_qs:
+        created = _dt_iso(row.created_at) if row.created_at else ""
+        updated = _dt_iso(row.updated_at) if row.updated_at else created
+        payload = {
+            "id": row.id,
+            "name": row.name or "",
+            "mobile": row.mobile or "",
+            "licenseCode": row.license_code or "",
+            "signed": row.signed or "有效",
+            "origin": row.origin or "",
+            "type": row.customer_type or "",
+            "sellUserId": row.sell_user_id or "",
+            "sellUserName": sell_names.get(row.sell_user_id or "", ""),
+            "tags": [],
+            "createdAt": created,
+            "updatedAt": updated,
+        }
+        items.append(_sanitize_record_data("libraryContacts", payload, can_view_sensitive))
+    return items
+
 
 
 def _record_payload(payload: dict):
@@ -2234,14 +2299,17 @@ def collection_items(request, collection):
             page, page_size = _parse_page_params(request)
             total = queryset.count()
             start = (page - 1) * page_size
-            items = [
-                _sanitize_record_data(
-                    collection,
-                    _collection_public_data(collection, item),
-                    can_view_sensitive,
-                )
-                for item in queryset[start : start + page_size]
-            ]
+            if collection == "libraryContacts":
+                items = _library_contacts_paged_items(queryset, start, page_size, can_view_sensitive)
+            else:
+                items = [
+                    _sanitize_record_data(
+                        collection,
+                        _collection_public_data(collection, item),
+                        can_view_sensitive,
+                    )
+                    for item in queryset[start : start + page_size]
+                ]
             return JsonResponse(
                 {
                     "items": items,
@@ -2249,6 +2317,12 @@ def collection_items(request, collection):
                     "page": page,
                     "page_size": page_size,
                 }
+            )
+        # libraryContacts 禁止无分页全量（约十几万行且含跟进记录 JSON）。
+        if collection == "libraryContacts":
+            return JsonResponse(
+                {"detail": "libraryContacts 请使用分页查询：paged=1&page=1&page_size=20"},
+                status=400,
             )
         return JsonResponse({"data": [
             _sanitize_record_data(
@@ -2349,6 +2423,10 @@ def collection_item(request, collection, record_id):
     data = {**_column_json_from_record(record), **existing_data, **incoming} if request.method == "PATCH" else incoming
     data["id"] = record.id
     data = _preserve_sensitive_fields(collection, data, record.data)
+    if collection == "libraryContacts" and "communicationRecords" not in incoming and "records" not in incoming:
+        # 列表页可能剥离了跟进记录；未显式提交时保留库内原值，避免误清空。
+        if existing_data.get("communicationRecords"):
+            data["communicationRecords"] = existing_data["communicationRecords"]
     if collection == "customerAccounts":
         conflict = _customer_account_conflict(data, record)
         if conflict:
@@ -2601,12 +2679,83 @@ def delete_document(request, file_id):
     return JsonResponse({"data": {"id": file_id}})
 
 
+def _prefer_json_response(request) -> bool:
+    accept = (request.headers.get("Accept") or "").lower()
+    if not accept or accept.strip() == "*/*":
+        return False
+    json_pos = accept.find("application/json")
+    if json_pos < 0:
+        return False
+    html_pos = accept.find("text/html")
+    if html_pos < 0:
+        return True
+    return json_pos < html_pos
+
+
+def _document_missing_message(document_type: str = "") -> str:
+    if document_type == "contract":
+        return "合同文件不存在或已被移除，请联系管理员。"
+    return "文件不存在或已被移除，请联系管理员。"
+
+
+def _missing_document_response(request, document_type: str = ""):
+    """DB 有记录但磁盘文件缺失，或记录本身不存在时的友好响应（勿暴露服务器路径）。"""
+    message = _document_missing_message(document_type)
+    if _prefer_json_response(request):
+        return JsonResponse({"detail": message}, status=404)
+    safe_message = (
+        message.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>文件不可用</title>
+<style>
+  body {{ margin: 0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f7f6; color: #1f2933; }}
+  .wrap {{ max-width: 480px; margin: 12vh auto; padding: 32px 28px; background: #fff; border: 1px solid #e5ebe8; border-radius: 12px; box-shadow: 0 8px 24px rgba(15, 118, 110, 0.06); }}
+  h1 {{ margin: 0 0 12px; font-size: 20px; color: #0f766e; font-weight: 600; }}
+  p {{ margin: 0; line-height: 1.65; color: #52606d; font-size: 15px; }}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>无法打开文件</h1>
+    <p>{safe_message}</p>
+  </div>
+</body>
+</html>"""
+    return HttpResponse(html, status=404, content_type="text/html; charset=utf-8")
+
+
+def _open_managed_file(record: ManagedFile):
+    """打开托管文件；磁盘缺失时抛 FileNotFoundError，路径异常抛 SuspiciousFileOperation。"""
+    if not record.file or not record.file.name:
+        raise FileNotFoundError("managed file has no storage name")
+    storage = record.file.storage
+    name = record.file.name
+    try:
+        if hasattr(storage, "exists") and not storage.exists(name):
+            raise FileNotFoundError(name)
+        return record.file.open("rb")
+    except SuspiciousFileOperation:
+        raise
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+
+
 @require_http_methods(["GET"])
 @xframe_options_sameorigin
 def download_document(request, file_id):
     record = ManagedFile.objects.filter(id=file_id).first()
     if not record:
-        return JsonResponse({"detail": "文件不存在。"}, status=404)
+        return _missing_document_response(request)
     permissions = DOCUMENT_PERMISSIONS.get(record.document_type)
     if not permissions:
         return JsonResponse({"detail": "文件类型无效。"}, status=404)
@@ -2614,7 +2763,11 @@ def download_document(request, file_id):
         _, permission_error = _require_permission(request, permissions["read"])
         if permission_error:
             return permission_error
-    response = FileResponse(record.file.open("rb"), content_type=record.content_type or "application/octet-stream")
+    try:
+        file_handle = _open_managed_file(record)
+    except (FileNotFoundError, SuspiciousFileOperation, OSError):
+        return _missing_document_response(request, record.document_type)
+    response = FileResponse(file_handle, content_type=record.content_type or "application/octet-stream")
     response["Content-Disposition"] = f"inline; filename*=UTF-8''{quote(record.original_name)}"
     response["X-Original-Filename"] = record.original_name
     if record.document_type in PUBLIC_DOCUMENT_TYPES:

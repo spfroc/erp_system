@@ -833,6 +833,14 @@ export type PermissionKey =
   | "sms.manage"
   | "customerAccount.view"
   | "customerAccount.manage"
+  | "portal.notice.view"
+  | "portal.notice.subscribe"
+  | "portal.stats.view"
+  | "portal.order.view"
+  | "portal.invoice.view"
+  | "portal.contract.view"
+  | "portal.account.view"
+  | "portal.account.manage"
   | "menu.view"
   | "menu.manage"
   | "lead.manage"
@@ -840,6 +848,9 @@ export type PermissionKey =
   | "profit.view"
   | "dev.ops.view"
   | "dev.ops.manage"
+  | "assistant.view"
+  | "assistant.use"
+  | "assistant.manage"
   | "user.manage";
 
 export interface NavCategory {

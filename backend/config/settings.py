@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "apps.data_store",
+    "apps.assistant",
 ]
 
 MIDDLEWARE = [
@@ -166,6 +167,10 @@ CELERY_ENABLE_UTC = True
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+# 全量采集 timeout=86400；acks_late 下 visibility 过短会重复投递导致状态错乱
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "90000")),
+}
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
     "apps.data_store.dev_ops_tasks.run_crawler_script": {"queue": "crawler"},

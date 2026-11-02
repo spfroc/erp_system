@@ -27,6 +27,8 @@ _LIST_RAW_ONLY = (
     "notice_type",
     "title",
     "region_name",
+    "district_name",
+    "region_guid",
     "publish_time",
     "source_url",
     "crawl_status",
@@ -45,6 +47,8 @@ _LIST_PARSED_ONLY = (
     "buyer_address",
     "buyer_contact",
     "region_name",
+    "district_name",
+    "region_guid",
     "budget_amount",
     "deal_amount",
     "deal_supplier",
@@ -54,8 +58,12 @@ _LIST_PARSED_ONLY = (
     "start_time",
     "end_time",
 )
-_OPTIONS_TTL_SEC = 60.0
+_OPTIONS_TTL_SEC = 300.0
+_RAW_COUNT_TTL_SEC = 30.0
+_FILTERED_COUNT_TTL_SEC = 20.0
 _options_cache: dict[str, tuple[float, Any]] = {}
+_raw_count_cache: tuple[float, int] | None = None
+_filtered_count_cache: dict[str, tuple[float, int]] = {}
 
 
 def _cached_options(key: str, builder):
@@ -66,6 +74,103 @@ def _cached_options(key: str, builder):
     value = builder()
     _options_cache[key] = (now + _OPTIONS_TTL_SEC, value)
     return value
+
+
+def _cached_raw_total() -> int:
+    """无筛选列表的总数短缓存，避免每次 COUNT(*) 全表。"""
+    global _raw_count_cache
+    now = time.monotonic()
+    if _raw_count_cache and _raw_count_cache[0] > now:
+        return _raw_count_cache[1]
+    total = NoticeRaw.objects.count()
+    _raw_count_cache = (now + _RAW_COUNT_TTL_SEC, total)
+    return total
+
+
+def _cached_filtered_total(cache_key: str, counter) -> int:
+    """带筛选 COUNT 的短缓存（默认发布日起筛很常见）。"""
+    now = time.monotonic()
+    hit = _filtered_count_cache.get(cache_key)
+    if hit and hit[0] > now:
+        return hit[1]
+    total = int(counter())
+    _filtered_count_cache[cache_key] = (now + _FILTERED_COUNT_TTL_SEC, total)
+    if len(_filtered_count_cache) > 64:
+        # 简单淘汰过期项，避免无限涨
+        alive = {k: v for k, v in _filtered_count_cache.items() if v[0] > now}
+        _filtered_count_cache.clear()
+        _filtered_count_cache.update(alive)
+    return total
+
+
+_ORG_SUFFIX_RE = re.compile(r"(局|院|校|中心|公司|部|处|办|医院|大学|小学|中学|委员会|管理局|财政局|采购中心)$")
+_SEARCH_NOISE_TOKENS = {
+    "昨天",
+    "昨日",
+    "今天",
+    "今日",
+    "前天",
+    "发布的",
+    "发布",
+    "公告",
+    "采购",
+    "查询",
+    "查找",
+    "搜索",
+    "最近",
+    "的",
+}
+
+
+def _keyword_search_q(keyword: str) -> Q:
+    """关键词搜索：单位名优先走 buyer；多词空格拆成 AND，避免整句 LIKE 扫全表。"""
+    text = (keyword or "").strip()
+    if not text:
+        return Q()
+
+    def one_token(token: str) -> Q:
+        token = token.strip()
+        if not token or token in _SEARCH_NOISE_TOKENS:
+            return Q()
+        if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
+            return Q(
+                Exists(
+                    NoticeParsed.objects.filter(
+                        notice_raw_id=OuterRef("pk"),
+                        buyer_name__icontains=token,
+                    )
+                )
+            )
+        return (
+            Q(title__icontains=token)
+            | Q(notice_key__icontains=token)
+            | Q(region_name__icontains=token)
+            | Q(
+                Exists(
+                    NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
+                        Q(project_code__icontains=token)
+                        | Q(project_name__icontains=token)
+                        | Q(buyer_name__icontains=token)
+                        | Q(deal_supplier__icontains=token)
+                        | Q(notice_title__icontains=token)
+                    )
+                )
+            )
+        )
+
+    tokens = [part for part in re.split(r"[\s,，、]+", text) if part and part not in _SEARCH_NOISE_TOKENS]
+    if not tokens:
+        return Q()
+    if len(tokens) == 1:
+        return one_token(tokens[0])
+    combined = Q()
+    applied = False
+    for token in tokens[:4]:
+        part = one_token(token)
+        if part:
+            combined &= part
+            applied = True
+    return combined if applied else Q()
 
 
 SITE_LABELS = {
@@ -669,18 +774,11 @@ def _raw_ids_for_kinds(notice_kinds: list[str], site_id: str) -> Q:
 def _notice_kind_options(site_id: str) -> list[str]:
     def build() -> list[str]:
         labels: set[str] = set()
-        # 站点映射表本身就是完整枚举，优先用它，避免扫全表 distinct
+        # 只用站点映射枚举，避免对 notice_parsed 做 distinct 全表扫描
         for sid, mapping in NOTICE_TYPE_LABELS.items():
             if site_id and sid != site_id:
                 continue
             labels.update(mapping.values())
-        kind_qs = NoticeParsed.objects.exclude(notice_kind__isnull=True).exclude(notice_kind="")
-        if site_id:
-            kind_qs = kind_qs.filter(site_id=site_id)
-        for sid, kind in kind_qs.values_list("site_id", "notice_kind").distinct()[:200]:
-            if not kind or str(kind).strip().isdigit():
-                continue
-            labels.add(_normalize_display_kind(sid, str(kind)))
         return sorted(labels)
 
     return _cached_options(f"notice_kinds:{site_id or '*'}", build)
@@ -895,6 +993,23 @@ def _load_related_notices(raw: NoticeRaw, parsed: NoticeParsed | None, now=None)
     return _related_from_raws(list(NoticeRaw.objects.filter(id__in=raw_ids)), exclude_raw_id=None, now=now)
 
 
+def _project_code_lookup_values(codes: list[str]) -> list[str]:
+    """展开项目编号等值匹配集合，避免 project_code LIKE 前缀扫表。
+
+    成交公告常见「编号，1 / 编号,1」包号；列表关联只按等值 IN 查询。
+    """
+    values: set[str] = set()
+    for code in codes:
+        text = (code or "").strip()
+        if not text:
+            continue
+        values.add(text)
+        for idx in range(1, 31):
+            values.add(f"{text}，{idx}")
+            values.add(f"{text},{idx}")
+    return sorted(values)
+
+
 def _sibling_kinds_by_project(
     *,
     project_codes: list[str],
@@ -904,10 +1019,8 @@ def _sibling_kinds_by_project(
     codes = sorted({_normalize_project_code(c) for c in project_codes if _normalize_project_code(c)})
     if not codes:
         return {}
-    code_query = Q()
-    for code in codes:
-        code_query |= Q(project_code=code) | Q(project_code__startswith=code + "，") | Q(project_code__startswith=code + ",")
-    parsed_qs = NoticeParsed.objects.filter(code_query)
+    # 等值 IN 可走索引；旧实现 OR + startswith 在列表页可拖到 1s+
+    parsed_qs = NoticeParsed.objects.filter(project_code__in=_project_code_lookup_values(codes))
     if site_ids:
         parsed_qs = parsed_qs.filter(site_id__in=site_ids)
     parsed_rows = list(
@@ -1342,6 +1455,7 @@ def query_crawled_notices(
     site_ids: list[str] | None = None,
     publish_date_from: str = "",
     publish_date_to: str = "",
+    buyer_name: str = "",
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1367,23 +1481,30 @@ def query_crawled_notices(
     day_q = _notice_day_filter_q(publish_from=publish_date_from, publish_to=publish_date_to)
     if day_q is not None:
         qs = qs.filter(day_q)
+    buyer = (buyer_name or "").strip()
+    if buyer:
+        field_q = _notice_field_filter_q(
+            project_code="",
+            project_name="",
+            buyer_name=buyer,
+            supplier_name="",
+            goods_name="",
+        )
+        if field_q is not None:
+            qs = qs.filter(field_q)
     keyword = (search or "").strip()
     if keyword:
-        qs = qs.filter(
-            Q(title__icontains=keyword)
-            | Q(notice_key__icontains=keyword)
-            | Q(
-                Exists(
-                    NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
-                        Q(project_code__icontains=keyword)
-                        | Q(project_name__icontains=keyword)
-                        | Q(buyer_name__icontains=keyword)
-                        | Q(notice_title__icontains=keyword)
-                    )
-                )
-            )
+        qs = qs.filter(_keyword_search_q(keyword))
+    has_filter = bool(site_id or kinds or day_q is not None or buyer or keyword or (site_ids is not None))
+    if not has_filter:
+        total = _cached_raw_total()
+    elif day_q is not None and not (site_id or kinds or buyer or keyword or (site_ids is not None)):
+        total = _cached_filtered_total(
+            f"console_pub:{publish_date_from}:{publish_date_to}:sites:{','.join(site_ids or [])}",
+            qs.count,
         )
-    total = qs.count()
+    else:
+        total = qs.count()
     rows = list(qs[(page - 1) * page_size : page * page_size])
     parsed_map = _load_parsed_map([row.id for row in rows])
     items = _attach_result_tags(
@@ -1436,7 +1557,7 @@ def notice_list(request):
     now = timezone.now()
 
     try:
-        qs = _list_raw_qs()
+        qs = _list_raw_qs().order_by("-publish_time", "-id")
         if site_id:
             qs = qs.filter(site_id=site_id)
         if parse_status:
@@ -1444,22 +1565,7 @@ def notice_list(request):
         if region_name:
             qs = qs.filter(_region_filter_q(region_name))
         if search:
-            qs = qs.filter(
-                Q(title__icontains=search)
-                | Q(notice_key__icontains=search)
-                | Q(region_name__icontains=search)
-                | Q(
-                    Exists(
-                        NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
-                            Q(project_code__icontains=search)
-                            | Q(project_name__icontains=search)
-                            | Q(buyer_name__icontains=search)
-                            | Q(deal_supplier__icontains=search)
-                            | Q(notice_title__icontains=search)
-                        )
-                    )
-                )
-            )
+            qs = qs.filter(_keyword_search_q(search))
         if notice_kinds:
             qs = qs.filter(_raw_ids_for_kinds(notice_kinds, site_id))
         field_q = _notice_field_filter_q(
@@ -1494,7 +1600,37 @@ def notice_list(request):
         if progress_target:
             qs = qs.filter(_progress_filter_q(progress_target, now=now))
 
-        total = qs.count()
+        has_filter = bool(
+            site_id
+            or parse_status
+            or region_name
+            or search
+            or notice_kinds
+            or field_q is not None
+            or day_q is not None
+            or progress_target
+        )
+        # 无筛选时短缓存 COUNT；仅默认发布日筛也缓存，避免重复慢 COUNT
+        if not has_filter:
+            total = _cached_raw_total()
+        elif (
+            day_q is not None
+            and not (
+                site_id
+                or parse_status
+                or region_name
+                or search
+                or notice_kinds
+                or field_q is not None
+                or progress_target
+            )
+        ):
+            total = _cached_filtered_total(
+                f"pub:{publish_from}:{publish_to}",
+                qs.count,
+            )
+        else:
+            total = qs.count()
         offset = (page - 1) * page_size
         page_rows = list(qs[offset : offset + page_size])
         parsed_map = _load_parsed_map([r.id for r in page_rows])

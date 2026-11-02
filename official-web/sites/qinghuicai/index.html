@@ -799,6 +799,15 @@
             .nav-menu { display: none; }
             .section-title { font-size: 1.8rem; }
         }
+
+        header .home-notices {
+            margin-top: 28px;
+            max-width: 920px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            z-index: 2;
+        }
     </style>
 </head>
 <body>
@@ -824,6 +833,17 @@
                 <div class="stat-item"><div class="stat-number">30+60天</div><div class="stat-label">账期保障</div></div>
             </div>
             <a href="#contact" class="header-cta">立即申请入驻代办</a>
+            <div id="home-notices" class="home-notices is-on-hero" data-notice-detail="portal" aria-label="最新公告">
+                <div class="home-notices-inner">
+                    <div class="home-notices-label">公告</div>
+                    <div class="home-notices-viewport">
+                        <ul class="home-notices-track" id="home-notices-track">
+                            <li>公告加载中…</li>
+                        </ul>
+                    </div>
+                    <a href="/portal/?from=site#notices" class="home-notices-more" data-notices-more>查看更多</a>
+                </div>
+            </div>
         </div>
     </div>
 </header>
@@ -841,7 +861,7 @@
             <li class="nav-item"><a href="#guarantee" class="nav-link">权益保障</a></li>
             <li class="nav-item"><a href="#faq" class="nav-link">常见问题</a></li>
             <li class="nav-item"><a href="#contact" class="nav-link">联系我们</a></li>
-            <li class="nav-item"><a href="https://portal.qlyc.co/" class="nav-link">客户登录</a></li>
+            <li class="nav-item"><a href="/portal/?from=site" class="nav-link" data-portal-entry>会员登录</a></li>
         </ul>
     </div>
 </nav>
@@ -1027,6 +1047,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/sendMessage.js?v=20260916a"></script>
+<script src="/js/portal-home.js?v=20261102a"></script>
 <script>
     window.addEventListener('load', function() {
         const bar = document.getElementById('loading-bar');
@@ -1037,11 +1058,14 @@
     const backBtn = document.getElementById('back-to-top');
     window.addEventListener('scroll', () => { backBtn.classList.toggle('visible', window.pageYOffset > 300); });
     backBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    document.querySelectorAll('nav a, .header-cta').forEach(anchor => {
+    document.querySelectorAll('nav a[href^="#"], .header-cta[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function(e) {
-            e.preventDefault();
             const target = this.getAttribute('href');
-            if(target && target !== '#') document.querySelector(target).scrollIntoView({ behavior: 'smooth' });
+            if (!target || target === '#') return;
+            const el = document.querySelector(target);
+            if (!el) return;
+            e.preventDefault();
+            el.scrollIntoView({ behavior: 'smooth' });
         });
     });
     document.querySelectorAll('.faq-question').forEach(q => { q.addEventListener('click', function() { this.parentElement.classList.toggle('active'); }); });

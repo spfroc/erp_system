@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BookUser, X } from "lucide-react";
-import { createCollectionItem, createId, deleteCollectionItem, patchCollectionItem, queryCollection, AuthExpiredError } from "./db";
+import { createCollectionItem, createId, deleteCollectionItem, getCollectionItem, patchCollectionItem, queryCollection, AuthExpiredError } from "./db";
 import { CopyableLine, Pagination, SearchField } from "./listUi";
 import type {
   AppData,
@@ -130,8 +130,7 @@ export function LibraryContactsPanel({
     setForm({ ...emptyForm, sellUserId: currentUser.id });
   }
 
-  function openEdit(item: LibraryContact) {
-    setEditing(item);
+  async function openEdit(item: LibraryContact) {
     setCreating(false);
     setForm({
       name: item.name || "",
@@ -148,6 +147,30 @@ export function LibraryContactsPanel({
       tags: (item.tags || []).join(","),
       sellUserId: item.sellUserId || "",
     });
+    // 列表已剥离 communicationRecords；编辑前拉详情以免保存时覆盖跟进记录。
+    try {
+      const full = await getCollectionItem<LibraryContact>("libraryContacts", item.id);
+      setEditing(full);
+      setForm({
+        name: full.name || "",
+        legalPerson: full.legalPerson || "",
+        mobile: full.mobile || "",
+        email: full.email || "",
+        licenseCode: full.licenseCode || "",
+        address: full.address || "",
+        province: full.province || "山东省",
+        city: full.city || "济南市",
+        origin: full.origin || "其他",
+        signed: full.signed || "有效",
+        type: full.type || "其他",
+        tags: (full.tags || []).join(","),
+        sellUserId: full.sellUserId || "",
+      });
+    } catch (error) {
+      if (error instanceof AuthExpiredError) return;
+      setEditing(item);
+      onNotice({ type: "error", message: error instanceof Error ? error.message : "加载资料详情失败" });
+    }
   }
 
   function closeModal() {
@@ -324,7 +347,7 @@ export function LibraryContactsPanel({
                 )}
                 {canManage && (
                   <>
-                    <button className="copy-link" onClick={() => openEdit(item)}>
+                    <button className="copy-link" onClick={() => void openEdit(item)}>
                       编辑
                     </button>
                     <button className="copy-link danger-action" onClick={() => void remove(item)}>

@@ -35,5 +35,7 @@ CALL add_notice_list_index('notice_parsed', 'idx_parsed_site_project', 'site_id,
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_publish_time', 'publish_time');
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_publish_raw', 'publish_time, notice_raw_id');
 CALL add_notice_list_index('notice_parsed', 'idx_parsed_site_publish', 'site_id, publish_time');
+-- Portal / 统计：覆盖索引，避免 GROUP BY + SUM 回表读大 JSON 行
+CALL add_notice_list_index('notice_parsed', 'idx_parsed_stats_cover', 'publish_time, site_id, notice_kind, budget_amount, deal_amount');
 
 DROP PROCEDURE IF EXISTS add_notice_list_index;

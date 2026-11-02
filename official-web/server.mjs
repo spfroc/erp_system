@@ -100,12 +100,25 @@ function siteRoot(siteKey) {
   return path.join(__dirname, "sites", siteKey);
 }
 
+const SHARED_ROOT = path.join(__dirname, "shared");
+const SHARED_PREFIXES = ["css/", "js/", "webfonts/", "download/"];
+
 function safeJoin(root, urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0] || "/");
   const relative = decoded.replace(/^\/+/, "");
   const full = path.normalize(path.join(root, relative));
   if (!full.startsWith(root)) return null;
   return full;
+}
+
+function resolveSharedStatic(pathname) {
+  const relative = decodeURIComponent(pathname.split("?")[0] || "/").replace(/^\/+/, "");
+  if (!SHARED_PREFIXES.some((prefix) => relative === prefix.slice(0, -1) || relative.startsWith(prefix))) {
+    return null;
+  }
+  const filePath = safeJoin(SHARED_ROOT, relative);
+  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return null;
+  return filePath;
 }
 
 function contentType(filePath) {
@@ -207,6 +220,9 @@ function resolveStaticFile(root, pathname) {
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     const htmlPath = `${filePath}.html`;
     if (fs.existsSync(htmlPath) && fs.statSync(htmlPath).isFile()) return htmlPath;
+    // 三站公共 css/js/webfonts/download 走 shared，站点目录可无副本。
+    const shared = resolveSharedStatic(pathname);
+    if (shared) return shared;
     return null;
   }
   return filePath;
