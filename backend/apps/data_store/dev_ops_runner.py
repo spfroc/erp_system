@@ -110,25 +110,60 @@ def _build_notice_crawl_cli_args(script_key: str, options: dict[str, Any]) -> li
 
 
 def _run_crawler(script: dict[str, Any], options: dict[str, Any]) -> dict[str, str]:
+    cli_args = list(script.get("cli") or [])
+    if script["key"] in {"notice_crawl_once", "notice_crawl_all"}:
+        cli_args += _build_notice_crawl_cli_args(script["key"], options)
+    timeout = int(script.get("timeout") or 7200)
+    container = (getattr(settings, "NOTICE_CRAWLER_DOCKER_CONTAINER", "") or "").strip()
+    if container:
+        result = _run_crawler_docker_exec(container, cli_args, timeout)
+    else:
+        result = _run_crawler_local(cli_args, timeout)
+    # 采集成功后批量补标签（全量/一轮都需要；解析写入 notice_parsed 后才能识别）
+    if result["ok"] and script["key"] in {"notice_crawl_once", "notice_crawl_all"}:
+        tag_summary = _tag_after_crawl(batch_size=500, max_batches=200)
+        result["stdout"] = _clip((result["stdout"] or "") + "\n" + tag_summary)
+    return result
+
+
+def _run_crawler_local(cli_args: list[str], timeout: int) -> dict[str, str]:
     root = Path(getattr(settings, "NOTICE_CRAWLER_DIR", "") or "")
     cli = root / "cli.py"
     if not cli.is_file():
         raise FileNotFoundError(f"找不到采集目录或 cli.py：{root}")
-    cmd = [sys.executable, str(cli), *list(script.get("cli") or [])]
-    if script["key"] in {"notice_crawl_once", "notice_crawl_all"}:
-        cmd += _build_notice_crawl_cli_args(script["key"], options)
-    env = os.environ.copy()
-    timeout = int(script.get("timeout") or 7200)
+    cmd = [sys.executable, str(cli), *cli_args]
+    return _run_subprocess(cmd, cwd=str(root), timeout=timeout, env=os.environ.copy())
+
+
+def _run_crawler_docker_exec(container: str, cli_args: list[str], timeout: int) -> dict[str, str]:
+    """在已具备依赖/代理的 notice-crawler 容器内跑 cli（生产 SOCKS 需 host 网络）。"""
+    cmd = ["docker", "exec", "-w", "/app", container, "python", "cli.py", *cli_args]
+    return _run_subprocess(cmd, cwd=None, timeout=timeout, env=os.environ.copy())
+
+
+def _run_subprocess(
+    cmd: list[str],
+    *,
+    cwd: str | None,
+    timeout: int,
+    env: dict[str, str],
+) -> dict[str, str]:
     try:
         completed = subprocess.run(
             cmd,
-            cwd=str(root),
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
             env=env,
         )
+    except FileNotFoundError as exc:
+        return {
+            "ok": False,
+            "stdout": "",
+            "stderr": _clip(f"无法执行采集命令（缺少可执行文件）：{exc}"),
+        }
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
         stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
@@ -144,10 +179,6 @@ def _run_crawler(script: dict[str, Any], options: dict[str, Any]) -> dict[str, s
     }
     if completed.returncode != 0 and not result["stderr"]:
         result["stderr"] = f"采集命令退出码 {completed.returncode}"
-    # 采集成功后批量补标签（全量/一轮都需要；解析写入 notice_parsed 后才能识别）
-    if result["ok"] and script["key"] in {"notice_crawl_once", "notice_crawl_all"}:
-        tag_summary = _tag_after_crawl(batch_size=500, max_batches=200)
-        result["stdout"] = _clip((result["stdout"] or "") + "\n" + tag_summary)
     return result
 
 

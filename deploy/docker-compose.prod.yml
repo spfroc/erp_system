@@ -175,7 +175,7 @@ services:
     image: yzc-erp-backend:latest
     container_name: yzc-erp-celery-crawler-prod
     working_dir: /app
-    # 承接 devops notice_crawl_*：backend 镜像无 crawler 依赖，启动时安装精简 requirements。
+    # 承接 devops notice_crawl_*：优先 docker exec 进 notice-crawler；本地回退时再装精简依赖。
     command: >
       bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-celery.txt
       && exec celery -A config worker -l info -Q crawler -c 1 -n crawler@%h"
@@ -185,7 +185,8 @@ services:
     environment:
       <<: *default-tz
       NOTICE_CRAWLER_DIR: /opt/notice_crawler
-      # 代码目录只读挂载；附件落到可写路径
+      NOTICE_CRAWLER_DOCKER_CONTAINER: yzc-erp-notice-crawler-prod
+      # 本地回退路径：代码只读挂载时附件落到可写目录
       ATTACHMENT_DIR: /tmp/notice_crawler_attachments
       EXTRACTOR_BACKEND: heuristic
     restart: unless-stopped
@@ -195,10 +196,14 @@ services:
     volumes:
       - business-documents:/app/media
       - ../notice_crawler:/opt/notice_crawler:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
       - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
     depends_on:
       backend:
         condition: service_healthy
+      notice-crawler:
+        condition: service_started
 
 networks:
   internal:

@@ -182,4 +182,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 NOTICE_CRAWLER_DIR = os.getenv("NOTICE_CRAWLER_DIR", str(BASE_DIR.parent / "notice_crawler"))
+# 若设置，devops crawler 脚本经 docker exec 进该容器执行（生产 notice-crawler 已有依赖/SOCKS）。
+NOTICE_CRAWLER_DOCKER_CONTAINER = os.getenv("NOTICE_CRAWLER_DOCKER_CONTAINER", "").strip()
 
