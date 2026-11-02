@@ -264,9 +264,9 @@ services:
   celery-crawler-worker:
     image: yzc-erp-backend:latest
     working_dir: /app
-    # 独立 crawler 队列，承接 notice_crawl_*
+    # 独立 crawler 队列，承接 notice_crawl_*；backend 镜像缺 crawler 依赖，启动时安装精简包。
     command: >
-      bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-docker.txt
+      bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-celery.txt
       && exec celery -A config worker -l info -Q crawler -c 1 -n crawler@%h"
     environment:
       <<: *timezone-env

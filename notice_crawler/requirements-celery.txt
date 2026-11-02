@@ -1,0 +1,15 @@
+# Celery crawler worker（backend 镜像）运行 devops notice_crawl_* 所需依赖。
+# 不含 llama-cpp / rapidocr（本地模型与附件 OCR 走 notice-crawler 容器）。
+requests>=2.32.0
+PySocks>=1.7.1
+curl_cffi>=0.7.0
+SQLAlchemy>=2.0.0
+PyMySQL>=1.1.0
+python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+pypdf>=4.0.0
+Pillow>=10.0.0
+ddddocr>=1.5.0
+tenacity>=8.2.0
+tqdm>=4.66.0

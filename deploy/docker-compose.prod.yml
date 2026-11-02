@@ -43,6 +43,7 @@ services:
     restart: unless-stopped
     networks:
       - internal
+      - prod.host
     volumes:
       - business-documents:/app/media
       - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
@@ -123,6 +124,75 @@ services:
       - traefik.http.routers.yzc-portal.tls.certresolver=letsencrypt
       - traefik.http.routers.yzc-portal.service=yzc-official
       - traefik.http.services.yzc-official.loadbalancer.server.port=5180
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  celery-worker:
+    image: yzc-erp-backend:latest
+    container_name: yzc-erp-celery-worker-prod
+    working_dir: /app
+    command: celery -A config worker -l info -Q default -c 2
+    env_file:
+      - path: ../.env.prod
+        format: raw
+    environment:
+      <<: *default-tz
+      NOTICE_CRAWLER_DIR: /opt/notice_crawler
+    restart: unless-stopped
+    networks:
+      - internal
+      - prod.host
+    volumes:
+      - business-documents:/app/media
+      - ../notice_crawler:/opt/notice_crawler:ro
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  celery-beat:
+    image: yzc-erp-backend:latest
+    container_name: yzc-erp-celery-beat-prod
+    working_dir: /app
+    command: celery -A config beat -l info
+    env_file:
+      - path: ../.env.prod
+        format: raw
+    environment:
+      <<: *default-tz
+    restart: unless-stopped
+    networks:
+      - internal
+      - prod.host
+    volumes:
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  celery-crawler-worker:
+    image: yzc-erp-backend:latest
+    container_name: yzc-erp-celery-crawler-prod
+    working_dir: /app
+    # 承接 devops notice_crawl_*：backend 镜像无 crawler 依赖，启动时安装精简 requirements。
+    command: >
+      bash -lc "pip install -q -i https://mirrors.huaweicloud.com/repository/pypi/simple -r /opt/notice_crawler/requirements-celery.txt
+      && exec celery -A config worker -l info -Q crawler -c 1 -n crawler@%h"
+    env_file:
+      - path: ../.env.prod
+        format: raw
+    environment:
+      <<: *default-tz
+      NOTICE_CRAWLER_DIR: /opt/notice_crawler
+    restart: unless-stopped
+    networks:
+      - internal
+      - prod.host
+    volumes:
+      - business-documents:/app/media
+      - ../notice_crawler:/opt/notice_crawler:ro
+      - /usr/share/zoneinfo/Asia/Shanghai:/etc/localtime:ro
     depends_on:
       backend:
         condition: service_healthy
