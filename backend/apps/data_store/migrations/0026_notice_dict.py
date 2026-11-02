@@ -72,7 +72,11 @@ def seed_and_grant(apps, schema_editor):
 
     rows = {row["id"]: row for row in DEFAULT_NAV_ITEMS}
     for item_id in ("nav-item-noticeOrgTypes", "nav-item-noticeNatures"):
-        defaults = nav_menu_item_defaults(rows[item_id])
+        row = rows.get(item_id)
+        if not row:
+            # 旧菜单项已从 DEFAULT_NAV_ITEMS 移除，由后续 0027 合并为 noticeDict。
+            continue
+        defaults = nav_menu_item_defaults(row)
         NavMenuItemRecord.objects.update_or_create(
             id=item_id,
             defaults={**defaults, "is_deleted": False, "deleted_at": None, "deleted_by": ""},
