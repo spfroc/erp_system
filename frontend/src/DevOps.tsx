@@ -49,6 +49,23 @@ function scheduleLabel(job: JobItem) {
   return "手动";
 }
 
+/** 长参数 label 缩短展示，完整含义放 title。 */
+function argFieldCopy(field: ScriptArg): { label: string; title: string } {
+  const map: Record<string, { label: string; title: string }> = {
+    max_pages: { label: "每类最多页数", title: "每类最多页数；空=不限" },
+    stop_dup: { label: "连续入库后停止", title: "连续已入库条数后停止；空=不提前停" },
+    site: { label: "站点", title: "站点：all / sd-mall / jd" },
+    list_only: { label: "只抓列表", title: "只抓列表，不抓详情" },
+    page_size: { label: "每页条数", title: "每页条数" },
+    lookback_days: { label: "回溯天数", title: "回溯天数" },
+    rebuild: { label: "重算未锁定", title: "重算未锁定" },
+    limit: { label: "条数上限", title: "条数上限" },
+  };
+  const mapped = map[field.key];
+  if (mapped) return mapped;
+  return { label: field.label, title: field.label };
+}
+
 /** 运维任务时间统一按东八区展示（后端存 UTC aware）。 */
 function formatRunTime(value?: string | null) {
   if (!value) return "—";
@@ -338,7 +355,12 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
 
       {editing && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEditing(null)}>
-          <div className="modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="modal devops-job-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal-head">
               <div>
                 <h2>{editing.id ? "编辑任务" : "新建任务"}</h2>
@@ -348,109 +370,141 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
                 <X size={18} />
               </button>
             </div>
-            <div className="form-grid">
-              <label>
-                脚本
-                <select
-                  value={editing.scriptKey || ""}
-                  disabled={!canManage || Boolean(editing.id)}
-                  onChange={(event) => {
-                    const script = scripts.find((item) => item.key === event.target.value);
-                    setEditing({
-                      ...editing,
-                      scriptKey: event.target.value,
-                      name: editing.name || script?.label || "",
-                      args: Object.fromEntries((script?.argSchema || []).map((item) => [item.key, item.default ?? ""])),
-                    });
-                  }}
-                >
-                  {scripts.map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                名称
-                <input
-                  value={editing.name || ""}
-                  disabled={!canManage}
-                  onChange={(event) => setEditing({ ...editing, name: event.target.value })}
-                />
-              </label>
-              <label>
-                调度
-                <select
-                  value={editing.scheduleType || "manual"}
-                  disabled={!canManage}
-                  onChange={(event) => setEditing({ ...editing, scheduleType: event.target.value })}
-                >
-                  <option value="manual">仅手动</option>
-                  <option value="interval">固定间隔</option>
-                  <option value="cron">cron</option>
-                </select>
-              </label>
-              {editing.scheduleType === "interval" && (
-                <label>
-                  间隔秒数
-                  <input
-                    type="number"
-                    min={60}
-                    value={editing.intervalSeconds ?? 3600}
-                    disabled={!canManage}
-                    onChange={(event) => setEditing({ ...editing, intervalSeconds: Number(event.target.value) })}
-                  />
-                </label>
-              )}
-              {editing.scheduleType === "cron" && (
-                <label>
-                  cron（分 时 日 月 周）
-                  <input
-                    value={editing.cronExpr || ""}
-                    disabled={!canManage}
-                    onChange={(event) => setEditing({ ...editing, cronExpr: event.target.value })}
-                  />
-                </label>
-              )}
-              <label className="checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={Boolean(editing.enabled)}
-                  disabled={!canManage}
-                  onChange={(event) => setEditing({ ...editing, enabled: event.target.checked })}
-                />
-                启用调度
-              </label>
-              {(selectedScript?.argSchema || []).map((field) => (
-                <label key={field.key}>
-                  {field.label}
-                  {field.type === "bool" ? (
-                    <input
-                      type="checkbox"
-                      checked={Boolean(editing.args?.[field.key])}
-                      disabled={!canManage}
-                      onChange={(event) =>
-                        setEditing({ ...editing, args: { ...(editing.args || {}), [field.key]: event.target.checked } })
-                      }
-                    />
-                  ) : (
-                    <input
-                      value={String(editing.args?.[field.key] ?? "")}
-                      disabled={!canManage}
-                      onChange={(event) =>
+            <div className="devops-job-sections">
+              <section className="devops-job-section">
+                <h3>基础</h3>
+                <div className="form-grid devops-job-form">
+                  <label>
+                    <span>脚本</span>
+                    <select
+                      value={editing.scriptKey || ""}
+                      disabled={!canManage || Boolean(editing.id)}
+                      onChange={(event) => {
+                        const script = scripts.find((item) => item.key === event.target.value);
                         setEditing({
                           ...editing,
-                          args: {
-                            ...(editing.args || {}),
-                            [field.key]: field.type === "int" ? Number(event.target.value || 0) : event.target.value,
-                          },
-                        })
-                      }
+                          scriptKey: event.target.value,
+                          name: editing.name || script?.label || "",
+                          args: Object.fromEntries((script?.argSchema || []).map((item) => [item.key, item.default ?? ""])),
+                        });
+                      }}
+                    >
+                      {scripts.map((item) => (
+                        <option key={item.key} value={item.key}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>名称</span>
+                    <input
+                      value={editing.name || ""}
+                      disabled={!canManage}
+                      onChange={(event) => setEditing({ ...editing, name: event.target.value })}
                     />
+                  </label>
+                  <label>
+                    <span>调度</span>
+                    <select
+                      value={editing.scheduleType || "manual"}
+                      disabled={!canManage}
+                      onChange={(event) => setEditing({ ...editing, scheduleType: event.target.value })}
+                    >
+                      <option value="manual">仅手动</option>
+                      <option value="interval">固定间隔</option>
+                      <option value="cron">cron</option>
+                    </select>
+                  </label>
+                  {editing.scheduleType === "interval" && (
+                    <label>
+                      <span>间隔秒数</span>
+                      <input
+                        type="number"
+                        min={60}
+                        value={editing.intervalSeconds ?? 3600}
+                        disabled={!canManage}
+                        onChange={(event) => setEditing({ ...editing, intervalSeconds: Number(event.target.value) })}
+                      />
+                    </label>
                   )}
-                </label>
-              ))}
+                  {editing.scheduleType === "cron" && (
+                    <label className="span-2">
+                      <span>cron（分 时 日 月 周）</span>
+                      <input
+                        value={editing.cronExpr || ""}
+                        disabled={!canManage}
+                        onChange={(event) => setEditing({ ...editing, cronExpr: event.target.value })}
+                      />
+                    </label>
+                  )}
+                  <label className="devops-check-field" title="启用后按调度自动执行">
+                    <span>启用调度</span>
+                    <span className="devops-check-control">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editing.enabled)}
+                        disabled={!canManage}
+                        onChange={(event) => setEditing({ ...editing, enabled: event.target.checked })}
+                      />
+                    </span>
+                  </label>
+                </div>
+              </section>
+              {(selectedScript?.argSchema || []).length > 0 && (
+                <section className="devops-job-section">
+                  <h3>脚本参数</h3>
+                  <div className="form-grid devops-job-form">
+                    {(selectedScript?.argSchema || []).map((field) => {
+                      const copy = argFieldCopy(field);
+                      if (field.type === "bool") {
+                        return (
+                          <label key={field.key} className="devops-check-field" title={copy.title}>
+                            <span>{copy.label}</span>
+                            <span className="devops-check-control">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(editing.args?.[field.key])}
+                                disabled={!canManage}
+                                onChange={(event) =>
+                                  setEditing({
+                                    ...editing,
+                                    args: { ...(editing.args || {}), [field.key]: event.target.checked },
+                                  })
+                                }
+                              />
+                            </span>
+                          </label>
+                        );
+                      }
+                      return (
+                        <label key={field.key} title={copy.title}>
+                          <span>{copy.label}</span>
+                          <input
+                            value={String(editing.args?.[field.key] ?? "")}
+                            disabled={!canManage}
+                            placeholder={field.optional ? "空=默认/不限" : undefined}
+                            onChange={(event) =>
+                              setEditing({
+                                ...editing,
+                                args: {
+                                  ...(editing.args || {}),
+                                  [field.key]:
+                                    field.type === "int"
+                                      ? event.target.value === ""
+                                        ? ""
+                                        : Number(event.target.value || 0)
+                                      : event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
             </div>
             <div className="modal-actions">
               <button className="ghost" type="button" onClick={() => setEditing(null)}>

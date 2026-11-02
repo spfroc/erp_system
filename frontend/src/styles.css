@@ -2371,6 +2371,92 @@ nav button:hover {
   align-items: start;
 }
 
+.devops-job-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.devops-job-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.devops-job-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.devops-job-section > h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: #334155;
+}
+
+.form-grid.devops-job-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 14px;
+  align-items: start;
+}
+
+.form-grid.devops-job-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.form-grid.devops-job-form > label > span:first-child {
+  font-weight: 600;
+  color: #53606f;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-grid.devops-job-form .span-2 {
+  grid-column: span 2;
+}
+
+.form-grid.devops-job-form input,
+.form-grid.devops-job-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+}
+
+.form-grid.devops-job-form .devops-check-field .devops-check-control {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+}
+
+.form-grid.devops-job-form input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  accent-color: #1f8a4c;
+}
+
+@media (max-width: 720px) {
+  .form-grid.devops-job-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-grid.devops-job-form .span-2 {
+    grid-column: span 2;
+  }
+}
+
 .dev-ops-output {
   margin: 0 0 12px;
   padding: 12px;

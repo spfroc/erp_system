@@ -12,14 +12,20 @@
       --ink: #241c14;
       --muted: #74685a;
       --line: #eadfce;
+      --line-strong: #e4d5be;
       --card: #fffdf8;
       --shadow: 0 12px 28px rgba(62, 42, 16, .08);
+      --control-h: 36px;
+      --control-radius: 10px;
+      --control-font: 14px;
+      --control-pad-x: 12px;
+      --danger: #a33b2b;
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { height: 100%; margin: 0; overflow: hidden; }
     body { color: var(--ink); background: #e9efe9; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
-    button, input, select { font: inherit; }
+    button, input, select, textarea { font: inherit; font-size: var(--control-font); }
     button { cursor: pointer; }
 
     .login { height: 100%; display: grid; grid-template-columns: 1.15fr 0.85fr; overflow: hidden; }
@@ -50,15 +56,68 @@
     .login-mark { margin-bottom: 16px; }
     .login-card h1 { margin: 0 0 22px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.35; }
     label { display: block; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
-    input, select { width: 100%; margin-top: 6px; padding: 11px 12px; border: 1px solid #e4d5be; border-radius: 12px; background: #fff; color: var(--ink); }
-    input:focus, select:focus { outline: 2px solid rgba(27,104,68,.22); border-color: #1b6844; }
-    .primary {
-      width: 100%; margin-top: 6px; color: #f7f4ec; border: 0; border-radius: 12px; padding: 12px 16px;
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+    select,
+    textarea {
+      width: 100%;
+      height: var(--control-h);
+      margin-top: 6px;
+      padding: 0 var(--control-pad-x);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--control-radius);
+      background: #fff;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+    textarea {
+      height: auto;
+      min-height: calc(var(--control-h) * 2.4);
+      padding: 8px var(--control-pad-x);
+      resize: vertical;
+    }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):focus,
+    select:focus,
+    textarea:focus {
+      outline: 2px solid rgba(27,104,68,.22);
+      border-color: var(--green);
+    }
+    input[type="checkbox"], input[type="radio"] {
+      width: auto; height: auto; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent;
+    }
+    .primary, .ghost, .danger-btn, a.primary, a.ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: var(--control-h);
+      min-height: var(--control-h);
+      padding: 0 14px;
+      border-radius: var(--control-radius);
+      font-size: var(--control-font);
+      line-height: 1;
+      text-decoration: none;
+      box-sizing: border-box;
+      white-space: nowrap;
+    }
+    .primary, a.primary {
+      width: auto; margin: 0; color: #f7f4ec; border: 0;
       background: linear-gradient(180deg, #2f7d52, #1b5c3b);
       box-shadow: 0 8px 16px rgba(36, 48, 38, .12);
     }
-    .primary:hover { background: linear-gradient(180deg, #286b47, #164c31); }
-    .error { color: #a33b2b; min-height: 1.2em; font-size: 13px; }
+    .primary:hover, a.primary:hover { background: linear-gradient(180deg, #286b47, #164c31); }
+    .ghost, a.ghost {
+      background: #fffdf8; color: var(--ink); border: 1px solid var(--line-strong);
+      box-shadow: none;
+    }
+    .ghost:hover, a.ghost:hover { border-color: #d7a441; color: #8d6412; background: #fffdf8; }
+    .danger-btn {
+      color: #fff; border: 0;
+      background: linear-gradient(180deg, #c45a48, #a33b2b);
+      box-shadow: 0 8px 16px rgba(120, 40, 28, .12);
+    }
+    .danger-btn:hover { background: linear-gradient(180deg, #b24b2c, #8f2f22); }
+    .login-card .primary { width: 100%; margin-top: 6px; }
+    .error { color: var(--danger); min-height: 1.2em; font-size: 13px; }
 
     .app { height: 100%; display: grid; grid-template-columns: 228px 1fr; overflow: hidden; }
     .side {
@@ -93,7 +152,7 @@
     .dropdown { position: absolute; right: 0; top: calc(100% + 8px); width: 168px; background: #fffdf8; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 36px rgba(48, 32, 12, .14); padding: 6px; z-index: 5; }
     .dropdown button { width: 100%; text-align: left; background: transparent; border: 0; border-radius: 10px; padding: 9px 10px; color: var(--ink); }
     .dropdown button:hover { background: #f6efe2; }
-    .dropdown button.danger { color: #a33b2b; }
+    .dropdown button.danger { color: var(--danger); }
     .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 20px; }
     #panel.stats-panel { overflow: auto; display: block; width: 100%; }
     #panel.stats-panel > .charts { height: 320px; flex: none; }
@@ -103,8 +162,8 @@
     .stats-filters .segmented { flex: none; }
     .stats-custom-range { display: inline-flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
     .stats-custom-range label { margin: 0; min-width: 0; color: var(--muted); font-size: 12px; }
-    .stats-custom-range input[type="date"] { width: auto; min-width: 146px; margin-top: 4px; padding: 7px 10px; }
-    .stats-custom-range .range-sep { color: var(--muted); font-size: 13px; padding-bottom: 8px; }
+    .stats-custom-range input[type="date"] { width: auto; min-width: 146px; margin-top: 4px; }
+    .stats-custom-range .range-sep { color: var(--muted); font-size: 13px; padding-bottom: 8px; line-height: var(--control-h); }
     .stats-custom-range .ghost { margin: 0; }
     .home-site-block { margin-top: 16px; width: 100%; }
     .home-site-block > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 750; }
@@ -125,9 +184,15 @@
     .tag-table th { color: var(--muted); font-weight: 600; }
     .tag-table tr.clickable { cursor: pointer; }
     .tag-table tr.clickable:hover { background: #fbf3df; }
-    .segmented { display: inline-flex; flex-wrap: wrap; gap: 6px; }
-    .segmented button { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 6px 12px; }
+    .segmented { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .segmented button {
+      height: var(--control-h); min-height: var(--control-h); padding: 0 14px;
+      border: 1px solid var(--line-strong); background: #fff; color: var(--ink);
+      border-radius: 999px; font-size: var(--control-font); line-height: 1;
+    }
+    .segmented button:hover { border-color: #d7a441; color: #8d6412; }
     .segmented button.active { background: #1f8a56; border-color: #1f8a56; color: #fff; }
+    .segmented button.active:hover { color: #fff; }
     .metrics { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
     .metric, .card { background: var(--card); border: 1px solid rgba(234, 223, 206, .9); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); }
     .metric { position: relative; overflow: hidden; padding-left: 18px; }
@@ -151,8 +216,10 @@
     .chart { width: 100%; min-height: 0; }
     .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
     .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, #1f8a56, #d7a441); }
-    .toolbar { flex: none; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
+    .toolbar { flex: none; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
     .toolbar label { margin: 0; min-width: 160px; flex: 1; }
+    .toolbar .primary, .toolbar .ghost { width: auto; margin: 0; flex: none; }
+    .toolbar input[type="date"] { width: auto; min-width: 146px; }
     .list-card { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 4px 16px; }
     .notice { flex: 1 1 0; min-height: 0; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0e6d6; }
     .notice:last-child { border-bottom: 0; }
@@ -168,25 +235,31 @@
     .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
     .modal-head h3 { margin: 0; font-size: 17px; line-height: 1.4; }
     .modal-head p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
-    .icon-button { border: 0; background: #f4ebe0; color: var(--ink); width: 32px; height: 32px; border-radius: 10px; flex: none; }
+    .icon-button {
+      border: 0; background: #f4ebe0; color: var(--ink);
+      width: var(--control-h); height: var(--control-h); border-radius: var(--control-radius);
+      flex: none; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px; line-height: 1; padding: 0;
+    }
+    .icon-button:hover { background: #ebe0d0; }
     .modal-body { padding: 8px 18px 18px; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
     .detail-grid .info { min-width: 0; }
     .detail-grid .info span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
     .detail-grid .info strong { display: block; font-size: 14px; font-weight: 650; word-break: break-word; }
     .detail-grid .info.wide { grid-column: 1 / -1; }
-    .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-    .modal-actions .primary { width: auto; margin: 0; }
+    .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: flex-end; align-items: center; }
+    .modal-actions .primary, .modal-actions .ghost, .modal-actions .danger-btn,
+    .modal-actions a.primary, .modal-actions a.ghost { width: auto; margin: 0; }
     .panel-loading { color: var(--muted); padding: 24px 4px; font-size: 14px; }
     .kind { flex: none; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #e7f6ee; color: #0f6b40; }
     .kind.gold { background: #fbf3df; color: #8a6414; }
     .kind.coral { background: #fde8e1; color: #a3472c; }
     .kind.teal { background: #e5f6f4; color: #1d756c; }
     .kind.ink { background: #e7eef5; color: #2d5570; }
-    .pager { flex: none; display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 13px; }
-    .pager div { display: flex; gap: 8px; }
-    .ghost { background: #fffdf8; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
-    .ghost:hover { border-color: #d7a441; color: #8d6412; }
+    .pager { flex: none; display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 13px; gap: 10px; }
+    .pager div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pager .ghost { margin: 0; }
     .profile { display: grid; grid-template-columns: 120px 1fr; gap: 0; max-width: 640px; }
     .profile dt, .profile dd { margin: 0; padding: 12px 0; border-bottom: 1px solid #f0e6d6; }
     .profile dt { color: var(--muted); }
@@ -199,10 +272,24 @@
     .enterprise-table tr.clickable { cursor: pointer; }
     .enterprise-table tr.clickable:hover { background: #fbf3df; }
     .enterprise-table .mono { font-variant-numeric: tabular-nums; }
-    .enterprise-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .enterprise-actions .primary, .enterprise-actions .ghost { width: auto; margin: 0; }
+    .enterprise-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: flex-end; align-items: center; }
+    .enterprise-actions .primary, .enterprise-actions .ghost, .enterprise-actions .danger-btn { width: auto; margin: 0; }
     .enterprise-form { display: grid; gap: 10px; max-width: 520px; }
     .enterprise-form label { margin: 0; }
+    .enterprise-form fieldset {
+      border: 1px solid var(--line-strong); border-radius: var(--control-radius); padding: 10px 12px; margin: 0;
+    }
+    .enterprise-form fieldset legend { padding: 0 4px; color: var(--muted); font-size: 12px; }
+    form.card .primary, form.card .ghost { width: auto; margin: 0; }
+    form.card { display: grid; gap: 12px; align-content: start; }
+    form.card > label { margin: 0; }
+    label.check-row {
+      display: flex; align-items: center; gap: 8px; margin: 0;
+      min-height: var(--control-h); color: var(--ink); font-size: var(--control-font);
+    }
+    .option-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .option-actions .copy-link.danger { color: var(--danger); }
+    .option-actions .copy-link.danger:hover { color: #8f2f22; }
     .boot {
       height: 100%; display: grid; place-items: center;
       background:
@@ -221,7 +308,7 @@
     #panel > .metrics { max-width: none; width: 100%; }
     .home-site-block .metrics { margin-top: 4px; width: 100%; }
 
-    .menu-toggle { display: none; border: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; width: 40px; height: 40px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; padding: 0; }
+    .menu-toggle { display: none; background: #fff; border: 1px solid var(--line-strong); border-radius: var(--control-radius); width: var(--control-h); height: var(--control-h); align-items: center; justify-content: center; flex-direction: column; gap: 5px; padding: 0; }
     .menu-toggle span { display: block; width: 18px; height: 2px; background: var(--ink); border-radius: 2px; }
     .side-backdrop { display: none; }
     .table-scroll { overflow: auto; -webkit-overflow-scrolling: touch; }
@@ -784,7 +871,6 @@
         addBtn.className = "primary";
         addBtn.type = "button";
         addBtn.textContent = "新增账号";
-        addBtn.style.width = "auto";
         addBtn.onclick = () => openAccountEditor(null, () => renderAccounts(panel));
         toolbar.appendChild(addBtn);
       }
@@ -814,9 +900,8 @@
             cells[4].appendChild(edit);
             if (item.id !== me.id) {
               const del = document.createElement("button");
-              del.className = "copy-link";
+              del.className = "copy-link danger";
               del.type = "button";
-              del.style.color = "#a33b2b";
               del.textContent = "删除";
               del.onclick = async () => {
                 if (!window.confirm("确认删除账号「" + (item.name || item.phone) + "」？")) return;
@@ -853,7 +938,7 @@
         '<label>手机号<input name="phone" required inputmode="tel" /></label>' +
         '<label>' + (isNew ? "登录密码" : "重置密码（留空不改）") + '<input name="password" type="password" ' + (isNew ? "required" : "") + " /></label>" +
         '<label>状态<select name="status"><option value="启用">启用</option><option value="停用">停用</option></select></label>' +
-        '<fieldset style="border:1px solid var(--line);border-radius:12px;padding:10px"><legend>门户权限</legend><div data-role="perms"></div></fieldset>' +
+        '<fieldset><legend>门户权限</legend><div data-role="perms"></div></fieldset>' +
         '<p class="error"></p><div class="enterprise-actions"><button class="ghost" type="button" data-role="cancel">取消</button><button class="primary" type="submit">保存</button></div>' +
         "</form></div></div>";
       backdrop.querySelector("h3").textContent = isNew ? "新增企业账号" : "编辑企业账号";
@@ -1464,8 +1549,8 @@
         '<div class="modal-body">' +
         '<div class="detail-grid"></div>' +
         '<div class="modal-actions">' +
-        '<button class="primary" type="button" data-role="open-source">打开原文</button>' +
         '<button class="ghost" type="button" data-role="close">关闭</button>' +
+        '<button class="primary" type="button" data-role="open-source">打开原文</button>' +
         "</div></div></div>";
       const meta = [detail.siteLabel, detail.noticeKind, formatDateTimeShanghai(detail.publishTime)].filter((part) => part && part !== "—").join(" · ");
       backdrop.querySelector("h3").textContent = detail.title || "公告详情";
@@ -1682,7 +1767,7 @@
       panel.innerHTML = "";
       const card = document.createElement("form");
       card.className = "card";
-      card.innerHTML = '<label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔" /></label><label><input name="enabled" type="checkbox" style="width:auto;margin-right:8px" /> 开启订阅</label><button class="primary" type="submit" style="width:auto">保存</button><p class="error"></p>';
+      card.innerHTML = '<label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔" /></label><label class="check-row"><input name="enabled" type="checkbox" /> 开启订阅</label><button class="primary" type="submit">保存</button><p class="error"></p>';
       card.keywords.value = me.subscription?.keywords || "";
       card.enabled.checked = Boolean(me.subscription?.enabled);
       card.onsubmit = async (event) => {

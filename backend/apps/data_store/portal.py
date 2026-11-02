@@ -248,26 +248,63 @@ def _site_id_sql(site_ids: list[str] | None) -> tuple[str, list[str]]:
     return f" AND site_id IN ({placeholders})", [str(sid) for sid in site_ids]
 
 
-_PARSED_STATS_FORCE_INDEX: str | None = None
+_MYSQL_INDEX_EXISTS_CACHE: dict[tuple[str, str], bool] = {}
 
 
-def _parsed_force_index(site_ids: list[str] | None = None) -> str:
-    """优先覆盖索引，避免回表读大 JSON；不存在则回退。"""
-    global _PARSED_STATS_FORCE_INDEX
-    if _PARSED_STATS_FORCE_INDEX is not None:
-        return _PARSED_STATS_FORCE_INDEX
-    preferred = "idx_parsed_stats_cover"
-    fallback = "idx_parsed_site_publish" if site_ids is not None else "idx_parsed_publish_raw"
+def _mysql_index_exists(table: str, index_name: str) -> bool:
+    """缓存 information_schema 查询；索引缺失时禁止 FORCE INDEX，避免统计整段被吞成空。"""
+    key = (table, index_name)
+    cached = _MYSQL_INDEX_EXISTS_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SHOW INDEX FROM notice_parsed WHERE Key_name = %s",
-                [preferred],
+                "SELECT 1 FROM information_schema.statistics "
+                "WHERE table_schema = DATABASE() AND table_name = %s AND index_name = %s "
+                "LIMIT 1",
+                [table, index_name],
             )
-            _PARSED_STATS_FORCE_INDEX = preferred if cursor.fetchone() else fallback
+            exists = cursor.fetchone() is not None
     except (ProgrammingError, OperationalError):
-        _PARSED_STATS_FORCE_INDEX = fallback
-    return _PARSED_STATS_FORCE_INDEX
+        exists = False
+    _MYSQL_INDEX_EXISTS_CACHE[key] = exists
+    return exists
+
+
+def _force_index_clause(table: str, *candidates: str) -> str:
+    """返回 ' FORCE INDEX (name)'；候选均不存在时返回空串（让优化器自选）。"""
+    for name in candidates:
+        if name and _mysql_index_exists(table, name):
+            return f" FORCE INDEX ({name})"
+    return ""
+
+
+def _parsed_force_index_clause(site_ids: list[str] | None = None) -> str:
+    """优先覆盖索引，避免回表读大 JSON；不存在则逐级回退，最后不强制。"""
+    preferred = "idx_parsed_stats_cover"
+    if site_ids is not None:
+        fallbacks = ("idx_parsed_site_publish", "idx_parsed_publish_time", "idx_parsed_publish_raw")
+    else:
+        fallbacks = ("idx_parsed_publish_raw", "idx_parsed_publish_time", "idx_parsed_site_publish")
+    return _force_index_clause("notice_parsed", preferred, *fallbacks)
+
+
+def _raw_force_index_clause(site_ids: list[str] | None = None) -> str:
+    # 有 site 过滤时优先 (site_id, publish_time)；全站时优先 publish_time 系索引
+    if site_ids is not None:
+        return _force_index_clause(
+            "notice_raw",
+            "idx_raw_site_publish",
+            "idx_raw_publish_id",
+            "idx_publish_time",
+        )
+    return _force_index_clause(
+        "notice_raw",
+        "idx_publish_time",
+        "idx_raw_publish_id",
+        "idx_raw_site_publish",
+    )
 
 
 def _sql_raw_site_counts(
@@ -281,12 +318,13 @@ def _sql_raw_site_counts(
 ) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
     """一次按站点聚合：区间总量 / 今日 / 近 7 日。"""
     site_sql, site_params = _site_id_sql(site_ids)
+    force = _raw_force_index_clause(site_ids)
     sql = (
         "SELECT site_id, "
         "COUNT(*), "
         "SUM(publish_time >= %s AND publish_time < %s), "
         "SUM(publish_time >= %s AND publish_time < %s) "
-        "FROM notice_raw FORCE INDEX (idx_raw_site_publish) "
+        f"FROM notice_raw{force} "
         f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
         "GROUP BY site_id"
     )
@@ -315,10 +353,10 @@ def _sql_raw_site_counts(
 def _sql_parsed_kind_rows(site_ids: list[str] | None, lo: datetime, hi: datetime):
     """按站点+类型聚合数量与金额；按是否限站点选择最优索引。"""
     site_sql, site_params = _site_id_sql(site_ids)
-    force = _parsed_force_index(site_ids)
+    force = _parsed_force_index_clause(site_ids)
     sql = (
         "SELECT site_id, notice_kind, COUNT(*), SUM(budget_amount), SUM(deal_amount) "
-        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"FROM notice_parsed{force} "
         f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
         "GROUP BY site_id, notice_kind"
     )
@@ -330,12 +368,12 @@ def _sql_parsed_kind_rows(site_ids: list[str] | None, lo: datetime, hi: datetime
 def _sql_parsed_site_amounts(site_ids: list[str] | None, lo: datetime, hi: datetime) -> tuple[dict[str, float], dict[str, float]]:
     """分站点采购/成交金额（仅两类公告）。"""
     site_sql, site_params = _site_id_sql(site_ids)
-    force = _parsed_force_index(site_ids)
+    force = _parsed_force_index_clause(site_ids)
     sql = (
         "SELECT site_id, "
         "SUM(CASE WHEN notice_kind = '采购公告' THEN budget_amount ELSE 0 END), "
         "SUM(CASE WHEN notice_kind = '成交公告' THEN deal_amount ELSE 0 END) "
-        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"FROM notice_parsed{force} "
         f"WHERE publish_time >= %s AND publish_time < %s "
         f"AND notice_kind IN ('采购公告', '成交公告'){site_sql} "
         "GROUP BY site_id"
@@ -353,10 +391,9 @@ def _sql_parsed_site_amounts(site_ids: list[str] | None, lo: datetime, hi: datet
 
 def _sql_daily_counts(site_ids: list[str] | None, lo: datetime, hi: datetime) -> dict[str, int]:
     site_sql, site_params = _site_id_sql(site_ids)
-    # 有 site 过滤时切勿强绑纯 publish_time 索引（会先扫全月再过滤站点）
-    force = "idx_raw_site_publish" if site_ids is not None else "idx_publish_time"
+    force = _raw_force_index_clause(site_ids)
     sql = (
-        f"SELECT DATE(publish_time), COUNT(*) FROM notice_raw FORCE INDEX ({force}) "
+        f"SELECT DATE(publish_time), COUNT(*) FROM notice_raw{force} "
         f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
         "GROUP BY DATE(publish_time)"
     )
@@ -474,10 +511,10 @@ def _monthly_deal_amounts(
     chart_start = date.fromisoformat(keys[0] + "-01")
     lo, hi = _publish_dt_bounds(start, end)
     site_sql, site_params = _site_id_sql(site_ids)
-    force = _parsed_force_index(site_ids)
+    force = _parsed_force_index_clause(site_ids)
     sql = (
         "SELECT LEFT(publish_time, 7), SUM(deal_amount) "
-        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"FROM notice_parsed{force} "
         f"WHERE notice_kind = '成交公告' AND publish_time >= %s AND publish_time < %s{site_sql} "
         "GROUP BY LEFT(publish_time, 7)"
     )

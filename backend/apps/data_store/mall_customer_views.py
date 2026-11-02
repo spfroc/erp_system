@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from django.db import ProgrammingError
+from django.db import OperationalError, ProgrammingError
 from django.db.models import Q
 from django.http import JsonResponse
 from django.utils import timezone
@@ -147,10 +147,11 @@ def mall_customer_list(request):
         total = qs.count()
         start = (page - 1) * page_size
         rows = list(qs.order_by("-id")[start : start + page_size])
-    except ProgrammingError:
+    except (ProgrammingError, OperationalError) as exc:
         return JsonResponse(
             {
-                "detail": "mall_customer 表不存在或未迁移，请先执行 notice_crawler init-db / import-customers。",
+                "detail": "mall_customer 表不可用或字段未就绪，请先执行 notice_crawler init-db / 补齐列迁移。",
+                "error": str(exc)[:200],
                 "items": [],
                 "total": 0,
                 "page": page,
@@ -183,8 +184,8 @@ def mall_customer_detail(request, customer_id: int):
 
     try:
         row = MallCustomer.objects.filter(id=customer_id).first()
-    except ProgrammingError:
-        return JsonResponse({"detail": "mall_customer 表不可用"}, status=503)
+    except (ProgrammingError, OperationalError) as exc:
+        return JsonResponse({"detail": "mall_customer 表不可用", "error": str(exc)[:200]}, status=503)
     if row is None:
         return JsonResponse({"detail": "记录不存在"}, status=404)
 

@@ -94,14 +94,33 @@ function badgeCount(value?: number | null) {
   return Number(value);
 }
 
+async function readJsonSafe<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchList(params: URLSearchParams): Promise<ListResponse> {
   const response = await fetch(backendApiUrl(`/api/mall-customers/?${params.toString()}`), {
     credentials: "include",
+    headers: { Accept: "application/json" },
   });
   if (response.status === 401) throw new AuthExpiredError();
-  const data = (await response.json()) as ListResponse;
+  const data = await readJsonSafe<ListResponse>(response);
+  if (!data) {
+    throw new Error(response.ok ? "资料库返回格式异常" : `加载资料库失败（HTTP ${response.status}）`);
+  }
   if (!response.ok && response.status !== 503) {
     throw new Error(data.detail || "加载资料库失败");
+  }
+  if (response.status === 503) {
+    throw new Error(data.detail || "资料库暂不可用，请稍后重试");
   }
   return data;
 }
@@ -110,13 +129,16 @@ async function patchItem(id: number, payload: Record<string, unknown>): Promise<
   const response = await fetch(backendApiUrl(`/api/mall-customers/${id}/`), {
     method: "PATCH",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
   });
   if (response.status === 401) throw new AuthExpiredError();
-  const data = await response.json();
+  const data = await readJsonSafe<MallCustomerItem & { detail?: string }>(response);
   if (!response.ok) {
-    throw new Error(data.detail || "保存失败");
+    throw new Error(data?.detail || `保存失败（HTTP ${response.status}）`);
+  }
+  if (!data) {
+    throw new Error("保存成功但返回格式异常");
   }
   return data as MallCustomerItem;
 }

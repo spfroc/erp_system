@@ -1,8 +1,15 @@
+from unittest.mock import patch
+
 from django.contrib.auth.hashers import make_password
 from django.test import Client, SimpleTestCase, TestCase
 
 from apps.data_store.models import CustomerAccountRecord, NoticeRecord
-from apps.data_store.portal import PORTAL_COOKIE
+from apps.data_store.portal import (
+    PORTAL_COOKIE,
+    _force_index_clause,
+    _parsed_force_index_clause,
+    _raw_force_index_clause,
+)
 from apps.data_store.portal_enterprise import portal_format_datetime
 
 
@@ -17,6 +24,24 @@ class PortalDatetimeFormatTests(SimpleTestCase):
     def test_naive_wall_clock_kept_as_shanghai(self):
         self.assertEqual(portal_format_datetime("2026-09-09 13:35:00"), "2026-09-09 13:35")
         self.assertEqual(portal_format_datetime("2026-09-09"), "2026-09-09")
+
+
+class PortalStatsForceIndexTests(SimpleTestCase):
+    def test_force_index_clause_skips_missing_indexes(self):
+        with patch("apps.data_store.portal._mysql_index_exists", return_value=False):
+            self.assertEqual(_force_index_clause("notice_raw", "idx_raw_site_publish"), "")
+            self.assertEqual(_raw_force_index_clause(None), "")
+            self.assertEqual(_parsed_force_index_clause(["sd-ggzyjyzx"]), "")
+
+    def test_force_index_clause_uses_first_existing(self):
+        def exists(table, name):
+            return name == "idx_raw_publish_id"
+
+        with patch("apps.data_store.portal._mysql_index_exists", side_effect=exists):
+            self.assertEqual(
+                _raw_force_index_clause(["sd-ggzyjyzx"]),
+                " FORCE INDEX (idx_raw_publish_id)",
+            )
 
 
 class PortalAccountTests(TestCase):
