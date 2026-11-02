@@ -13,7 +13,7 @@ from .dev_ops_catalog import get_script, list_scripts
 from .dev_ops_defaults import ensure_default_dev_ops_jobs
 from .dev_ops_models import DevOpsJob, DevOpsJobRun
 from .dev_ops_schedule import next_run_at
-from .dev_ops_tasks import enqueue_job_run
+from .dev_ops_tasks import enqueue_job_run, reap_stale_dev_ops_runs
 from .views import _require_permission
 
 
@@ -213,6 +213,12 @@ def dev_ops_runs(request):
     _user, error = _require_permission(request, "dev.ops.view")
     if error:
         return error
+    # 列表前轻量收尸：worker 重启后的僵尸 running 不必等 beat
+    if DevOpsJobRun.objects.filter(status__in=["pending", "running"]).exists():
+        try:
+            reap_stale_dev_ops_runs()
+        except Exception:  # noqa: BLE001
+            pass
     page, page_size = _page(request)
     qs = DevOpsJobRun.objects.select_related("job").order_by("-id")
     job_id = request.GET.get("job_id")

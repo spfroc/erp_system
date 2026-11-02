@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.test import SimpleTestCase, TestCase
@@ -8,6 +9,7 @@ from apps.data_store.dev_ops_catalog import get_script, list_scripts
 from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun
 from apps.data_store.dev_ops_schedule import cron_matches, next_run_at
 from apps.data_store.dev_ops_tasks import (
+    ORPHAN_CELERY_GRACE_SECONDS,
     PENDING_STALE_SECONDS,
     preempt_notice_crawl_all,
     reap_stale_dev_ops_runs,
@@ -71,6 +73,49 @@ class DevOpsStaleRunTests(TestCase):
         self.assertEqual(stale_pending.status, "failed")
         self.assertEqual(stale_running.status, "failed")
         self.assertEqual(fresh.status, "running")
+
+    def test_reap_orphan_celery_running(self):
+        now = timezone.now()
+        job = DevOpsJob.objects.create(
+            script_key="notice_crawl_once",
+            name="一轮",
+            enabled=False,
+            schedule_type="manual",
+            args_json={},
+        )
+        orphan = DevOpsJobRun.objects.create(
+            job=job,
+            trigger="manual",
+            status="running",
+            celery_task_id="dead-task-id",
+            started_at=now - timedelta(seconds=ORPHAN_CELERY_GRACE_SECONDS + 30),
+        )
+        live = DevOpsJobRun.objects.create(
+            job=job,
+            trigger="manual",
+            status="running",
+            celery_task_id="live-task-id",
+            started_at=now - timedelta(seconds=ORPHAN_CELERY_GRACE_SECONDS + 30),
+        )
+
+        with (
+            patch(
+                "apps.data_store.dev_ops_tasks._active_or_reserved_celery_task_ids",
+                return_value={"live-task-id"},
+            ),
+            patch(
+                "apps.data_store.dev_ops_tasks._celery_task_finished_terminal",
+                return_value=False,
+            ),
+        ):
+            result = reap_stale_dev_ops_runs(now=now)
+
+        self.assertIn(f"running#{orphan.id}:orphan", result["runs"])
+        orphan.refresh_from_db()
+        live.refresh_from_db()
+        self.assertEqual(orphan.status, "failed")
+        self.assertIn("Celery 任务已不在 worker", orphan.stderr)
+        self.assertEqual(live.status, "running")
 
 
 class DevOpsPreemptCrawlAllTests(TestCase):

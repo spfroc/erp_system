@@ -13,13 +13,69 @@ from .dev_ops_schedule import next_run_at
 
 # pending 超过此时长仍未变成 running，视为队列丢失
 PENDING_STALE_SECONDS = 2 * 3600
-# running 超过脚本 timeout 后再宽限此时长，仍无结束则收尸
+# running 超过脚本 timeout 后再宽限此时长，仍未结束则收尸
 RUNNING_GRACE_SECONDS = 10 * 60
+# status=running 且 Celery 已无此 task（如 worker 重启）时，超过此时长收尸
+ORPHAN_CELERY_GRACE_SECONDS = 90
 
 PREEMPT_NOTE = (
     "[系统] 被公告采集一轮抢占暂停（once run#{once_id}）。"
     "全量不会自动恢复，如需请手动再跑全量。"
 )
+ORPHAN_STDERR = "[系统] Celery 任务已不在 worker 上（可能因重启丢失），判定为僵尸 running，已自动收尸。"
+
+
+def _active_or_reserved_celery_task_ids() -> set[str] | None:
+    """当前 worker 上 active/reserved 的 task id；inspect 失败返回 None（勿据此收尸）。"""
+    try:
+        from config.celery import app as celery_app
+
+        insp = celery_app.control.inspect(timeout=2.0)
+        if insp is None:
+            return None
+        active = insp.active() or {}
+        reserved = insp.reserved() or {}
+        ids: set[str] = set()
+        for bucket in (active, reserved):
+            for tasks in bucket.values():
+                for item in tasks or []:
+                    tid = item.get("id") if isinstance(item, dict) else None
+                    if tid:
+                        ids.add(str(tid))
+        return ids
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _celery_task_finished_terminal(task_id: str) -> bool:
+    """结果后端已是终态（成功/失败/撤销）。"""
+    try:
+        from celery.result import AsyncResult
+        from config.celery import app as celery_app
+
+        state = AsyncResult(task_id, app=celery_app).state
+        return state in {"SUCCESS", "FAILURE", "REVOKED"}
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _mark_run_failed(run: DevOpsJobRun, *, now, note: str, bump_job: bool = False) -> None:
+    run.status = "failed"
+    run.finished_at = now
+    run.stderr = ((run.stderr or "").rstrip() + f"\n{note}").strip()
+    run.save(update_fields=["status", "finished_at", "stderr"])
+    if not bump_job:
+        return
+    job = run.job
+    job.last_run_at = now
+    job.next_run_at = next_run_at(
+        schedule_type=job.schedule_type,
+        interval_seconds=job.interval_seconds,
+        cron_expr=job.cron_expr,
+        now=now,
+        last_run_at=now,
+    )
+    job.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
 
 
 @shared_task(name="apps.data_store.dev_ops_tasks.run_dev_ops_job")
@@ -167,19 +223,27 @@ def _execute_run(run_id: int) -> dict:
 
 
 def reap_stale_dev_ops_runs(now=None) -> dict:
-    """回收僵尸 pending/running，避免挡住手动重跑与定时入队。"""
+    """回收僵尸 pending/running，避免挡住手动重跑与定时入队。
+
+    含两类 running 收尸：
+    1) 超过脚本 timeout+宽限仍未结束；
+    2) Celery worker 重启后 task 已消失，但 DB 仍标 running（orphan）。
+    """
     now = now or timezone.now()
     reaped = 0
     notes: list[str] = []
 
     pending_cutoff = now - timedelta(seconds=PENDING_STALE_SECONDS)
     for run in DevOpsJobRun.objects.select_related("job").filter(status="pending", created_at__lte=pending_cutoff):
-        run.status = "failed"
-        run.finished_at = now
-        run.stderr = ((run.stderr or "").rstrip() + "\n[系统] 排队超时，任务可能已从 Celery 队列丢失。").strip()
-        run.save(update_fields=["status", "finished_at", "stderr"])
+        _mark_run_failed(
+            run,
+            now=now,
+            note="[系统] 排队超时，任务可能已从 Celery 队列丢失。",
+        )
         reaped += 1
         notes.append(f"pending#{run.id}")
+
+    active_ids = _active_or_reserved_celery_task_ids()
 
     for run in DevOpsJobRun.objects.select_related("job").filter(status="running"):
         script = get_script(run.job.script_key) or {}
@@ -187,29 +251,29 @@ def reap_stale_dev_ops_runs(now=None) -> dict:
         started = run.started_at or run.created_at
         if not started:
             continue
+        age = (now - started).total_seconds()
         limit = timeout + RUNNING_GRACE_SECONDS
-        if (now - started).total_seconds() <= limit:
+
+        orphan = False
+        if run.celery_task_id and age > ORPHAN_CELERY_GRACE_SECONDS:
+            tid = str(run.celery_task_id)
+            if _celery_task_finished_terminal(tid):
+                orphan = True
+            elif active_ids is not None and tid not in active_ids:
+                # worker 重启后结果常仍为 PENDING，以 inspect 为准
+                orphan = True
+
+        if not orphan and age <= limit:
             continue
-        run.status = "failed"
-        run.finished_at = now
-        run.stderr = (
-            (run.stderr or "").rstrip()
-            + f"\n[系统] 执行超时未结束（已超过 {timeout}s），判定为僵尸 running，已自动收尸。"
-        ).strip()
-        run.save(update_fields=["status", "finished_at", "stderr"])
-        # 同步推进 next_run，避免 interval 任务卡在过去
-        job = run.job
-        job.last_run_at = now
-        job.next_run_at = next_run_at(
-            schedule_type=job.schedule_type,
-            interval_seconds=job.interval_seconds,
-            cron_expr=job.cron_expr,
-            now=now,
-            last_run_at=now,
+
+        note = (
+            ORPHAN_STDERR
+            if orphan
+            else f"[系统] 执行超时未结束（已超过 {timeout}s），判定为僵尸 running，已自动收尸。"
         )
-        job.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
+        _mark_run_failed(run, now=now, note=note, bump_job=True)
         reaped += 1
-        notes.append(f"running#{run.id}")
+        notes.append(f"running#{run.id}" + (":orphan" if orphan else ":timeout"))
 
     return {"reaped": reaped, "runs": notes}
 
@@ -245,6 +309,8 @@ def tick_scheduled_jobs():
 
 
 def enqueue_job_run(run_id: int, script_key: str) -> str:
+    # 入队前先收尸，避免僵尸 running 挡住同脚本重跑 / 误导「双 running」
+    reap_stale_dev_ops_runs()
     if script_key == "notice_crawl_once":
         preempt_notice_crawl_all(by_run_id=run_id)
     script = get_script(script_key)
