@@ -282,6 +282,7 @@ services:
       NOTICE_CRAWLER_DIR: /opt/notice_crawler
       NOTICE_DB_URL: mysql+pymysql://root:yicai-root@mysql:3306/yicai_erp?charset=utf8mb4
       EXTRACTOR_BACKEND: heuristic
+      ATTACHMENT_DIR: /tmp/notice_crawler_attachments
     volumes:
       - ../backend:/app
       - ../notice_crawler:/opt/notice_crawler

@@ -77,5 +77,10 @@ class Settings:
 
 
 settings = Settings()
-settings.attachment_dir.mkdir(parents=True, exist_ok=True)
-(ROOT / "models").mkdir(parents=True, exist_ok=True)
+# 允许只读挂载（如 celery 将 notice_crawler :ro 挂到 /opt）；写目录应通过 ATTACHMENT_DIR 指到可写路径。
+for _path in (settings.attachment_dir, ROOT / "models"):
+    try:
+        _path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+

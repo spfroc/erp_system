@@ -185,6 +185,9 @@ services:
     environment:
       <<: *default-tz
       NOTICE_CRAWLER_DIR: /opt/notice_crawler
+      # 代码目录只读挂载；附件落到可写路径
+      ATTACHMENT_DIR: /tmp/notice_crawler_attachments
+      EXTRACTOR_BACKEND: heuristic
     restart: unless-stopped
     networks:
       - internal
