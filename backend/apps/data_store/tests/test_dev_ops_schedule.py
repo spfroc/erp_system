@@ -7,7 +7,11 @@ from django.utils import timezone
 from apps.data_store.dev_ops_catalog import get_script, list_scripts
 from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun
 from apps.data_store.dev_ops_schedule import cron_matches, next_run_at
-from apps.data_store.dev_ops_tasks import PENDING_STALE_SECONDS, reap_stale_dev_ops_runs
+from apps.data_store.dev_ops_tasks import (
+    PENDING_STALE_SECONDS,
+    preempt_notice_crawl_all,
+    reap_stale_dev_ops_runs,
+)
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -67,3 +71,47 @@ class DevOpsStaleRunTests(TestCase):
         self.assertEqual(stale_pending.status, "failed")
         self.assertEqual(stale_running.status, "failed")
         self.assertEqual(fresh.status, "running")
+
+
+class DevOpsPreemptCrawlAllTests(TestCase):
+    def test_preempt_marks_running_and_fails_pending(self):
+        all_job = DevOpsJob.objects.create(
+            script_key="notice_crawl_all",
+            name="全量",
+            enabled=False,
+            schedule_type="manual",
+            args_json={},
+        )
+        once_job = DevOpsJob.objects.create(
+            script_key="notice_crawl_once",
+            name="一轮",
+            enabled=False,
+            schedule_type="manual",
+            args_json={},
+        )
+        once_run = DevOpsJobRun.objects.create(job=once_job, trigger="manual", status="pending")
+        running_all = DevOpsJobRun.objects.create(
+            job=all_job, trigger="manual", status="running", started_at=timezone.now()
+        )
+        pending_all = DevOpsJobRun.objects.create(
+            job=all_job, trigger="schedule", status="pending", celery_task_id="fake-task"
+        )
+        other = DevOpsJobRun.objects.create(
+            job=once_job, trigger="manual", status="running", started_at=timezone.now()
+        )
+
+        preempted = preempt_notice_crawl_all(by_run_id=once_run.id)
+        self.assertCountEqual(preempted, [running_all.id, pending_all.id])
+
+        running_all.refresh_from_db()
+        pending_all.refresh_from_db()
+        other.refresh_from_db()
+        self.assertTrue(running_all.cancel_requested)
+        self.assertEqual(running_all.preempted_by_run_id, once_run.id)
+        self.assertEqual(running_all.status, "running")
+        self.assertIn("抢占暂停", running_all.stderr)
+        self.assertEqual(pending_all.status, "failed")
+        self.assertTrue(pending_all.cancel_requested)
+        self.assertIn("抢占暂停", pending_all.stderr)
+        self.assertEqual(other.status, "running")
+        self.assertFalse(other.cancel_requested)

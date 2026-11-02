@@ -47,7 +47,8 @@ SCRIPT_CATALOG: dict[str, dict[str, Any]] = {
         ],
         "timeout": 7200,
     },
-    # 独立全量采集：不设日期窗口、默认不因连续重复提前停止；与 notice_crawl_once 互不影响。
+    # 独立全量采集：不设日期窗口、默认不因连续重复提前停止。
+    # 同队列 concurrency=1：手动/定时跑 notice_crawl_once 时会抢占暂停本脚本（不自动恢复）。
     "notice_crawl_all": {
         "label": "公告全量采集",
         "kind": "crawler",

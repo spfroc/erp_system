@@ -26,6 +26,9 @@ class DevOpsJobRun(models.Model):
     trigger = models.CharField(max_length=16, default="manual")  # schedule|manual
     status = models.CharField(max_length=16, default="pending", db_index=True)
     celery_task_id = models.CharField(max_length=64, blank=True, default="")
+    # 同队列 concurrency=1：一轮采集可请求暂停正在跑的全量 subprocess（不杀 notice-crawler 常驻）
+    cancel_requested = models.BooleanField(default=False)
+    preempted_by_run_id = models.PositiveIntegerField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     stdout = models.TextField(blank=True, default="")
