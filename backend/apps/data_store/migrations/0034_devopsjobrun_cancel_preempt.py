@@ -3,7 +3,8 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("data_store", "0033_merge_mall_assistant_portal"),
+        # one 环境未合入 mall merge(0033)；与 0032 对齐即可，0033 为空 merge 可并存为另一 head
+        ("data_store", "0032_portal_enterprise_permissions"),
     ]
 
     operations = [
