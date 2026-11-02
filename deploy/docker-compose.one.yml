@@ -66,6 +66,13 @@ services:
       # 对接 center（php artisan serve :8899）；172.18.0.1 = compose 默认 bridge
       CENTER_SMS_BASE_URL: http://172.18.0.1:8899/api/sms
       CENTER_SMS_DRY_RUN: "0"
+      # 智能助手开关；模型地址/Key/型号放 env_file（environment 会覆盖 env_file，故勿在此写死 BASE_URL）
+      ASSISTANT_ENABLED: "true"
+      ASSISTANT_FALLBACK_ENABLED: "true"
+      ASSISTANT_LLM_MAX_OUTPUT_TOKENS: "256"
+    env_file:
+      - .env.assistant.defaults
+      - .env.assistant.local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -81,6 +88,44 @@ services:
         condition: service_started
       ocr-service:
         condition: service_started
+      # 已改用云端 DeepSeek（.env.assistant.local）；本地 GGUF 停用，勿再 depends_on
+      # assistant-llm:
+      #   condition: service_started
+
+  # 本地 CPU 演示模型已停用（助手走 DeepSeek）。需要时取消注释并恢复 backend depends_on。
+  # assistant-llm:
+  #   build:
+  #     context: ./assistant-llm
+  #   environment:
+  #     <<: *timezone-env
+  #   command:
+  #     - python
+  #     - -m
+  #     - llama_cpp.server
+  #     - --model
+  #     - /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+  #     - --model_alias
+  #     - qwen2.5:0.5b
+  #     - --host
+  #     - 0.0.0.0
+  #     - --port
+  #     - "8080"
+  #     - --n_ctx
+  #     - "1024"
+  #     - --n_threads
+  #     - "1"
+  #     - --n_gpu_layers
+  #     - "0"
+  #     - --chat_format
+  #     - chatml
+  #   ports:
+  #     - "11434:8080"
+  #   volumes:
+  #     - /home/spf/.cache/assistant-llm:/models:ro
+  #     - *vol-localtime
+  #     - *vol-zoneinfo
+  #   mem_limit: 2g
+  #   cpus: "1.0"
 
   ocr-service:
     build:
@@ -113,9 +158,10 @@ services:
       - *vol-zoneinfo
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
-      retries: 20
+      retries: 10
+      start_period: 40s
 
   redis:
     image: redis:7

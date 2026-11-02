@@ -1,6 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import * as XLSX from "xlsx";
 import { backendApiUrl, ocrServiceUrl } from "./apiConfig";
 import {
   AlertTriangle,
@@ -56,20 +55,21 @@ import {
   resolveNavIcon,
   type View,
 } from "./navCatalog";
-import { MenuSettingsPanel } from "./MenuSettings";
 import { organizationReferenceCounts, formatOrganizationReferences } from "./dataIntegrity";
-import { LibraryContactsPanel } from "./LibraryContacts";
-import { MallCustomersPanel } from "./MallCustomers";
 import { Notices } from "./Notices";
-import { NoticeStats } from "./NoticeStats";
-import { NoticeDictAdmin } from "./NoticeDictAdmin";
-import { NoticeTags } from "./NoticeTags";
-import { DevOps } from "./DevOps";
-import { AssistantPage } from "./assistant/AssistantPage";
-import { CustomerAccountsPanel } from "./CustomerAccounts";
-import { OfficialSeoPanel } from "./OfficialSeo";
-import { OfficialSitesPanel } from "./OfficialSites";
-import { SmsPanel } from "./SmsPanel";
+
+const MenuSettingsPanel = lazy(() => import("./MenuSettings").then((m) => ({ default: m.MenuSettingsPanel })));
+const LibraryContactsPanel = lazy(() => import("./LibraryContacts").then((m) => ({ default: m.LibraryContactsPanel })));
+const MallCustomersPanel = lazy(() => import("./MallCustomers").then((m) => ({ default: m.MallCustomersPanel })));
+const NoticeStats = lazy(() => import("./NoticeStats").then((m) => ({ default: m.NoticeStats })));
+const NoticeDictAdmin = lazy(() => import("./NoticeDictAdmin").then((m) => ({ default: m.NoticeDictAdmin })));
+const NoticeTags = lazy(() => import("./NoticeTags").then((m) => ({ default: m.NoticeTags })));
+const DevOps = lazy(() => import("./DevOps").then((m) => ({ default: m.DevOps })));
+const AssistantPage = lazy(() => import("./assistant/AssistantPage").then((m) => ({ default: m.AssistantPage })));
+const CustomerAccountsPanel = lazy(() => import("./CustomerAccounts").then((m) => ({ default: m.CustomerAccountsPanel })));
+const OfficialSeoPanel = lazy(() => import("./OfficialSeo").then((m) => ({ default: m.OfficialSeoPanel })));
+const OfficialSitesPanel = lazy(() => import("./OfficialSites").then((m) => ({ default: m.OfficialSitesPanel })));
+const SmsPanel = lazy(() => import("./SmsPanel").then((m) => ({ default: m.SmsPanel })));
 import { DateTimeField } from "./DateTimeField";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
@@ -447,6 +447,14 @@ const permissionLabels: Record<PermissionKey, string> = {
   "sms.manage": "短信管理",
   "customerAccount.view": "查看登录账号",
   "customerAccount.manage": "管理登录账号",
+  "portal.notice.view": "门户：公告列表",
+  "portal.notice.subscribe": "门户：订阅消息",
+  "portal.stats.view": "门户：数据统计",
+  "portal.order.view": "门户：企业订单",
+  "portal.invoice.view": "门户：企业发票",
+  "portal.contract.view": "门户：企业合同",
+  "portal.account.view": "门户：查看企业账号",
+  "portal.account.manage": "门户：管理企业账号",
   "menu.view": "查看菜单配置",
   "menu.manage": "管理菜单配置",
   "lead.manage": "管理商机",
@@ -462,6 +470,7 @@ const permissionLabels: Record<PermissionKey, string> = {
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
   { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
   { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
+  { title: "客户门户", keys: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe", "portal.order.view", "portal.invoice.view", "portal.contract.view", "portal.account.view", "portal.account.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "assistant.manage", "user.manage"] },
 ];
@@ -526,6 +535,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "customerAccount.view") {
     return permissionSet.has("customerAccount.manage");
+  }
+  if (permission === "portal.account.view") {
+    return permissionSet.has("portal.account.manage");
   }
   if (permission === "menu.view") {
     return permissionSet.has("menu.manage");
@@ -3549,6 +3561,7 @@ export default function App() {
     const previous = data!;
     try {
       let dataToSave = next;
+      let pendingLog: OperationLog | null = null;
       if (log) {
         const currentUser = next.users.find((user) => user.id === currentUserId);
         const permissionSet = currentUser ? userPermissionSet(next, currentUser) : new Set<PermissionKey>();
@@ -3557,9 +3570,10 @@ export default function App() {
           throw new Error(`没有权限：${permissionLabels[requiredPermission]}`);
         }
         const normalizedLog = { ...log, operator: log.operator === "当前用户" ? currentUser?.name ?? "未登录用户" : log.operator };
+        pendingLog = { id: createId("log"), createdAt: today(), ...normalizedLog };
         dataToSave = {
           ...next,
-          operationLogs: [{ id: createId("log"), createdAt: today(), ...normalizedLog }, ...next.operationLogs],
+          operationLogs: [pendingLog, ...next.operationLogs],
         };
       }
       const { upserts, deleteIds } = diffPartialAppData(previous, dataToSave);
@@ -3567,10 +3581,16 @@ export default function App() {
       const savedData = (Object.keys(upserts).length || Object.keys(deleteIds).length)
         ? await saveData(upserts, true, deleteIds)
         : null;
+      if (pendingLog) {
+        // operationLogs 不进 bootstrap / diffPartial，须走 collections 写入。
+        await createCollectionItem<OperationLog>("operationLogs", pendingLog);
+      }
       if (savedData) {
         // 防止服务端快照偶发缺当前用户时，把本地会话用户踢回登录页。
         const savedKeepsUser = !currentUserId || savedData.users.some((user) => user.id === currentUserId && user.status === "启用");
-        setData(savedKeepsUser ? savedData : { ...savedData, users: dataToSave.users, roles: dataToSave.roles });
+        const merged = savedKeepsUser ? savedData : { ...savedData, users: dataToSave.users, roles: dataToSave.roles };
+        // 保留会话内操作日志缓存（bootstrap 恒为空）。
+        setData({ ...merged, operationLogs: dataToSave.operationLogs });
       }
       setNotice({ type: "success", message: log ? `${log.action}成功` : "保存成功" });
     } catch (error) {
@@ -3776,83 +3796,92 @@ export default function App() {
         </header>
 
         {view === "dashboard" && <Dashboard data={data} commit={commit} currentUser={currentUser} />}
-        {view === "assistant" && (
-          <AssistantPage
-            can={can}
-            onNavigate={(viewId) => setView(viewId as View)}
-            onNotice={(message) => setNotice({ type: "error", message })}
-          />
-        )}
-        {view === "productProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="商品项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
-        {view === "serviceProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="服务项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
-        {view === "serviceOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="服务订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
-        {view === "salesOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="销售订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
-        {view === "purchaseOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="采购订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
-        {view === "contracts" && <Contracts data={data} commit={commit} can={can} />}
-        {view === "entities" && <Entities data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
-        {view === "products" && <Products data={data} commit={commit} can={can} />}
-        {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
-        {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
-        {view === "notices" && <Notices onNotice={setNotice} />}
-        {view === "noticeStats" && <NoticeStats onNotice={setNotice} />}
-        {view === "noticeTags" && <NoticeTags onNotice={setNotice} canManage={can("notice.tag.manage")} />}
-        {view === "noticeDict" && (
-          <NoticeDictAdmin
-            onNotice={setNotice}
-            canManageOrgType={can("notice.orgType.manage")}
-            canManageNature={can("notice.nature.manage")}
-          />
-        )}
-        {view === "customerAccounts" && <CustomerAccountsPanel onNotice={setNotice} can={can} />}
-        {view === "libraryContacts" && (
-          <LibraryContactsPanel
-            data={data}
-            applyData={(next) => setData(next)}
-            onNotice={setNotice}
-            can={can}
-            currentUser={currentUser}
-            onSendSms={(contacts) => {
-              setSmsDraftContacts(contacts);
-              setView("sms");
-            }}
-          />
-        )}
-        {view === "mallCustomers" && (
-          <MallCustomersPanel onNotice={setNotice} can={can} currentUser={currentUser} />
-        )}
-        {view === "sms" && (
-          <SmsPanel
-            data={data}
-            applyData={(next) => setData(next)}
-            onNotice={setNotice}
-            can={can}
-            currentUser={currentUser}
-            draftContacts={smsDraftContacts}
-            onDraftConsumed={() => setSmsDraftContacts(undefined)}
-          />
-        )}
-        {view === "officialSites" && <OfficialSitesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
-        {view === "officialSeo" && <OfficialSeoPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
-        {view === "reminders" && <Reminders data={data} commit={commit} currentUser={currentUser} />}
-        {view === "invoices" && <Invoices data={data} commit={commit} can={can} />}
-        {view === "transactions" && <Transactions data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} onOpenProject={openProject} />}
-        {view === "financeStatements" && <FinanceStatements data={data} onNotice={setNotice} />}
-        {view === "receiptStats" && <CashflowStats data={data} kind="receipt" />}
-        {view === "paymentStats" && <CashflowStats data={data} kind="payment" />}
-        {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
-        {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
-        {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
-        {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
-        {view === "devOps" && <DevOps onNotice={setNotice} canManage={can("dev.ops.manage")} />}
-        {view === "menuSettings" && (
-          <MenuSettingsPanel
-            data={data}
-            applyData={(next) => setData(next)}
-            onNotice={setNotice}
-            can={can}
-          />
-        )}
-        {view === "access" && <AccessControl data={data} commit={commit} />}
+        <Suspense fallback={<div className="table-empty">页面加载中…</div>}>
+          {view === "assistant" && (
+            <AssistantPage
+              can={can}
+              currentUser={currentUser}
+              onNavigate={(viewId) => setView(viewId as View)}
+              onNotice={(message, type = "error") => setNotice({ type, message })}
+            />
+          )}
+          {view === "productProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="商品项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
+          {view === "serviceProjects" && <Projects data={data} commit={commit} currentUser={currentUser} can={can} projectType="服务项目" selectedProject={selectedProject} onSelectProject={setSelectedProjectId} />}
+          {view === "serviceOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="服务订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
+          {view === "salesOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="销售订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
+          {view === "purchaseOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="采购订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
+          {view === "contracts" && <Contracts data={data} commit={commit} can={can} />}
+          {view === "entities" && <Entities data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
+          {view === "products" && <Products data={data} commit={commit} can={can} />}
+          {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
+          {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
+          {view === "notices" && <Notices onNotice={setNotice} />}
+          {view === "noticeStats" && <NoticeStats onNotice={setNotice} />}
+          {view === "noticeTags" && <NoticeTags onNotice={setNotice} canManage={can("notice.tag.manage")} />}
+          {view === "noticeDict" && (
+            <NoticeDictAdmin
+              onNotice={setNotice}
+              canManageOrgType={can("notice.orgType.manage")}
+              canManageNature={can("notice.nature.manage")}
+            />
+          )}
+          {view === "customerAccounts" && (
+            <CustomerAccountsPanel
+              organizations={data.organizations.filter((org) => isCustomerOrganization(org))}
+              onNotice={setNotice}
+              can={can}
+            />
+          )}
+          {view === "libraryContacts" && (
+            <LibraryContactsPanel
+              data={data}
+              applyData={(next) => setData(next)}
+              onNotice={setNotice}
+              can={can}
+              currentUser={currentUser}
+              onSendSms={(contacts) => {
+                setSmsDraftContacts(contacts);
+                setView("sms");
+              }}
+            />
+          )}
+          {view === "mallCustomers" && (
+            <MallCustomersPanel onNotice={setNotice} can={can} currentUser={currentUser} />
+          )}
+          {view === "sms" && (
+            <SmsPanel
+              data={data}
+              applyData={(next) => setData(next)}
+              onNotice={setNotice}
+              can={can}
+              currentUser={currentUser}
+              draftContacts={smsDraftContacts}
+              onDraftConsumed={() => setSmsDraftContacts(undefined)}
+            />
+          )}
+          {view === "officialSites" && <OfficialSitesPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+          {view === "officialSeo" && <OfficialSeoPanel data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} />}
+          {view === "reminders" && <Reminders data={data} commit={commit} currentUser={currentUser} />}
+          {view === "invoices" && <Invoices data={data} commit={commit} can={can} />}
+          {view === "transactions" && <Transactions data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} onOpenProject={openProject} />}
+          {view === "financeStatements" && <FinanceStatements data={data} onNotice={setNotice} />}
+          {view === "receiptStats" && <CashflowStats data={data} kind="receipt" />}
+          {view === "paymentStats" && <CashflowStats data={data} kind="payment" />}
+          {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
+          {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
+          {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
+          {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
+          {view === "devOps" && <DevOps onNotice={setNotice} canManage={can("dev.ops.manage")} />}
+          {view === "menuSettings" && (
+            <MenuSettingsPanel
+              data={data}
+              applyData={(next) => setData(next)}
+              onNotice={setNotice}
+              can={can}
+            />
+          )}
+          {view === "access" && <AccessControl data={data} commit={commit} />}
+        </Suspense>
         {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       </main>
     </div>
@@ -9161,9 +9190,8 @@ function Contracts({
             </div>
           );
         })}
-        {contractsPage.total === 0 && (
-          <div className="table-row contract-table"><span>暂无合同数据</span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-        )}
+        {contractsPage.loading && contractsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+        {!contractsPage.loading && contractsPage.total === 0 && <div className="table-empty">暂无合同数据</div>}
       </div>
       <Pagination {...contractsPage} onPageChange={contractsPage.setPage} />
       {viewerFileId && (
@@ -10586,7 +10614,8 @@ function Orders({ data, commit, can, onOpenProject, tab, focus, onClearFocus }: 
       </div>
       {isProductOrderList ? (
         <div className="order-cloud-list">
-          {rowsPage.items.length === 0 && !ordersPage.loading && <p className="empty-line">暂无订单</p>}
+          {ordersPage.loading && rowsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {rowsPage.items.length === 0 && !ordersPage.loading && <div className="table-empty">暂无订单</div>}
           {rowsPage.items.map((row) => (
             <Fragment key={`${row.kind}-${row.id}`}>{renderProductOrderCard(row)}</Fragment>
           ))}
@@ -10594,6 +10623,8 @@ function Orders({ data, commit, can, onOpenProject, tab, focus, onClearFocus }: 
       ) : (
       <div className="table">
         <div className="table-row order-table head"><span>项目/订单</span><span>客户</span><span>服务</span><span>收款账户/公司</span><span>金额</span><span>状态</span><span>时间</span></div>
+        {ordersPage.loading && rowsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+        {!ordersPage.loading && rowsPage.items.length === 0 && <div className="table-empty">暂无订单</div>}
         {rowsPage.items.map((row) => (
           <div className="table-row order-table clickable-row" role="button" tabIndex={0} key={`${row.kind}-${row.id}`} onClick={() => setSelectedOrder(row)} onKeyDown={(event) => event.key === "Enter" && setSelectedOrder(row)}>
             <span>
@@ -11574,7 +11605,8 @@ function Entities({
             </div>
             );
           })}
-          {filteredPage.items.length === 0 && <div className="table-empty">暂无符合条件的客户信息</div>}
+          {filteredPage.loading && filteredPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!filteredPage.loading && filteredPage.items.length === 0 && <div className="table-empty">暂无符合条件的客户信息</div>}
         </div>
         <Pagination {...filteredPage} onPageChange={filteredPage.setPage} />
       </div>
@@ -11797,6 +11829,7 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
       return;
     }
     const buffer = await productImportFile.arrayBuffer();
+    const XLSX = await import("xlsx");
     const workbook = XLSX.read(buffer, { type: "array" });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!worksheet) {
@@ -12028,6 +12061,8 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
           />
         </div>
         <div className="product-list">
+          {visibleProductsPage.loading && visibleProductsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!visibleProductsPage.loading && visibleProductsPage.items.length === 0 && <div className="table-empty">暂无商品</div>}
           {visibleProductsPage.items.map((product) => {
             const productPrices = data.supplierPrices
               .filter((price) => price.productId === product.id)
@@ -12492,6 +12527,8 @@ function PlatformAccounts({
         </div>
         <div className="table platform-account-list">
           <div className="table-row platform-table head"><span>客户</span><span>平台</span><span>账号</span><span>密码</span><span>商家ID</span><span>店铺ID</span><span>店铺名称</span><span>创建/更新</span><span>操作</span></div>
+          {rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">暂无平台账号</div>}
           {rowsPage.items.map((account) => {
             const customer = data.organizations.find((org) => org.id === account.customerOrgId);
             const customerName = customer?.name ?? "";
@@ -13030,7 +13067,8 @@ function TrademarkCertificates({
               </div>
             );
           })}
-          {rowsPage.items.length === 0 && <div className="table-empty">暂无商标注册证</div>}
+          {rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">暂无商标注册证</div>}
         </div>
         <Pagination {...rowsPage} onPageChange={rowsPage.setPage} />
       </div>
@@ -13413,7 +13451,8 @@ function WebsiteLeads({
             </div>
             );
           })}
-          {leadsPage.total === 0 && <div className="table-row lead-table"><span>暂无商机</span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>}
+          {leadsPage.loading && leadsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!leadsPage.loading && leadsPage.total === 0 && <div className="table-empty">暂无商机</div>}
         </div>
         <Pagination {...leadsPage} onPageChange={leadsPage.setPage} />
       </div>
@@ -14012,6 +14051,8 @@ function Invoices({ data, commit, can }: { data: AppData; commit: (data: AppData
         />
         <div className="table">
           <div className="table-row invoice-table head"><span>发票号码/日期</span><span>订单</span><span>买方</span><span>卖方</span><span>不含税</span><span>税额</span><span>价税合计</span><span>状态</span><span>操作</span></div>
+          {invoicesPage.loading && invoicesPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+          {!invoicesPage.loading && invoicesPage.items.length === 0 && <div className="table-empty">暂无发票</div>}
           {invoicesPage.items.map((invoice) => {
             const projectText = invoiceProjectText(invoice);
             const orders = invoiceOrderEntries(data, invoice);
@@ -14214,7 +14255,8 @@ function financeStatementExportName(kind: string, dateFrom: string, dateTo: stri
   return `${parts.join("-")}.xlsx`;
 }
 
-function downloadFinanceStatementWorkbook(rows: FinanceStatementRow[], filename: string) {
+async function downloadFinanceStatementWorkbook(rows: FinanceStatementRow[], filename: string) {
+  const XLSX = await import("xlsx");
   const sheetRows = rows.map((row) => ({
     客户: row.customerName,
     客户类型: row.serviceCustomerKind || "",
@@ -14323,7 +14365,7 @@ function FinanceStatements({
         onNotice({ type: "error", message: "当前筛选没有可导出的对账记录" });
         return;
       }
-      downloadFinanceStatementWorkbook(result.items, financeStatementExportName(businessKind, dateFrom, dateTo));
+      await downloadFinanceStatementWorkbook(result.items, financeStatementExportName(businessKind, dateFrom, dateTo));
       onNotice({ type: "success", message: `已导出 ${result.items.length} 条财务清单` });
     } catch (error) {
       if (error instanceof AuthExpiredError) return;
@@ -14915,16 +14957,25 @@ function OperationLogs({ data, commit, can }: { data: AppData; commit: (data: Ap
   });
 
   async function deleteLog(log: OperationLog) {
-    await commit(
-      { ...data, operationLogs: data.operationLogs.filter((item) => item.id !== log.id) },
-      { action: "删除操作日志", targetType: "系统", targetName: log.action, operator: "当前用户", detail: "开发环境允许清理日志记录" },
-    );
+    try {
+      await deleteCollectionItem("operationLogs", log.id);
+      await commit(
+        { ...data, operationLogs: data.operationLogs.filter((item) => item.id !== log.id) },
+        { action: "删除操作日志", targetType: "系统", targetName: log.action, operator: "当前用户", detail: "开发环境允许清理日志记录" },
+      );
+      logsPage.reload();
+    } catch (error) {
+      if (error instanceof AuthExpiredError) return;
+      throw error;
+    }
   }
 
   return (
     <div className="panel">
       <PanelTitle title="系统操作日志" subtitle="记录关键业务操作；当前开发环境允许删除，正式发布后恢复只读。" />
       <div className="log-list">
+        {logsPage.loading && logsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
+        {!logsPage.loading && logsPage.items.length === 0 && <div className="table-empty">暂无操作日志</div>}
         {logsPage.items.map((log) => (
           <article className="log-card" key={log.id}>
             <div>

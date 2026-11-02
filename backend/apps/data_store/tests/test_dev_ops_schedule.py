@@ -1,10 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from apps.data_store.dev_ops_catalog import get_script, list_scripts
+from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun
 from apps.data_store.dev_ops_schedule import cron_matches, next_run_at
+from apps.data_store.dev_ops_tasks import PENDING_STALE_SECONDS, reap_stale_dev_ops_runs
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -33,3 +36,34 @@ class DevOpsScheduleTests(SimpleTestCase):
         self.assertEqual(nxt.hour, 3)
         self.assertEqual(nxt.minute, 0)
         self.assertGreater(nxt, when)
+
+
+class DevOpsStaleRunTests(TestCase):
+    def test_reap_stale_pending_and_running(self):
+        now = timezone.now()
+        job = DevOpsJob.objects.create(
+            script_key="tag_notice_results",
+            name="打标",
+            enabled=False,
+            schedule_type="manual",
+            args_json={},
+        )
+        stale_pending = DevOpsJobRun.objects.create(job=job, trigger="manual", status="pending")
+        DevOpsJobRun.objects.filter(id=stale_pending.id).update(
+            created_at=now - timedelta(seconds=PENDING_STALE_SECONDS + 10)
+        )
+        stale_running = DevOpsJobRun.objects.create(job=job, trigger="manual", status="running")
+        DevOpsJobRun.objects.filter(id=stale_running.id).update(
+            started_at=now - timedelta(seconds=1800 + 700),
+            created_at=now - timedelta(seconds=1800 + 800),
+        )
+        fresh = DevOpsJobRun.objects.create(job=job, trigger="manual", status="running", started_at=now)
+
+        result = reap_stale_dev_ops_runs(now=now)
+        self.assertGreaterEqual(result["reaped"], 2)
+        stale_pending.refresh_from_db()
+        stale_running.refresh_from_db()
+        fresh.refresh_from_db()
+        self.assertEqual(stale_pending.status, "failed")
+        self.assertEqual(stale_running.status, "failed")
+        self.assertEqual(fresh.status, "running")

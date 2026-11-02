@@ -46,15 +46,32 @@ def trim_context_for_llm(context: dict[str, Any] | None, *, max_ids: int = 10) -
     }
 
 
-def build_tool_catalog_for_prompt(tools: list[dict[str, Any]], *, limit: int = 20) -> list[dict[str, Any]]:
+def build_tool_catalog_for_prompt(
+    tools: list[dict[str, Any]],
+    *,
+    limit: int = 24,
+    compact: bool = True,
+    desc_limit: int = 40,
+) -> list[dict[str, Any]]:
+    """供意图模型使用的工具目录。默认精简，避免撑爆小模型 n_ctx。"""
     catalog = []
+    cut = max(20, int(desc_limit))
     for tool in tools[:limit]:
-        catalog.append(
-            {
-                "name": tool.get("name"),
-                "description": tool.get("description"),
-                "permission": tool.get("permission"),
-                "input_schema": tool.get("input_schema") or {},
-            }
-        )
+        desc = str(tool.get("description") or "")
+        if compact:
+            catalog.append(
+                {
+                    "name": tool.get("name"),
+                    "description": desc[:cut],
+                }
+            )
+        else:
+            catalog.append(
+                {
+                    "name": tool.get("name"),
+                    "description": desc,
+                    "permission": tool.get("permission"),
+                    "input_schema": tool.get("input_schema") or {},
+                }
+            )
     return catalog

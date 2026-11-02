@@ -56,3 +56,27 @@ class OrchestratorTests(SimpleTestCase):
         self.assertEqual(result["intent"], "clarification")
         self.assertEqual(result["blocks"][0]["type"], "clarification")
         update_ctx.assert_called()
+
+    @patch("apps.assistant.services.orchestrator.resolve_intent")
+    @patch("apps.assistant.services.orchestrator.update_context", return_value={})
+    @patch("apps.assistant.services.orchestrator.append_message")
+    @patch("apps.assistant.services.orchestrator.create_conversation")
+    def test_missing_mode_unrecognized_not_rule_only(self, create_conv, append_msg, update_ctx, resolve):
+        conversation = MagicMock(id=12, context_json={})
+        create_conv.return_value = conversation
+        append_msg.side_effect = [MagicMock(id=1), MagicMock(id=2)]
+        resolve.return_value = {
+            "intent": "clarification",
+            "tool_name": None,
+            "params": {},
+            "confidence": 0.2,
+            "needs_clarification": True,
+            "reason": "defer_analytics_to_llm",
+            "clarification": "我还不能确定要执行的操作。你可以试试：查询采购公告。",
+            # 故意缺 mode，模拟旧路由/异常返回
+        }
+
+        result = handle_chat(user_data=self._user(), message="使用柱状图表帮我统计下近7天采购公告类型")
+        self.assertEqual(result["intent"], "clarification")
+        self.assertEqual(result["mode"], "degraded")
+        self.assertNotEqual(result["mode"], "rule_only")

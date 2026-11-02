@@ -1,13 +1,11 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 import hashlib
 
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable
 from django.core import signing
 from django.core.cache import cache
-from django.db import OperationalError, ProgrammingError
-from django.db.models import Count, Q, Sum
-from django.db.models.functions import TruncDate, TruncMonth
+from django.db import OperationalError, ProgrammingError, connection
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -29,6 +27,11 @@ PORTAL_PERMISSIONS = (
     "portal.notice.view",
     "portal.notice.subscribe",
     "portal.stats.view",
+    "portal.order.view",
+    "portal.invoice.view",
+    "portal.contract.view",
+    "portal.account.view",
+    "portal.account.manage",
 )
 
 
@@ -180,8 +183,15 @@ def require_portal(request, permission: str | None = None):
     if not record:
         return None, JsonResponse({"detail": "请先登录客户控制台。"}, status=401)
     account = public_account(record)
-    if permission and permission not in account["permissions"]:
-        return None, JsonResponse({"detail": "当前账号没有这项权限。", "permission": permission}, status=403)
+    perms = set(account["permissions"] or [])
+    if permission and permission not in perms:
+        # manage 蕴含 view（如 portal.account.manage → portal.account.view）
+        implied = False
+        if permission.endswith(".view"):
+            manage_key = permission[: -len(".view")] + ".manage"
+            implied = manage_key in perms
+        if not implied:
+            return None, JsonResponse({"detail": "当前账号没有这项权限。", "permission": permission}, status=403)
     return record, None
 
 
@@ -207,32 +217,158 @@ def _recent_month_keys(today: date, count: int = 6) -> list[str]:
     return keys
 
 
-def _raw_base_qs(site_ids: list[str] | None = None):
-    qs = NoticeRaw.objects.all()
-    if site_ids is not None:
-        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
-    return qs
+def _publish_dt_bounds(start: date, end: date) -> tuple[datetime, datetime]:
+    """公告 publish_time 为上海墙钟 naive DATETIME。
+
+    返回「墙钟数字 + UTC tzinfo」的 datetime，避免 USE_TZ 把 Asia/Shanghai 再减 8 小时后
+    写出错误的 SQL 边界（并破坏索引范围）。
+    """
+    return (
+        datetime(start.year, start.month, start.day, tzinfo=dt_timezone.utc),
+        datetime(end.year, end.month, end.day, tzinfo=dt_timezone.utc),
+    )
 
 
-def _publish_dt_bounds(start: date, end: date) -> tuple[str, str]:
-    """公告 publish_time 为上海墙钟 naive DATETIME；返回 [start, end) 字符串以便走索引。"""
-    return f"{start.isoformat()} 00:00:00", f"{end.isoformat()} 00:00:00"
+def _wall_sql(value: datetime | date | str) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, date):
+        return f"{value.isoformat()} 00:00:00"
+    text = str(value).strip().replace("T", " ")
+    return text[:19] if len(text) >= 19 else (text + " 00:00:00")[:19]
 
 
-def _kind_amount(kind: str, field: str, start: date, end: date, site_ids: list[str] | None = None) -> float:
-    """按解析表 notice_kind + publish_time 汇总金额（可走 site/publish 索引）。"""
-    lo, hi = _publish_dt_bounds(start, end)
-    qs = NoticeParsed.objects.filter(notice_kind=kind, publish_time__gte=lo, publish_time__lt=hi)
-    if site_ids is not None:
-        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
-    return _money(qs.aggregate(total=Sum(field))["total"])
+def _site_id_sql(site_ids: list[str] | None) -> tuple[str, list[str]]:
+    """返回 (AND site_id IN (...), params)。site_ids is None 表示不限。"""
+    if site_ids is None:
+        return "", []
+    if not site_ids:
+        return " AND 1=0", []
+    placeholders = ", ".join(["%s"] * len(site_ids))
+    return f" AND site_id IN ({placeholders})", [str(sid) for sid in site_ids]
 
 
-def _parsed_qs(site_ids: list[str] | None, lo: str, hi: str):
-    qs = NoticeParsed.objects.filter(publish_time__gte=lo, publish_time__lt=hi)
-    if site_ids is not None:
-        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
-    return qs
+_PARSED_STATS_FORCE_INDEX: str | None = None
+
+
+def _parsed_force_index(site_ids: list[str] | None = None) -> str:
+    """优先覆盖索引，避免回表读大 JSON；不存在则回退。"""
+    global _PARSED_STATS_FORCE_INDEX
+    if _PARSED_STATS_FORCE_INDEX is not None:
+        return _PARSED_STATS_FORCE_INDEX
+    preferred = "idx_parsed_stats_cover"
+    fallback = "idx_parsed_site_publish" if site_ids is not None else "idx_parsed_publish_raw"
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SHOW INDEX FROM notice_parsed WHERE Key_name = %s",
+                [preferred],
+            )
+            _PARSED_STATS_FORCE_INDEX = preferred if cursor.fetchone() else fallback
+    except (ProgrammingError, OperationalError):
+        _PARSED_STATS_FORCE_INDEX = fallback
+    return _PARSED_STATS_FORCE_INDEX
+
+
+def _sql_raw_site_counts(
+    site_ids: list[str] | None,
+    *,
+    lo: datetime,
+    hi: datetime,
+    today_lo: datetime,
+    today_hi: datetime,
+    week_lo: datetime,
+) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+    """一次按站点聚合：区间总量 / 今日 / 近 7 日。"""
+    site_sql, site_params = _site_id_sql(site_ids)
+    sql = (
+        "SELECT site_id, "
+        "COUNT(*), "
+        "SUM(publish_time >= %s AND publish_time < %s), "
+        "SUM(publish_time >= %s AND publish_time < %s) "
+        "FROM notice_raw FORCE INDEX (idx_raw_site_publish) "
+        f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
+        "GROUP BY site_id"
+    )
+    params = [
+        _wall_sql(today_lo),
+        _wall_sql(today_hi),
+        _wall_sql(week_lo),
+        _wall_sql(today_hi),
+        _wall_sql(lo),
+        _wall_sql(hi),
+        *site_params,
+    ]
+    range_counts: dict[str, int] = {}
+    today_counts: dict[str, int] = {}
+    week_counts: dict[str, int] = {}
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        for sid, total, today_c, week_c in cursor.fetchall():
+            key = str(sid or "")
+            range_counts[key] = int(total or 0)
+            today_counts[key] = int(today_c or 0)
+            week_counts[key] = int(week_c or 0)
+    return range_counts, today_counts, week_counts
+
+
+def _sql_parsed_kind_rows(site_ids: list[str] | None, lo: datetime, hi: datetime):
+    """按站点+类型聚合数量与金额；按是否限站点选择最优索引。"""
+    site_sql, site_params = _site_id_sql(site_ids)
+    force = _parsed_force_index(site_ids)
+    sql = (
+        "SELECT site_id, notice_kind, COUNT(*), SUM(budget_amount), SUM(deal_amount) "
+        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
+        "GROUP BY site_id, notice_kind"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [_wall_sql(lo), _wall_sql(hi), *site_params])
+        return cursor.fetchall()
+
+
+def _sql_parsed_site_amounts(site_ids: list[str] | None, lo: datetime, hi: datetime) -> tuple[dict[str, float], dict[str, float]]:
+    """分站点采购/成交金额（仅两类公告）。"""
+    site_sql, site_params = _site_id_sql(site_ids)
+    force = _parsed_force_index(site_ids)
+    sql = (
+        "SELECT site_id, "
+        "SUM(CASE WHEN notice_kind = '采购公告' THEN budget_amount ELSE 0 END), "
+        "SUM(CASE WHEN notice_kind = '成交公告' THEN deal_amount ELSE 0 END) "
+        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"WHERE publish_time >= %s AND publish_time < %s "
+        f"AND notice_kind IN ('采购公告', '成交公告'){site_sql} "
+        "GROUP BY site_id"
+    )
+    purchase_map: dict[str, float] = {}
+    deal_map: dict[str, float] = {}
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [_wall_sql(lo), _wall_sql(hi), *site_params])
+        for sid, budget, deal in cursor.fetchall():
+            key = str(sid or "")
+            purchase_map[key] = _money(budget)
+            deal_map[key] = _money(deal)
+    return purchase_map, deal_map
+
+
+def _sql_daily_counts(site_ids: list[str] | None, lo: datetime, hi: datetime) -> dict[str, int]:
+    site_sql, site_params = _site_id_sql(site_ids)
+    # 有 site 过滤时切勿强绑纯 publish_time 索引（会先扫全月再过滤站点）
+    force = "idx_raw_site_publish" if site_ids is not None else "idx_publish_time"
+    sql = (
+        f"SELECT DATE(publish_time), COUNT(*) FROM notice_raw FORCE INDEX ({force}) "
+        f"WHERE publish_time >= %s AND publish_time < %s{site_sql} "
+        "GROUP BY DATE(publish_time)"
+    )
+    out: dict[str, int] = {}
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [_wall_sql(lo), _wall_sql(hi), *site_params])
+        for day, count in cursor.fetchall():
+            if not day:
+                continue
+            key = day.isoformat() if hasattr(day, "isoformat") else str(day)[:10]
+            out[key] = int(count or 0)
+    return out
 
 
 def build_site_metric_stats(
@@ -255,34 +391,18 @@ def build_site_metric_stats(
     week_lo, _ = _publish_dt_bounds(today - timedelta(days=6), end)
     site_ids = [str(site["id"]) for site in sites]
 
-    def _count_map(qs) -> dict[str, int]:
-        return {str(row["site_id"] or ""): int(row["c"] or 0) for row in qs.values("site_id").annotate(c=Count("id"))}
-
     try:
         if range_counts is None or today_counts is None or week_counts is None:
-            base = _raw_base_qs(site_ids)
-            range_counts = range_counts if range_counts is not None else _count_map(
-                base.filter(publish_time__gte=lo, publish_time__lt=hi)
+            rc, tc, wc = _sql_raw_site_counts(
+                site_ids, lo=lo, hi=hi, today_lo=today_lo, today_hi=today_hi, week_lo=week_lo
             )
-            today_counts = today_counts if today_counts is not None else _count_map(
-                base.filter(publish_time__gte=today_lo, publish_time__lt=today_hi)
-            )
-            week_counts = week_counts if week_counts is not None else _count_map(
-                base.filter(publish_time__gte=week_lo, publish_time__lt=today_hi)
-            )
+            range_counts = range_counts if range_counts is not None else rc
+            today_counts = today_counts if today_counts is not None else tc
+            week_counts = week_counts if week_counts is not None else wc
         if purchase_map is None or deal_map is None:
-            purchase_map, deal_map = {}, {}
-            for row in (
-                _parsed_qs(site_ids, lo, hi)
-                .filter(notice_kind__in=["采购公告", "成交公告"])
-                .values("site_id", "notice_kind")
-                .annotate(budget=Sum("budget_amount"), deal=Sum("deal_amount"))
-            ):
-                sid = str(row["site_id"] or "")
-                if row["notice_kind"] == "采购公告":
-                    purchase_map[sid] = _money(row["budget"])
-                elif row["notice_kind"] == "成交公告":
-                    deal_map[sid] = _money(row["deal"])
+            pm, dm = _sql_parsed_site_amounts(site_ids, lo, hi)
+            purchase_map = purchase_map if purchase_map is not None else pm
+            deal_map = deal_map if deal_map is not None else dm
     except (ProgrammingError, OperationalError):
         range_counts = range_counts or {}
         today_counts = today_counts or {}
@@ -353,25 +473,21 @@ def _monthly_deal_amounts(
     keys = _month_keys_between(start, end) or _recent_month_keys(timezone.localdate(), 6)
     chart_start = date.fromisoformat(keys[0] + "-01")
     lo, hi = _publish_dt_bounds(start, end)
-    qs = NoticeParsed.objects.filter(
-        notice_kind="成交公告",
-        publish_time__gte=lo,
-        publish_time__lt=hi,
-    )
-    if site_ids is not None:
-        qs = qs.filter(site_id__in=site_ids) if site_ids else qs.none()
-    rows = (
-        qs.annotate(month=TruncMonth("publish_time"))
-        .values("month")
-        .annotate(total=Sum("deal_amount"))
+    site_sql, site_params = _site_id_sql(site_ids)
+    force = _parsed_force_index(site_ids)
+    sql = (
+        "SELECT LEFT(publish_time, 7), SUM(deal_amount) "
+        f"FROM notice_parsed FORCE INDEX ({force}) "
+        f"WHERE notice_kind = '成交公告' AND publish_time >= %s AND publish_time < %s{site_sql} "
+        "GROUP BY LEFT(publish_time, 7)"
     )
     totals: dict[str, float] = {}
-    for row in rows:
-        month = row["month"]
-        if not month:
-            continue
-        key = month.strftime("%Y-%m") if hasattr(month, "strftime") else str(month)[:7]
-        totals[key] = _money(row["total"])
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [_wall_sql(lo), _wall_sql(hi), *site_params])
+        for month_key, total in cursor.fetchall():
+            if not month_key:
+                continue
+            totals[str(month_key)[:7]] = _money(total)
     # 保证横轴至少覆盖查询起点月份
     if keys and chart_start.isoformat()[:7] not in keys:
         keys = [chart_start.strftime("%Y-%m")] + keys
@@ -438,19 +554,11 @@ def build_notice_stats(
         lo, hi = _publish_dt_bounds(range_start, range_end)
         today_lo, today_hi = _publish_dt_bounds(today, today + timedelta(days=1))
         week_lo, _ = _publish_dt_bounds(week_start, today + timedelta(days=1))
-        raw_qs = _raw_base_qs(site_ids).filter(publish_time__gte=lo, publish_time__lt=hi)
 
-        # 1) 一次按站点聚合：区间总量 + 今日 + 近7日（条件计数，只扫区间内行）
-        site_count_rows = list(
-            raw_qs.values("site_id").annotate(
-                total=Count("id"),
-                today=Count("id", filter=Q(publish_time__gte=today_lo, publish_time__lt=today_hi)),
-                week=Count("id", filter=Q(publish_time__gte=week_lo, publish_time__lt=today_hi)),
-            )
+        # 1) 一次按站点聚合：区间总量 + 今日 + 近7日
+        range_counts, today_counts, week_counts = _sql_raw_site_counts(
+            site_ids, lo=lo, hi=hi, today_lo=today_lo, today_hi=today_hi, week_lo=week_lo
         )
-        range_counts = {str(row["site_id"] or ""): int(row["total"] or 0) for row in site_count_rows}
-        today_counts = {str(row["site_id"] or ""): int(row["today"] or 0) for row in site_count_rows}
-        week_counts = {str(row["site_id"] or ""): int(row["week"] or 0) for row in site_count_rows}
         stats["publicNoticeTotal"] = sum(range_counts.values())
         stats["todayCount"] = sum(today_counts.values())
         stats["weekCount"] = sum(week_counts.values())
@@ -463,26 +571,22 @@ def build_notice_stats(
             for sid in sorted(range_counts.keys(), key=lambda key: (-range_counts[key], key))
         ]
 
-        # 2) 解析表一次按站点+类型聚合：类型分布 + 采购/成交金额
+        # 2) 解析表一次按站点+类型聚合：类型分布 + 采购/成交金额（FORCE INDEX publish）
         purchase = 0.0
         deal = 0.0
         purchase_map: dict[str, float] = {}
         deal_map: dict[str, float] = {}
         kind_counts: dict[str, int] = {}
-        for row in (
-            _parsed_qs(site_ids, lo, hi)
-            .values("site_id", "notice_kind")
-            .annotate(count=Count("id"), budget=Sum("budget_amount"), deal_sum=Sum("deal_amount"))
-        ):
-            sid = str(row["site_id"] or "")
-            kind = (row["notice_kind"] or "").strip() or "其他"
-            kind_counts[kind] = kind_counts.get(kind, 0) + int(row["count"] or 0)
+        for sid_raw, kind_raw, count, budget, deal_sum in _sql_parsed_kind_rows(site_ids, lo, hi):
+            sid = str(sid_raw or "")
+            kind = (kind_raw or "").strip() or "其他"
+            kind_counts[kind] = kind_counts.get(kind, 0) + int(count or 0)
             if kind == "采购公告":
-                amount = _money(row["budget"])
+                amount = _money(budget)
                 purchase += amount
                 purchase_map[sid] = purchase_map.get(sid, 0.0) + amount
             elif kind == "成交公告":
-                amount = _money(row["deal_sum"])
+                amount = _money(deal_sum)
                 deal += amount
                 deal_map[sid] = deal_map.get(sid, 0.0) + amount
 
@@ -513,20 +617,82 @@ def build_notice_stats(
 
         # 3) 日发布量
         daily_map = {item["date"]: 0 for item in stats["daily"]}
-        for row in raw_qs.annotate(day=TruncDate("publish_time")).values("day").annotate(count=Count("id")):
-            day = row["day"]
-            if not day:
-                continue
-            key = day.isoformat() if hasattr(day, "isoformat") else str(day)[:10]
+        for key, count in _sql_daily_counts(site_ids, lo, hi).items():
             if key in daily_map:
-                daily_map[key] = row["count"]
+                daily_map[key] = count
         stats["daily"] = [{"date": key, "count": daily_map[key]} for key in daily_map]
 
-        # 4) 月成交
-        stats["monthlyDeal"] = _monthly_deal_amounts(site_ids, start=range_start, end=range_end)
+        # 4) 月成交：单月窗口直接复用区间成交额，避免再扫解析表
+        month_keys = _month_keys_between(range_start, range_end)
+        if len(month_keys) == 1:
+            stats["monthlyDeal"] = [{"month": month_keys[0], "amount": deal}]
+        else:
+            stats["monthlyDeal"] = _monthly_deal_amounts(site_ids, start=range_start, end=range_end)
     except (ProgrammingError, OperationalError):
         return _empty_notice_stats(site_ids, start=range_start, end=range_end)
     return stats
+
+
+PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX = 10
+
+
+def _public_crawled_notice_item(item: dict) -> dict:
+    """官网首页滚动条只需要标题与发布时间；详情仍走门户登录。"""
+    published = item.get("publishTime") or item.get("publishedAt") or ""
+    return {
+        "id": item.get("id"),
+        "title": item.get("title") or "",
+        "publishedAt": published,
+        "publishTime": published,
+        "noticeKind": item.get("noticeKind") or "",
+        "siteId": item.get("siteId") or "",
+        "siteLabel": item.get("siteLabel") or "",
+    }
+
+
+@require_http_methods(["GET"])
+def public_crawled_notices(request):
+    """匿名只读：与后台/门户同源的爬虫公告，最多 10 条，供官网首页滚动。"""
+    try:
+        page = max(int(request.GET.get("page") or 1), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(
+            max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 10), 1),
+            PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX,
+        )
+    except (TypeError, ValueError):
+        page_size = PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX
+    site_id = (request.GET.get("siteId") or "").strip()
+    notice_kind = (request.GET.get("noticeKind") or "").strip()
+    try:
+        payload = query_crawled_notices(
+            page=page,
+            page_size=page_size,
+            site_id=site_id,
+            notice_kind=notice_kind,
+            site_ids=None,
+        )
+    except (ProgrammingError, OperationalError):
+        return JsonResponse(
+            {
+                "detail": "公告数据暂时不可用，请稍后重试。",
+                "items": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+            },
+            status=503,
+        )
+    return JsonResponse(
+        {
+            "items": [_public_crawled_notice_item(item) for item in payload.get("items") or []],
+            "total": payload.get("total") or 0,
+            "page": payload.get("page") or page,
+            "page_size": payload.get("page_size") or page_size,
+        }
+    )
 
 
 @require_http_methods(["GET"])
@@ -550,7 +716,17 @@ def portal_notices(request):
             publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
-        payload = {"items": [], "total": 0, "page": page, "page_size": page_size}
+        # 勿吞成空列表：前端会当成「无数据」，掩盖缺列/索引等真实故障
+        return JsonResponse(
+            {
+                "detail": "公告数据暂时不可用，请稍后重试或联系管理员。",
+                "items": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+            },
+            status=503,
+        )
     payload["sites"] = site_options(scope)
     payload["noticeKinds"] = PORTAL_NOTICE_KINDS
     return JsonResponse(payload)
@@ -644,7 +820,7 @@ def portal_stats_view(request):
     return portal_stats(request)
 
 
-PORTAL_STATS_CACHE_SECONDS = 45
+PORTAL_STATS_CACHE_SECONDS = 60  # short TTL; LocMem per-process on one
 
 
 def _portal_stats_cache_key(
@@ -766,19 +942,26 @@ def portal_stats(request):
         **stats,
         "tagStats": tag_stats,
     }
-    # 首页：附带各可查看平台的独立统计（单平台时前端只展示一块）
+    # 首页：附带各可查看平台的独立统计（单平台时复用主汇总，避免二次全量查询）
     if include_sites:
         if len(sites) <= 1:
             payload["siteStats"] = [
                 {
                     "siteId": site["id"],
                     "label": site["label"],
-                    **build_notice_stats(
-                        site_ids=[site["id"]],
-                        start=range_start,
-                        end=range_end,
-                        light=False,
-                    ),
+                    "publicNoticeTotal": stats.get("publicNoticeTotal", 0),
+                    "todayCount": stats.get("todayCount", 0),
+                    "weekCount": stats.get("weekCount", 0),
+                    "purchaseAmount": stats.get("purchaseAmount", 0),
+                    "dealAmount": stats.get("dealAmount", 0),
+                    "lastMonthPurchaseAmount": stats.get("lastMonthPurchaseAmount", 0),
+                    "lastMonthDealAmount": stats.get("lastMonthDealAmount", 0),
+                    "monthlyDeal": stats.get("monthlyDeal") or [],
+                    "daily": stats.get("daily") or [],
+                    "bySite": stats.get("bySite") or [],
+                    "byKind": stats.get("byKind") or [],
+                    "startDate": stats.get("startDate"),
+                    "endDate": stats.get("endDate"),
                 }
                 for site in sites
             ]

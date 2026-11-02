@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.assistant.services.tool_registry import ToolDefinition, register_tool
@@ -11,13 +13,26 @@ from apps.assistant.services.tool_registry import ToolDefinition, register_tool
 ASSISTANT_SAFE_SCRIPT_KEYS = frozenset({"tag_notice_results"})
 
 
+def _period_day_bounds(period: str) -> tuple[date | None, date | None]:
+    today = timezone.localdate()
+    value = (period or "").strip()
+    if value == "today":
+        return today, today
+    if value == "yesterday":
+        day = today - timedelta(days=1)
+        return day, day
+    if value == "this_month":
+        return today.replace(day=1), today
+    return None, None
+
+
 def _devops_get_status(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
     del user_data
     limit = min(max(int(params.get("limit") or 20), 1), 50)
     failed_only = bool(params.get("failed_only") or params.get("failedOnly"))
+    period = str(params.get("relative_period") or "").strip()
     try:
         from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun
-        from apps.data_store.dev_ops_views import _serialize_job, _serialize_run
     except Exception as exc:  # noqa: BLE001
         return {
             "block_type": "error",
@@ -26,16 +41,59 @@ def _devops_get_status(*, params: dict[str, Any], user_data: dict) -> dict[str, 
             "data": {},
         }
 
-    jobs = [_serialize_job(job) for job in DevOpsJob.objects.all().order_by("-updated_at", "-id")[:limit]]
+    job_count = DevOpsJob.objects.count()
     run_qs = DevOpsJobRun.objects.select_related("job").order_by("-id")
     if failed_only:
         run_qs = run_qs.filter(status="failed")
-    runs = [_serialize_run(run) for run in run_qs[:limit]]
+    day_from, day_to = _period_day_bounds(period)
+    if day_from and day_to:
+        run_qs = run_qs.filter(
+            Q(started_at__date__gte=day_from, started_at__date__lte=day_to)
+            | Q(started_at__isnull=True, created_at__date__gte=day_from, created_at__date__lte=day_to)
+        )
+
+    runs = list(run_qs[:limit])
+    items = []
+    for run in runs:
+        job_name = run.job.name if run.job_id else f"运行 #{run.id}"
+        started = ""
+        if run.started_at:
+            started = timezone.localtime(run.started_at).strftime("%Y-%m-%d %H:%M:%S")
+        elif run.created_at:
+            started = timezone.localtime(run.created_at).strftime("%Y-%m-%d %H:%M:%S")
+        finished = timezone.localtime(run.finished_at).strftime("%H:%M:%S") if run.finished_at else "-"
+        items.append(
+            {
+                "id": run.id,
+                "name": job_name,
+                "status": run.status,
+                "script_key": run.job.script_key if run.job_id else "",
+                "trigger": run.trigger or "",
+                "summary": (
+                    f"状态:{run.status} · 触发:{run.trigger or '-'} · "
+                    f"开始:{started or '-'} · 结束:{finished}"
+                ),
+            }
+        )
+
+    scope = "失败运行" if failed_only else "运行记录"
+    if day_from and day_to and day_from == day_to:
+        scope = f"{day_from.isoformat()} {scope}"
+    elif day_from and day_to:
+        scope = f"{day_from}~{day_to} {scope}"
+    content = f"定时任务共 {job_count} 个；{scope}找到 {len(items)} 条。"
     return {
-        "block_type": "statistics",
-        "summary": f"任务 {len(jobs)} 个，最近运行 {len(runs)} 条。",
-        "content": f"任务 {len(jobs)} 个，最近运行 {len(runs)} 条。",
-        "data": {"jobs": jobs, "runs": runs, "total": len(runs)},
+        "block_type": "erp_record_list",
+        "summary": content,
+        "content": content,
+        "data": {
+            "collection": "devopsRuns",
+            "items": items,
+            "total": len(items),
+            "job_count": job_count,
+            "failed_only": failed_only,
+            "relative_period": period or None,
+        },
     }
 
 
@@ -125,6 +183,7 @@ def register() -> None:
                 "properties": {
                     "limit": {"type": "integer"},
                     "failed_only": {"type": "boolean"},
+                    "relative_period": {"type": "string"},
                 },
             },
             permission="dev.ops.view",

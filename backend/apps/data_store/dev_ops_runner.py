@@ -119,15 +119,24 @@ def _run_crawler(script: dict[str, Any], options: dict[str, Any]) -> dict[str, s
         cmd += _build_notice_crawl_cli_args(script["key"], options)
     env = os.environ.copy()
     timeout = int(script.get("timeout") or 7200)
-    completed = subprocess.run(
-        cmd,
-        cwd=str(root),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-        env=env,
-    )
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return {
+            "ok": False,
+            "stdout": _clip(stdout),
+            "stderr": _clip(f"采集超时（限制 {timeout}s）\n{stderr}".strip()),
+        }
     result = {
         "ok": completed.returncode == 0,
         "stdout": _clip(completed.stdout or ""),

@@ -49,7 +49,8 @@ export function migrateData(current: Partial<AppData>): AppData {
     organizations: current.organizations ?? seedData.organizations,
     users: (current.users ?? seedData.users).map((user) => ({ ...user, password: user.password || undefined })),
     roles: current.roles ?? seedData.roles,
-    operationLogs: current.operationLogs ?? seedData.operationLogs,
+    // bootstrap 跳过大表时服务端给 []；勿回落到 seed 样例日志
+    operationLogs: current.operationLogs ?? [],
     platformAccounts: current.platformAccounts ?? seedData.platformAccounts,
     websiteLeads: current.websiteLeads ?? seedData.websiteLeads,
     projectReminders: current.projectReminders ?? seedData.projectReminders,
@@ -549,7 +550,14 @@ async function fetchServerData(): Promise<{ raw: Partial<AppData> | null; data: 
 export type CollectionDeleteIds = Partial<Record<keyof AppData, string[]>>;
 
 /** 大表走 /api/collections，禁止打进 app-data 全量快照。 */
-const APP_DATA_BOOTSTRAP_SKIP = new Set<keyof AppData>(["libraryContacts", "smsRecords"]);
+const APP_DATA_BOOTSTRAP_SKIP = new Set<keyof AppData>([
+  "libraryContacts",
+  "smsRecords",
+  "notices",
+  "noticeCollectionSources",
+  "noticeCollectionRuns",
+  "operationLogs",
+]);
 
 function stripBootstrapHeavyCollections(data: Partial<AppData>): Partial<AppData> {
   const next = { ...data };
@@ -780,6 +788,20 @@ export async function queryCollection<T = Record<string, unknown>>(
     page: 1,
     pageSize: data.length || (query.pageSize ?? 20),
   };
+}
+
+export async function getCollectionItem<T>(collection: string, recordId: string): Promise<T> {
+  const response = await fetchWithTimeout(apiUrl(`/api/collections/${encodeURIComponent(collection)}/${encodeURIComponent(recordId)}/`), {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    if (response.status === 401) throw new AuthExpiredError();
+    if (response.status === 403) throw new Error("当前账号没有执行此操作的权限");
+    if (response.status === 404) throw new Error("记录不存在");
+    throw new Error("加载详情失败，请稍后重试");
+  }
+  const payload = await response.json() as { data: T };
+  return payload.data;
 }
 
 export async function createCollectionItem<T>(collection: string, record: T): Promise<T> {

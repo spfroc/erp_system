@@ -62,6 +62,13 @@ class LibrarySmsTests(TestCase):
             "signed": "有效",
             "origin": "齐鲁云采",
             "type": "经销商",
+            "communicationRecords": [
+                {
+                    "id": "lcr-1",
+                    "type": "电话",
+                    "remark": "首轮跟进",
+                }
+            ],
         }
         create = self.client.post(
             "/api/collections/libraryContacts/",
@@ -76,7 +83,11 @@ class LibrarySmsTests(TestCase):
         self.assertEqual(listed.status_code, 200)
         body = listed.json()
         self.assertGreaterEqual(body["total"], 1)
-        self.assertTrue(any(item["name"] == "济南示例科技" for item in body["items"]))
+        row = next(item for item in body["items"] if item["name"] == "济南示例科技")
+        self.assertNotIn("communicationRecords", row)
+        detail = self.client.get("/api/collections/libraryContacts/lib-test-1/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(len(detail.json()["data"].get("communicationRecords") or []), 1)
 
     def test_sms_send_local_mode(self):
         result, error = send_sms_via_center(mobile="13800138000", content="你好", prefix="壹知产")

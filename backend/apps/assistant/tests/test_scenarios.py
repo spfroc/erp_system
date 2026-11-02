@@ -33,6 +33,14 @@ class ScenarioRoutingTests(SimpleTestCase):
         routed = resolve_intent("查询最近三十天未完成的采购订单")
         self.assertEqual(routed["tool_name"], "erp.purchase_order.search")
 
+    def test_e2_customer_expiry(self):
+        routed = resolve_intent("查询客户的到期时间")
+        self.assertEqual(routed["tool_name"], "erp.customer.expiry")
+
+    def test_e3_project_status(self):
+        routed = resolve_intent("26922000001159238971 查询该项目的开票状态")
+        self.assertEqual(routed["tool_name"], "erp.project.status")
+
     def test_f_navigation(self):
         routed = resolve_intent("打开销售订单管理")
         self.assertEqual(routed["tool_name"], "navigation.find")

@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AssistantResultRenderer } from "./AssistantResultRenderer";
 
 describe("AssistantResultRenderer", () => {
-  it("renders notice list and follow-up button", () => {
-    const onFollowUp = vi.fn();
+  it("opens notice modal from list action", () => {
+    const onOpenNotice = vi.fn();
     render(
       <AssistantResultRenderer
         blocks={[
@@ -17,12 +17,40 @@ describe("AssistantResultRenderer", () => {
             },
           },
         ]}
-        onFollowUp={onFollowUp}
+        onOpenNotice={onOpenNotice}
       />
     );
     expect(screen.getByText("济南打印机采购")).toBeTruthy();
     screen.getByText("打开").click();
-    expect(onFollowUp).toHaveBeenCalledWith("打开公告 42");
+    expect(onOpenNotice).toHaveBeenCalledWith(42);
+  });
+
+  it("renders notice detail summary and open button", () => {
+    const onOpenNotice = vi.fn();
+    render(
+      <AssistantResultRenderer
+        blocks={[
+          {
+            type: "notice_detail",
+            data: {
+              notice_id: 61493,
+              item: {
+                id: 61493,
+                title: "办公桌定点竞价成交公告",
+                buyerName: "平度市财政局",
+                regionName: "青岛",
+                publishTime: "2026-10-28 09:04:41",
+                goods: [{ id: 1 }],
+              },
+            },
+          },
+        ]}
+        onOpenNotice={onOpenNotice}
+      />
+    );
+    expect(screen.getByText("办公桌定点竞价成交公告")).toBeTruthy();
+    screen.getByText("查看完整详情").click();
+    expect(onOpenNotice).toHaveBeenCalledWith(61493);
   });
 
   it("renders navigation actions", () => {
@@ -62,5 +90,30 @@ describe("AssistantResultRenderer", () => {
     );
     screen.getByText("确认执行").click();
     expect(onConfirmAction).toHaveBeenCalledWith(8, "tok");
+  });
+
+  it("renders invoice delete preview without raw json", () => {
+    const onConfirmAction = vi.fn();
+    render(
+      <AssistantResultRenderer
+        blocks={[
+          {
+            type: "tool_preview",
+            data: {
+              tool_name: "erp.invoice.delete",
+              description: "删除发票「26372000005015205376」",
+              execution_id: 9,
+              confirmation_token: "tok2",
+              params: { invoice_no: "26372000005015205376" },
+            },
+          },
+        ]}
+        onConfirmAction={onConfirmAction}
+      />
+    );
+    expect(screen.getByText("26372000005015205376")).toBeTruthy();
+    const buttons = screen.getAllByText("确认执行");
+    buttons[buttons.length - 1].click();
+    expect(onConfirmAction).toHaveBeenCalledWith(9, "tok2");
   });
 });

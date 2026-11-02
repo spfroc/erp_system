@@ -16,6 +16,55 @@ from apps.assistant.permissions import user_has_permission
 from apps.assistant.services.intent_router import resolve_intent
 from apps.assistant.services.tool_executor import ToolExecutionError, execute_tool
 from apps.assistant.services.tool_registry import list_tools
+from apps.assistant.services.user_settings import get_user_settings
+
+
+def _resolve_response_mode(routed: dict[str, Any]) -> str:
+    """routed 缺 mode 时：unrecognized / defer_* 不得静默当成 rule_only。"""
+    explicit = str(routed.get("mode") or "").strip()
+    if explicit in {"rule_only", "llm_assisted", "degraded"}:
+        return explicit
+    reason = str(routed.get("reason") or "")
+    if (
+        reason in {"unrecognized", "defer_analytics_to_llm"}
+        or reason.startswith("defer_")
+        or reason.startswith("llm_")
+        or (routed.get("needs_clarification") and not routed.get("tool_name"))
+    ):
+        return "degraded"
+    if routed.get("tool_name"):
+        return "rule_only"
+    return "degraded"
+
+
+_CHART_HINTS = (
+    "图表",
+    "柱状图",
+    "柱状",
+    "折线图",
+    "折线",
+    "饼图",
+    "饼状图",
+    "echarts",
+)
+
+
+def _sync_chart_type_param(message: str, params: dict[str, Any]) -> None:
+    """金额/统计默认不带图；仅用户明确要图表时保留/补齐 chart_type。"""
+    text = message or ""
+    if not any(hint in text for hint in _CHART_HINTS):
+        params.pop("chart_type", None)
+        params.pop("chartType", None)
+        params.pop("chart", None)
+        return
+    if params.get("chart_type") or params.get("chartType") or params.get("chart"):
+        return
+    if "折线" in text:
+        params["chart_type"] = "line"
+    elif "饼" in text:
+        params["chart_type"] = "pie"
+    else:
+        params["chart_type"] = "bar"
 
 
 def handle_chat(
@@ -55,12 +104,34 @@ def handle_chat(
         for tool in list_tools()
         if user_has_permission(user_data, tool.permission)
     }
-    routed = resolve_intent(text, context, allowed_tool_names=allowed)
-    mode = str(routed.get("mode") or "rule_only")
+    user_prefs = get_user_settings(user_id)
+    routed = resolve_intent(
+        text,
+        context,
+        allowed_tool_names=allowed,
+        system_prompt_addon=str(user_prefs.get("system_prompt_addon") or ""),
+    )
+    mode = _resolve_response_mode(routed)
+    llm_usage = routed.get("llm_usage") if isinstance(routed.get("llm_usage"), dict) else None
+    llm_model = routed.get("llm_model") or None
 
     if routed.get("needs_clarification") or not routed.get("tool_name"):
         content = str(routed.get("clarification") or "请补充更具体的业务指令。")
-        payload = {"blocks": [{"type": "clarification", "data": {"text": content}}], "route": routed}
+        # 防御：缺 mode 时若仍是规则「我还不能确定…」，标成 degraded，避免 UI 显示「未使用模型」
+        if mode == "rule_only" and str(routed.get("reason") or "") in {
+            "unrecognized",
+            "defer_analytics_to_llm",
+            "defer_erp_amount_stats_to_llm",
+        }:
+            mode = "degraded"
+            routed = {**routed, "mode": mode}
+        payload = {
+            "blocks": [{"type": "clarification", "data": {"text": content}}],
+            "route": routed,
+            "mode": mode,
+            "llm_usage": llm_usage,
+            "llm_model": llm_model,
+        }
         assistant_msg = append_message(
             conversation,
             role=AssistantMessage.ROLE_ASSISTANT,
@@ -77,12 +148,15 @@ def handle_chat(
             "status": "completed",
             "content": content,
             "blocks": payload["blocks"],
+            "llm_usage": llm_usage,
+            "llm_model": llm_model,
             "errors": [],
             "context": conversation.context_json,
         }
 
     tool_name = str(routed["tool_name"])
     params = dict(routed.get("params") or {})
+    _sync_chart_type_param(text, params)
     try:
         result = execute_tool(
             tool_name=tool_name,
@@ -98,7 +172,13 @@ def handle_chat(
             role=AssistantMessage.ROLE_ASSISTANT,
             content=content,
             message_type="error",
-            payload={"blocks": blocks, "route": routed},
+            payload={
+                "blocks": blocks,
+                "route": routed,
+                "mode": mode,
+                "llm_usage": llm_usage,
+                "llm_model": llm_model,
+            },
         )
         update_context(conversation, {"mode": mode, "last_tool_status": "failed", "intent": tool_name, "params": params})
         return {
@@ -109,6 +189,8 @@ def handle_chat(
             "status": "failed",
             "content": content,
             "blocks": blocks,
+            "llm_usage": llm_usage,
+            "llm_model": llm_model,
             "errors": [{"code": exc.code, "message": exc.message}],
             "context": conversation.context_json,
         }
@@ -136,7 +218,14 @@ def handle_chat(
         role=AssistantMessage.ROLE_ASSISTANT,
         content=content,
         message_type=block_type,
-        payload={"blocks": blocks, "route": routed, "execution_id": result.get("execution_id")},
+        payload={
+            "blocks": blocks,
+            "route": routed,
+            "execution_id": result.get("execution_id"),
+            "mode": mode,
+            "llm_usage": llm_usage,
+            "llm_model": llm_model,
+        },
     )
     return {
         "conversation_id": conversation.id,
@@ -146,6 +235,8 @@ def handle_chat(
         "status": status,
         "content": content,
         "blocks": blocks,
+        "llm_usage": llm_usage,
+        "llm_model": llm_model,
         "errors": [],
         "context": conversation.context_json,
         "execution_id": result.get("execution_id"),
@@ -154,7 +245,7 @@ def handle_chat(
 
 def _extract_result_ids(block_type: str, data: dict[str, Any]) -> list[int]:
     ids: list[int] = []
-    if block_type == "notice_list":
+    if block_type in {"notice_list", "notice_detail"}:
         for item in data.get("items") or []:
             value = item.get("id") or item.get("noticeRawId")
             if value is not None:
@@ -166,6 +257,11 @@ def _extract_result_ids(block_type: str, data: dict[str, Any]) -> list[int]:
         if isinstance(item, dict) and item.get("id") is not None:
             try:
                 ids.append(int(item["id"]))
+            except (TypeError, ValueError):
+                pass
+        if data.get("notice_id") is not None:
+            try:
+                ids.append(int(data["notice_id"]))
             except (TypeError, ValueError):
                 pass
     if block_type == "goods_table":

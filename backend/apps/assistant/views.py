@@ -13,6 +13,7 @@ from apps.assistant.permissions import ASSISTANT_MANAGE, ASSISTANT_USE, ASSISTAN
 from apps.assistant.services import conversation as conversation_service
 from apps.assistant.services.orchestrator import handle_chat
 from apps.assistant.services.tool_registry import list_tools
+from apps.assistant.services.user_settings import public_settings_for_user, update_user_settings
 from apps.data_store.views import _require_login, _require_permission
 
 
@@ -213,3 +214,22 @@ def assistant_action_confirm(request, execution_id: int):
         return JsonResponse(result)
     except ToolExecutionError as exc:
         return JsonResponse({"detail": exc.message, "code": exc.code}, status=exc.status)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT", "PATCH"])
+def assistant_settings(request):
+    """当前登录用户的助手个人设置。读写均用 assistant.use（仅影响本人，无需新 manage 权限）。"""
+    user_data, error = _require_permission(request, ASSISTANT_USE)
+    if error:
+        return error
+
+    if request.method == "GET":
+        return JsonResponse(public_settings_for_user(user_data))
+
+    payload = _parse_json(request)
+    try:
+        update_user_settings(str(user_data["id"]), payload)
+    except ValueError as exc:
+        return JsonResponse({"detail": str(exc)}, status=400)
+    return JsonResponse(public_settings_for_user(user_data))

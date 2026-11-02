@@ -9,6 +9,8 @@ docs
 .env.local
 .env.prod
 .env.official
+deploy/.env.assistant.local
+**/.env.assistant.local
 backend/media/
 npm-debug.log*
 .DS_Store

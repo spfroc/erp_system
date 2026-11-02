@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>壹采科技数据服务平台</title>
-  <script src="/portal/echarts.min.js"></script>
   <style>
     :root {
       --green: #1b6844;
@@ -194,6 +193,16 @@
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .tag { background: #fbf3df; color: #8a6414; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
     .empty { color: var(--muted); padding: 28px 0; }
+    .enterprise-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .enterprise-table th, .enterprise-table td { padding: 10px 8px; border-bottom: 1px solid #f0e6d6; text-align: left; vertical-align: top; }
+    .enterprise-table th { color: var(--muted); font-weight: 600; }
+    .enterprise-table tr.clickable { cursor: pointer; }
+    .enterprise-table tr.clickable:hover { background: #fbf3df; }
+    .enterprise-table .mono { font-variant-numeric: tabular-nums; }
+    .enterprise-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .enterprise-actions .primary, .enterprise-actions .ghost { width: auto; margin: 0; }
+    .enterprise-form { display: grid; gap: 10px; max-width: 520px; }
+    .enterprise-form label { margin: 0; }
     .boot {
       height: 100%; display: grid; place-items: center;
       background:
@@ -211,15 +220,39 @@
     #panel > .charts,
     #panel > .metrics { max-width: none; width: 100%; }
     .home-site-block .metrics { margin-top: 4px; width: 100%; }
+
+    .menu-toggle { display: none; border: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; width: 40px; height: 40px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; padding: 0; }
+    .menu-toggle span { display: block; width: 18px; height: 2px; background: var(--ink); border-radius: 2px; }
+    .side-backdrop { display: none; }
+    .table-scroll { overflow: auto; -webkit-overflow-scrolling: touch; }
+    .table-scroll-hint { display: none; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+    @media (max-width: 960px) {
+      .menu-toggle { display: inline-flex; }
+      .topbar { gap: 10px; }
+      .topbar h2 { flex: 1; min-width: 0; font-size: 16px; }
+      .app { display: block; position: relative; }
+      .side {
+        position: fixed; inset: 0 auto 0 0; width: min(280px, 86vw); z-index: 50;
+        transform: translateX(-105%); transition: transform .22s ease;
+        flex-direction: column; align-items: stretch; overflow: auto;
+      }
+      .app.side-open .side { transform: translateX(0); }
+      .side-backdrop {
+        display: block; position: fixed; inset: 0; background: rgba(36,28,20,.42); z-index: 45; opacity: 0; pointer-events: none; transition: opacity .22s ease;
+      }
+      .app.side-open .side-backdrop { opacity: 1; pointer-events: auto; }
+      .brand { padding: 2px 8px 16px; }
+      .nav { flex-direction: column; width: 100%; }
+      .table-scroll-hint { display: block; }
+      .enterprise-table { min-width: 640px; }
+    }
+
     @media (max-width: 960px) {
       .login, .app, .metrics, .charts, .tag-metrics, .tag-tables, .detail-grid { grid-template-columns: 1fr; }
       .login-visual { height: 220px; }
       .login-visual img { height: 220px; }
       html, body { overflow: auto; }
       .login, .app { height: auto; min-height: 100%; overflow: visible; }
-      .side { flex-direction: row; align-items: center; gap: 8px; padding: 12px; }
-      .brand { padding: 0 8px; }
-      .nav { flex-direction: row; }
       .app { display: block; }
       .content { overflow: visible; display: block; }
       .list-card, .charts > .card { overflow: visible; display: block; }
@@ -249,12 +282,14 @@
   </section>
 
   <section id="app" class="app" hidden>
-    <aside class="side">
+    <div class="side-backdrop" id="side-backdrop" hidden></div>
+    <aside class="side" id="side">
       <div class="brand"><span class="brand-mark">壹</span><span>壹采科技</span></div>
       <nav class="nav" id="nav"></nav>
     </aside>
     <div class="workspace">
       <header class="topbar">
+        <button type="button" class="menu-toggle" id="menu-toggle" aria-label="打开菜单"><span></span><span></span><span></span></button>
         <h2 id="title">公告列表</h2>
         <div class="user-menu">
           <button id="user-trigger" class="user-trigger" type="button">
@@ -273,6 +308,16 @@
   </section>
 
   <script>
+
+    const menuToggle = document.getElementById("menu-toggle");
+    const sideBackdrop = document.getElementById("side-backdrop");
+    if (menuToggle) menuToggle.addEventListener("click", () => setSideOpen(true));
+    if (sideBackdrop) sideBackdrop.addEventListener("click", () => setSideOpen(false));
+    const navEl = document.getElementById("nav");
+    if (navEl) navEl.addEventListener("click", (event) => {
+      if (event.target && event.target.closest && event.target.closest("button")) setSideOpen(false);
+    });
+
     const bootView = document.getElementById("boot");
     const loginView = document.getElementById("login");
     const appView = document.getElementById("app");
@@ -306,6 +351,40 @@
     let noticeSearchTimer = 0;
     let tagSearchTimer = 0;
     let charts = [];
+
+    let echartsReady = null;
+    function loadEcharts() {
+      if (window.echarts) return Promise.resolve(window.echarts);
+      if (echartsReady) return echartsReady;
+      echartsReady = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "/portal/echarts.min.js";
+        script.async = true;
+        script.onload = () => resolve(window.echarts);
+        script.onerror = () => reject(new Error("图表库加载失败"));
+        document.head.appendChild(script);
+      });
+      return echartsReady;
+    }
+    function setSideOpen(open) {
+      const app = document.getElementById("app");
+      const backdrop = document.getElementById("side-backdrop");
+      if (!app) return;
+      app.classList.toggle("side-open", open);
+      if (backdrop) backdrop.hidden = !open;
+    }
+    function wrapEnterpriseTable(table) {
+      const hint = document.createElement("p");
+      hint.className = "table-scroll-hint";
+      hint.textContent = "表格可左右滑动查看";
+      const wrap = document.createElement("div");
+      wrap.className = "table-scroll";
+      wrap.appendChild(table);
+      const frag = document.createDocumentFragment();
+      frag.appendChild(hint);
+      frag.appendChild(wrap);
+      return frag;
+    }
     const TAB_STORAGE_KEY = "portal_active_tab";
 
     const MENUS = [
@@ -313,12 +392,22 @@
       ["notices", "公告列表", "portal.notice.view"],
       ["stats", "数据统计", "portal.stats.view"],
       ["subscription", "订阅", "portal.notice.subscribe"],
+      ["orders", "企业订单", "portal.order.view"],
+      ["invoices", "企业发票", "portal.invoice.view"],
+      ["contracts", "企业合同", "portal.contract.view"],
+      ["accounts", "企业账号", "portal.account.view"],
     ];
     const PERMISSION_LABELS = {
       "portal.notice.view": "公告列表",
       "portal.stats.view": "数据统计",
       "portal.notice.subscribe": "订阅",
+      "portal.order.view": "企业订单",
+      "portal.invoice.view": "企业发票",
+      "portal.contract.view": "企业合同",
+      "portal.account.view": "查看企业账号",
+      "portal.account.manage": "管理企业账号",
     };
+    let enterpriseQuery = { orders: { page: 1, search: "" }, invoices: { page: 1, search: "" }, contracts: { page: 1, search: "" }, accounts: { page: 1, search: "" } };
 
     function readSavedTab() {
       const hash = (location.hash || "").replace(/^#/, "").trim();
@@ -370,7 +459,9 @@
       const name = account.customerName || account.name || "客户";
       document.getElementById("who").textContent = name;
       document.getElementById("avatar").textContent = name.slice(0, 1);
-      const allowed = MENUS.filter((item) => (account.permissions || []).includes(item[2]));
+      const perms = new Set(account.permissions || []);
+      if (perms.has("portal.account.manage")) perms.add("portal.account.view");
+      const allowed = MENUS.filter((item) => perms.has(item[2]));
       const nav = document.getElementById("nav");
       nav.innerHTML = "";
       allowed.forEach((item) => {
@@ -401,7 +492,17 @@
       saveTab(id);
       markNav();
       disposeCharts();
-      const titles = { home: "首页", notices: "公告列表", stats: "数据统计", subscription: "订阅", account: "用户中心" };
+      const titles = {
+        home: "首页",
+        notices: "公告列表",
+        stats: "数据统计",
+        subscription: "订阅",
+        orders: "企业订单",
+        invoices: "企业发票",
+        contracts: "企业合同",
+        accounts: "企业账号",
+        account: "用户中心",
+      };
       document.getElementById("title").textContent = titles[id] || "";
       const panel = document.getElementById("panel");
       panel.classList.toggle("stats-panel", id === "stats" || id === "home");
@@ -411,11 +512,398 @@
         else if (id === "stats") await renderStats(panel);
         else if (id === "notices") await renderNotices(panel);
         else if (id === "subscription") renderSubscription(panel);
+        else if (id === "orders") await renderOrders(panel);
+        else if (id === "invoices") await renderInvoices(panel);
+        else if (id === "contracts") await renderContracts(panel);
+        else if (id === "accounts") await renderAccounts(panel);
         else renderAccount(panel);
       } catch (error) {
         panel.innerHTML = '<p class="error"></p>';
         panel.querySelector(".error").textContent = error.message;
       }
+    }
+
+    function hasPortalPerm(id) {
+      const perms = new Set(me?.permissions || []);
+      if (perms.has("portal.account.manage")) perms.add("portal.account.view");
+      return perms.has(id);
+    }
+
+    function bindEnterpriseSearch(toolbar, key, onSearch) {
+      const input = toolbar.querySelector("[name=search]");
+      const apply = toolbar.querySelector("[data-role=search]");
+      if (!input || !apply) return;
+      input.value = enterpriseQuery[key].search || "";
+      const run = () => {
+        enterpriseQuery[key].search = input.value.trim();
+        enterpriseQuery[key].page = 1;
+        onSearch();
+      };
+      apply.onclick = run;
+      input.onkeydown = (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          run();
+        }
+      };
+    }
+
+    function fillEnterprisePager(pager, key, body, reload) {
+      const total = body.total || 0;
+      const page = body.page || 1;
+      const pageSize = body.page_size || 20;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      pager.innerHTML =
+        "<span>共 " + total + " 条 · 第 " + page + " / " + totalPages + " 页</span><div>" +
+        '<button class="ghost" type="button" data-page="1">首页</button>' +
+        '<button class="ghost" type="button" data-page="' + Math.max(1, page - 1) + '">上一页</button>' +
+        '<button class="ghost" type="button" data-page="' + Math.min(totalPages, page + 1) + '">下一页</button>' +
+        '<button class="ghost" type="button" data-page="' + totalPages + '">末页</button></div>';
+      pager.querySelectorAll("[data-page]").forEach((button) => {
+        button.onclick = () => {
+          enterpriseQuery[key].page = Number(button.dataset.page) || 1;
+          reload();
+        };
+      });
+    }
+
+    function showDetailModal(title, fields, actionsHtml) {
+      const backdrop = document.createElement("div");
+      backdrop.className = "modal-backdrop";
+      backdrop.innerHTML =
+        '<div class="modal"><div class="modal-head"><div><h3></h3></div><button class="icon-button" type="button" aria-label="关闭">×</button></div>' +
+        '<div class="modal-body"><div class="detail-grid"></div>' + (actionsHtml || "") + "</div></div>";
+      backdrop.querySelector("h3").textContent = title;
+      const grid = backdrop.querySelector(".detail-grid");
+      fields.forEach(([label, value, wide]) => {
+        const info = document.createElement("div");
+        info.className = "info" + (wide ? " wide" : "");
+        info.innerHTML = "<span></span><strong></strong>";
+        info.querySelector("span").textContent = label;
+        const strong = info.querySelector("strong");
+        strong.textContent = value == null || value === "" ? "—" : String(value);
+        if (wide) strong.style.whiteSpace = "pre-line";
+        grid.appendChild(info);
+      });
+      const close = () => backdrop.remove();
+      backdrop.querySelector(".icon-button").onclick = close;
+      backdrop.addEventListener("click", (event) => { if (event.target === backdrop) close(); });
+      document.body.appendChild(backdrop);
+      return backdrop;
+    }
+
+    async function renderOrders(panel) {
+      const q = enterpriseQuery.orders;
+      const params = new URLSearchParams({ page: String(q.page), page_size: "20", search: q.search || "" });
+      const body = await api("/api/portal/orders/?" + params.toString());
+      panel.innerHTML = "";
+      const toolbar = document.createElement("div");
+      toolbar.className = "toolbar";
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="订单号 / 状态" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      bindEnterpriseSearch(toolbar, "orders", () => renderOrders(panel));
+      const card = document.createElement("div");
+      card.className = "card list-card";
+      if (!(body.items || []).length) {
+        card.innerHTML = '<p class="empty">暂无本企业订单</p>';
+      } else {
+        const table = document.createElement("table");
+        table.className = "enterprise-table";
+        table.innerHTML = "<thead><tr><th>类型</th><th>订单号</th><th>金额</th><th>状态</th><th>创建时间</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        (body.items || []).forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.className = "clickable";
+          tr.innerHTML =
+            "<td></td><td class='mono'></td><td class='mono'></td><td></td><td></td>";
+          const cells = tr.querySelectorAll("td");
+          cells[0].textContent = item.kind || "订单";
+          cells[1].textContent = item.orderNo || item.id || "—";
+          cells[2].textContent = formatMoney(item.amount);
+          cells[3].textContent = item.status || "—";
+          cells[4].textContent = formatDateTimeShanghai(item.createdAt);
+          tr.onclick = async () => {
+            const detail = await api("/api/portal/orders/" + encodeURIComponent(item.id) + "/");
+            const data = detail.data || {};
+            const itemLines = (data.items || []).map((row) => {
+              const qty = row.quantity != null ? (" × " + row.quantity) : "";
+              const amt = row.amount != null ? ("　" + formatMoney(row.amount)) : "";
+              return (row.productName || "未命名") + qty + amt;
+            }).filter(Boolean);
+            showDetailModal(data.orderNo || "订单详情", [
+              ["类型", data.kind],
+              ["订单号", data.orderNo],
+              ["金额", formatMoney(data.amount)],
+              ["应收", formatMoney(data.receivableAmount)],
+              ["已收", formatMoney(data.receivedAmount)],
+              ["状态", data.status],
+              ["项目", data.projectName || "—"],
+              ["明细", itemLines.length ? itemLines.join("\n") : "暂无明细", true],
+              ["创建时间", formatDateTimeShanghai(data.createdAt, true), true],
+            ]);
+          };
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        card.appendChild(wrapEnterpriseTable(table));
+      }
+      const pager = document.createElement("div");
+      pager.className = "pager";
+      panel.appendChild(toolbar);
+      panel.appendChild(card);
+      panel.appendChild(pager);
+      fillEnterprisePager(pager, "orders", body, () => renderOrders(panel));
+    }
+
+    async function renderInvoices(panel) {
+      const q = enterpriseQuery.invoices;
+      const params = new URLSearchParams({ page: String(q.page), page_size: "20", search: q.search || "" });
+      const body = await api("/api/portal/invoices/?" + params.toString());
+      panel.innerHTML = "";
+      const toolbar = document.createElement("div");
+      toolbar.className = "toolbar";
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="发票号 / 买卖方" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      bindEnterpriseSearch(toolbar, "invoices", () => renderInvoices(panel));
+      const card = document.createElement("div");
+      card.className = "card list-card";
+      if (!(body.items || []).length) {
+        card.innerHTML = '<p class="empty">暂无本企业发票</p>';
+      } else {
+        const table = document.createElement("table");
+        table.className = "enterprise-table";
+        table.innerHTML = "<thead><tr><th>发票号</th><th>类型</th><th>金额</th><th>销方</th><th>状态</th><th>开票日期</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        (body.items || []).forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.className = "clickable";
+          tr.innerHTML = "<td class='mono'></td><td></td><td class='mono'></td><td></td><td></td><td></td>";
+          const cells = tr.querySelectorAll("td");
+          cells[0].textContent = item.invoiceNo || item.id || "—";
+          cells[1].textContent = item.type || "—";
+          cells[2].textContent = formatMoney(item.amount);
+          cells[3].textContent = item.sellerName || "—";
+          cells[4].textContent = item.status || "—";
+          cells[5].textContent = formatDateTimeShanghai(item.invoiceDate);
+          tr.onclick = async () => {
+            const detail = await api("/api/portal/invoices/" + encodeURIComponent(item.id) + "/");
+            const data = detail.data || {};
+            const actions = data.fileId
+              ? '<div class="modal-actions"><a class="primary" href="/api/portal/invoices/' + encodeURIComponent(data.id) + '/file/" target="_blank" rel="noopener">下载发票附件</a></div>'
+              : "";
+            showDetailModal(data.invoiceNo || "发票详情", [
+              ["发票号", data.invoiceNo],
+              ["类型", data.type],
+              ["金额", formatMoney(data.amount)],
+              ["状态", data.status],
+              ["开票日期", formatDateTimeShanghai(data.invoiceDate)],
+              ["买方", data.buyerName],
+              ["销方", data.sellerName],
+              ["附件", data.fileName || (data.fileId ? "已上传" : "无")],
+              ["备注", data.remark || data.note || "", true],
+            ], actions);
+          };
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        card.appendChild(wrapEnterpriseTable(table));
+      }
+      const pager = document.createElement("div");
+      pager.className = "pager";
+      panel.appendChild(toolbar);
+      panel.appendChild(card);
+      panel.appendChild(pager);
+      fillEnterprisePager(pager, "invoices", body, () => renderInvoices(panel));
+    }
+
+    async function renderContracts(panel) {
+      const q = enterpriseQuery.contracts;
+      const params = new URLSearchParams({ page: String(q.page), page_size: "20", search: q.search || "" });
+      const body = await api("/api/portal/contracts/?" + params.toString());
+      panel.innerHTML = "";
+      const toolbar = document.createElement("div");
+      toolbar.className = "toolbar";
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="项目 / 合同" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      bindEnterpriseSearch(toolbar, "contracts", () => renderContracts(panel));
+      const card = document.createElement("div");
+      card.className = "card list-card";
+      if (!(body.items || []).length) {
+        card.innerHTML = '<p class="empty">暂无本企业合同</p>';
+      } else {
+        const table = document.createElement("table");
+        table.className = "enterprise-table";
+        table.innerHTML = "<thead><tr><th>类型</th><th>项目</th><th>订单号</th><th>状态</th><th>附件</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        (body.items || []).forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.className = "clickable";
+          tr.innerHTML = "<td></td><td></td><td class='mono'></td><td></td><td></td>";
+          const cells = tr.querySelectorAll("td");
+          cells[0].textContent = item.kind || "合同";
+          cells[1].textContent = item.projectName || item.projectNo || "—";
+          cells[2].textContent = item.orderNo || "—";
+          cells[3].textContent = item.contractStatus || "—";
+          cells[4].textContent = item.contractFileName || (item.contractFileId ? "已上传" : "无");
+          tr.onclick = async () => {
+            const detail = await api("/api/portal/contracts/" + encodeURIComponent(item.id) + "/");
+            const data = detail.data || {};
+            const actions = data.contractFileId
+              ? '<div class="modal-actions"><a class="primary" href="/api/portal/contracts/' + encodeURIComponent(data.id) + '/file/" target="_blank" rel="noopener">下载合同</a></div>'
+              : "";
+            showDetailModal(data.projectName || "合同详情", [
+              ["类型", data.kind],
+              ["项目", data.projectName],
+              ["项目编号", data.projectNo],
+              ["订单号", data.orderNo],
+              ["合同状态", data.contractStatus],
+              ["附件名", data.contractFileName, true],
+            ], actions);
+          };
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        card.appendChild(wrapEnterpriseTable(table));
+      }
+      const pager = document.createElement("div");
+      pager.className = "pager";
+      panel.appendChild(toolbar);
+      panel.appendChild(card);
+      panel.appendChild(pager);
+      fillEnterprisePager(pager, "contracts", body, () => renderContracts(panel));
+    }
+
+    async function renderAccounts(panel) {
+      const q = enterpriseQuery.accounts;
+      const params = new URLSearchParams({ page: String(q.page), page_size: "20", search: q.search || "" });
+      const body = await api("/api/portal/accounts/?" + params.toString());
+      panel.innerHTML = "";
+      const toolbar = document.createElement("div");
+      toolbar.className = "toolbar";
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="姓名 / 手机号" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      bindEnterpriseSearch(toolbar, "accounts", () => renderAccounts(panel));
+      if (hasPortalPerm("portal.account.manage")) {
+        const addBtn = document.createElement("button");
+        addBtn.className = "primary";
+        addBtn.type = "button";
+        addBtn.textContent = "新增账号";
+        addBtn.style.width = "auto";
+        addBtn.onclick = () => openAccountEditor(null, () => renderAccounts(panel));
+        toolbar.appendChild(addBtn);
+      }
+      const card = document.createElement("div");
+      card.className = "card list-card";
+      if (!(body.items || []).length) {
+        card.innerHTML = '<p class="empty">暂无同企业账号</p>';
+      } else {
+        const table = document.createElement("table");
+        table.className = "enterprise-table";
+        table.innerHTML = "<thead><tr><th>名称</th><th>手机号</th><th>状态</th><th>权限</th><th>操作</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        (body.items || []).forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = "<td></td><td class='mono'></td><td></td><td></td><td class='option-actions'></td>";
+          const cells = tr.querySelectorAll("td");
+          cells[0].textContent = item.name || "—";
+          cells[1].textContent = item.phone || "—";
+          cells[2].textContent = item.status || "—";
+          cells[3].textContent = (item.permissions || []).map((id) => PERMISSION_LABELS[id] || id).join("、") || "—";
+          if (hasPortalPerm("portal.account.manage")) {
+            const edit = document.createElement("button");
+            edit.className = "copy-link";
+            edit.type = "button";
+            edit.textContent = "编辑";
+            edit.onclick = () => openAccountEditor(item, () => renderAccounts(panel));
+            cells[4].appendChild(edit);
+            if (item.id !== me.id) {
+              const del = document.createElement("button");
+              del.className = "copy-link";
+              del.type = "button";
+              del.style.color = "#a33b2b";
+              del.textContent = "删除";
+              del.onclick = async () => {
+                if (!window.confirm("确认删除账号「" + (item.name || item.phone) + "」？")) return;
+                await api("/api/portal/accounts/" + encodeURIComponent(item.id) + "/", { method: "DELETE", body: "{}" });
+                renderAccounts(panel);
+              };
+              cells[4].appendChild(del);
+            }
+          } else {
+            cells[4].textContent = "—";
+          }
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        card.appendChild(wrapEnterpriseTable(table));
+      }
+      const pager = document.createElement("div");
+      pager.className = "pager";
+      panel.appendChild(toolbar);
+      panel.appendChild(card);
+      panel.appendChild(pager);
+      fillEnterprisePager(pager, "accounts", body, () => renderAccounts(panel));
+    }
+
+    function openAccountEditor(item, onSaved) {
+      const isNew = !item;
+      const backdrop = document.createElement("div");
+      backdrop.className = "modal-backdrop";
+      backdrop.innerHTML =
+        '<div class="modal"><div class="modal-head"><div><h3></h3><p>仅可管理本企业账号，不可跨企业。</p></div>' +
+        '<button class="icon-button" type="button" aria-label="关闭">×</button></div>' +
+        '<div class="modal-body"><form class="enterprise-form">' +
+        '<label>账号名称<input name="name" required /></label>' +
+        '<label>手机号<input name="phone" required inputmode="tel" /></label>' +
+        '<label>' + (isNew ? "登录密码" : "重置密码（留空不改）") + '<input name="password" type="password" ' + (isNew ? "required" : "") + " /></label>" +
+        '<label>状态<select name="status"><option value="启用">启用</option><option value="停用">停用</option></select></label>' +
+        '<fieldset style="border:1px solid var(--line);border-radius:12px;padding:10px"><legend>门户权限</legend><div data-role="perms"></div></fieldset>' +
+        '<p class="error"></p><div class="enterprise-actions"><button class="ghost" type="button" data-role="cancel">取消</button><button class="primary" type="submit">保存</button></div>' +
+        "</form></div></div>";
+      backdrop.querySelector("h3").textContent = isNew ? "新增企业账号" : "编辑企业账号";
+      const form = backdrop.querySelector("form");
+      form.name.value = item?.name || "";
+      form.phone.value = item?.phone || "";
+      form.status.value = item?.status || "启用";
+      const permBox = form.querySelector("[data-role=perms]");
+      const selected = new Set(item?.permissions || ["portal.notice.view"]);
+      Object.entries(PERMISSION_LABELS).forEach(([id, label]) => {
+        const row = document.createElement("label");
+        row.style.display = "flex";
+        row.style.gap = "8px";
+        row.style.alignItems = "center";
+        row.style.marginBottom = "6px";
+        row.innerHTML = '<input type="checkbox" style="width:auto" /><span></span>';
+        row.querySelector("input").value = id;
+        row.querySelector("input").checked = selected.has(id);
+        row.querySelector("span").textContent = label;
+        permBox.appendChild(row);
+      });
+      const close = () => backdrop.remove();
+      backdrop.querySelector(".icon-button").onclick = close;
+      form.querySelector("[data-role=cancel]").onclick = close;
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const error = form.querySelector(".error");
+        error.textContent = "";
+        const permissions = Array.from(permBox.querySelectorAll("input:checked")).map((input) => input.value);
+        const payload = {
+          name: form.name.value.trim(),
+          phone: form.phone.value.trim(),
+          status: form.status.value,
+          permissions,
+        };
+        if (form.password.value.trim()) payload.password = form.password.value.trim();
+        try {
+          if (isNew) {
+            if (!payload.password) throw new Error("请设置登录密码");
+            await api("/api/portal/accounts/", { method: "POST", body: JSON.stringify(payload) });
+          } else {
+            await api("/api/portal/accounts/" + encodeURIComponent(item.id) + "/", { method: "PATCH", body: JSON.stringify(payload) });
+          }
+          close();
+          onSaved();
+        } catch (err) {
+          error.textContent = err.message;
+        }
+      };
+      document.body.appendChild(backdrop);
     }
 
     function appendMetricRow(parent, rows) {
@@ -634,6 +1122,7 @@
     }
 
     async function renderHome(panel) {
+      await loadEcharts();
       if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
         panel.innerHTML = "";
         mountStatsFilters(panel, { showDealKinds: false, onChange: () => openTab("home") });
@@ -719,6 +1208,39 @@
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0元";
     }
 
+    /** 统一按 Asia/Shanghai 显示；UTC/带偏移 ISO 会换算，无时区则视为东八区墙钟。 */
+    function formatDateTimeShanghai(value, withSeconds) {
+      if (value == null || value === "") return "—";
+      const raw = String(value).trim();
+      if (!raw) return "—";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+      const hasOffset = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(raw);
+      if (!hasOffset) {
+        const m = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (m) {
+          return withSeconds
+            ? m[1] + " " + m[2] + ":" + m[3] + ":" + (m[4] || "00")
+            : m[1] + " " + m[2] + ":" + m[3];
+        }
+        return raw.replace("T", " ").slice(0, withSeconds ? 19 : 16);
+      }
+      const date = new Date(raw);
+      if (Number.isNaN(date.getTime())) return raw.replace("T", " ").slice(0, withSeconds ? 19 : 16);
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: withSeconds ? "2-digit" : undefined,
+        hour12: false,
+      }).formatToParts(date);
+      const get = (type) => (parts.find((part) => part.type === type) || {}).value || "00";
+      const base = get("year") + "-" + get("month") + "-" + get("day") + " " + get("hour") + ":" + get("minute");
+      return withSeconds ? base + ":" + get("second") : base;
+    }
+
     function moneyLabel(value) {
       const amount = Number(value);
       if (!Number.isFinite(amount)) return "0.00";
@@ -784,6 +1306,7 @@
     }
 
     async function renderStats(panel) {
+      await loadEcharts();
       if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
         panel.innerHTML = "";
         mountStatsFilters(panel, {
@@ -944,7 +1467,7 @@
         '<button class="primary" type="button" data-role="open-source">打开原文</button>' +
         '<button class="ghost" type="button" data-role="close">关闭</button>' +
         "</div></div></div>";
-      const meta = [detail.siteLabel, detail.noticeKind, detail.publishTime].filter(Boolean).join(" · ");
+      const meta = [detail.siteLabel, detail.noticeKind, formatDateTimeShanghai(detail.publishTime)].filter((part) => part && part !== "—").join(" · ");
       backdrop.querySelector("h3").textContent = detail.title || "公告详情";
       backdrop.querySelector(".modal-head p").textContent = meta || "—";
       const grid = backdrop.querySelector(".detail-grid");
@@ -957,8 +1480,8 @@
         ["成交金额", detail.dealAmount != null ? formatMoney(detail.dealAmount) : ""],
         ["成交供应商", detail.dealSupplier],
         ["进度", detail.progressLabel],
-        ["开始时间", detail.startTime],
-        ["结束时间", detail.endTime],
+        ["开始时间", detail.startTime ? formatDateTimeShanghai(detail.startTime, true) : ""],
+        ["结束时间", detail.endTime ? formatDateTimeShanghai(detail.endTime, true) : ""],
       ];
       fields.forEach(([label, value]) => {
         if (value == null || value === "") return;
@@ -1017,7 +1540,7 @@
           "</div>" +
           '<span class="kind"></span>';
         article.querySelector("h3").textContent = item.title || "未命名公告";
-        article.querySelector("p").textContent = [item.siteLabel, item.regionName, item.progressLabel, item.publishTime].filter(Boolean).join(" · ");
+        article.querySelector("p").textContent = [item.siteLabel, item.regionName, item.progressLabel, formatDateTimeShanghai(item.publishTime)].filter((part) => part && part !== "—").join(" · ");
         const badge = article.querySelector(".kind");
         badge.textContent = item.noticeKind || "公告";
         const tone = kindTone(item.noticeKind);

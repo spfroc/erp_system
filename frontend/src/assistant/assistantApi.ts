@@ -4,6 +4,7 @@ import type {
   AssistantChatResponse,
   AssistantConversationItem,
   AssistantMessageItem,
+  AssistantUserSettings,
 } from "./assistantTypes";
 
 async function assistantFetch(path: string, init?: RequestInit) {
@@ -101,4 +102,25 @@ export async function confirmAssistantAction(executionId: number, confirmationTo
     blocks: AssistantChatResponse["blocks"];
     idempotent?: boolean;
   };
+}
+
+export async function fetchAssistantSettings(): Promise<AssistantUserSettings> {
+  const response = await assistantFetch("/api/assistant/settings/");
+  if (!response.ok) throw new Error("无法加载助手设置");
+  return response.json();
+}
+
+export async function saveAssistantSettings(
+  payload: Partial<AssistantUserSettings>
+): Promise<AssistantUserSettings> {
+  const response = await assistantFetch("/api/assistant/settings/", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || "保存助手设置失败");
+  }
+  return data as AssistantUserSettings;
 }

@@ -50,7 +50,29 @@ class AssistantMessage(models.Model):
         return f"Message<{self.id}:{self.role}>"
 
 
+class AssistantUserSettings(models.Model):
+    """当前登录用户的助手个人偏好（仅影响本人，不改全局 .env）。"""
+
+    user_id = models.CharField(max_length=64, unique=True, db_index=True)
+    # 追加到服务端固定 SYSTEM_PROMPT 之后；不可替换安全约束
+    system_prompt_addon = models.TextField(blank=True, default="")
+    show_token_usage = models.BooleanField(default=True)
+    # 聊天气泡显示名；空则前端回退为「我」或用户姓名
+    display_name = models.CharField(max_length=64, blank=True, default="")
+    # 头像 URL；空则前端可用用户 profile 中的 avatar 字段（若有）
+    display_avatar_url = models.CharField(max_length=512, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "assistant_user_settings"
+
+    def __str__(self) -> str:
+        return f"AssistantSettings<{self.user_id}>"
+
+
 class AssistantToolExecution(models.Model):
+
     STATUS_PENDING = "pending"
     STATUS_RUNNING = "running"
     STATUS_AWAITING_CONFIRMATION = "awaiting_confirmation"

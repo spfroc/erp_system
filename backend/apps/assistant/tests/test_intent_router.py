@@ -41,11 +41,90 @@ class IntentRouterTests(SimpleTestCase):
                 "reason": "llm",
             },
             "duration_ms": 12,
+            "usage": {
+                "prompt_tokens": 80,
+                "completion_tokens": 20,
+                "total_tokens": 100,
+                "source": "exact",
+            },
         }
-        routed = resolve_intent("帮我找一下那个网络设备型号资料")
+        routed = resolve_intent(
+            "帮我找一下那个网络设备型号资料",
+            system_prompt_addon="回答尽量简洁",
+        )
         self.assertEqual(routed["tool_name"], "erp.product.search")
         self.assertEqual(routed["mode"], "llm_assisted")
         self.assertEqual(routed["params"]["keyword"], "交换机")
+        self.assertEqual(routed["llm_usage"]["total_tokens"], 100)
+        self.assertEqual(routed["llm_usage"]["source"], "exact")
+        system_prompt = chat.call_args.kwargs["system_prompt"]
+        self.assertIn("ERP意图解析器", system_prompt)
+        self.assertIn("用户个人偏好", system_prompt)
+        self.assertIn("回答尽量简洁", system_prompt)
+
+    @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
+    @patch("apps.assistant.services.intent_router.llm_config")
+    @patch("apps.assistant.services.intent_router.chat_completion_json")
+    def test_analytics_goes_through_llm(self, chat, cfg, probe):
+        cfg.return_value = {
+            "enabled": True,
+            "fallback_enabled": True,
+            "base_url": "http://127.0.0.1:8080/v1",
+            "model": "tiny",
+            "timeout": 5,
+            "max_output_tokens": 128,
+            "api_key": "local",
+            "intent_timeout": 20,
+        }
+        chat.return_value = {
+            "ok": True,
+            "data": {
+                "tool_name": "notice.stats",
+                "params": {"relative_period": "last_7_days"},
+                "confidence": 0.9,
+                "clarification": None,
+                "reason": "llm",
+            },
+            "duration_ms": 20,
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "source": "exact"},
+        }
+        routed = resolve_intent("使用柱状图表帮我统计下近7天公告数据的类型和数量")
+        self.assertEqual(routed["mode"], "llm_assisted")
+        self.assertEqual(routed["tool_name"], "notice.stats")
+        self.assertEqual(routed["params"].get("relative_period"), "last_7_days")
+        chat.assert_called_once()
+
+    @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
+    @patch("apps.assistant.services.intent_router.llm_config")
+    @patch("apps.assistant.services.intent_router.chat_completion_json")
+    def test_order_amount_stats_goes_through_llm(self, chat, cfg, probe):
+        """含『销售订单』的金额统计不得走规则列表快路径。"""
+        cfg.return_value = {
+            "enabled": True,
+            "fallback_enabled": True,
+            "base_url": "http://127.0.0.1:8080/v1",
+            "model": "tiny",
+            "timeout": 5,
+            "max_output_tokens": 128,
+            "api_key": "local",
+            "intent_timeout": 20,
+        }
+        chat.return_value = {
+            "ok": True,
+            "data": {
+                "tool_name": "erp.sales.overview",
+                "params": {"relative_period": "this_month"},
+                "confidence": 0.9,
+                "clarification": None,
+                "reason": "llm",
+            },
+            "duration_ms": 20,
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "source": "exact"},
+        }
+        routed = resolve_intent("帮我统计商品销售订单/采购订单的总金额，还有已经开完发票的总金额")
+        self.assertEqual(routed["mode"], "llm_assisted")
+        self.assertEqual(routed["tool_name"], "erp.sales.overview")
+        chat.assert_called_once()
 
     @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": False})
     @patch("apps.assistant.services.intent_router.llm_config")
@@ -62,6 +141,25 @@ class IntentRouterTests(SimpleTestCase):
         routed = resolve_intent("随便聊聊")
         self.assertTrue(routed["needs_clarification"])
         self.assertEqual(routed["mode"], "degraded")
+        self.assertNotIn("我还不能确定要执行的操作", routed.get("clarification") or "")
+
+    @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
+    @patch("apps.assistant.services.intent_router.llm_config")
+    def test_degrade_analytics_when_llm_disabled(self, cfg, probe):
+        cfg.return_value = {
+            "enabled": False,
+            "fallback_enabled": True,
+            "base_url": "",
+            "model": "tiny",
+            "timeout": 5,
+            "max_output_tokens": 128,
+            "api_key": "",
+        }
+        routed = resolve_intent("使用柱状图表帮我统计下近7天采购公告类型")
+        self.assertEqual(routed["mode"], "degraded")
+        self.assertTrue(routed["needs_clarification"])
+        self.assertNotIn("我还不能确定要执行的操作", routed.get("clarification") or "")
+        self.assertIn("模型", routed.get("clarification") or "")
 
     @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
     @patch("apps.assistant.services.intent_router.llm_config")

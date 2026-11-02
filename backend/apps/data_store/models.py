@@ -336,6 +336,9 @@ class LibraryContactRecord(BaseRecord):
 
     class Meta:
         db_table = "library_contacts"
+        indexes = [
+            models.Index(fields=["is_deleted", "id"], name="library_contacts_del_id_idx"),
+        ]
 
 
 class SmsTemplateRecord(BaseRecord):

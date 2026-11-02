@@ -36,6 +36,41 @@ class ConfirmationFlowTests(SimpleTestCase):
         self.assertEqual(kwargs["status"], AssistantToolExecution.STATUS_AWAITING_CONFIRMATION)
         self.assertTrue(kwargs["confirmation_token_hash"])
 
+    @patch("apps.assistant.services.tool_executor.AssistantToolExecution.objects.create")
+    def test_invoice_delete_requires_preview(self, create_mock):
+        record = MagicMock()
+        record.id = 11
+        create_mock.return_value = record
+        user = {
+            "id": "u-confirm",
+            "permissions": ["assistant.use", "invoice.manage"],
+        }
+        result = execute_tool(
+            tool_name="erp.invoice.delete",
+            params={"invoice_no": "26372000005015205376"},
+            user_data=user,
+            confirmed=False,
+        )
+        self.assertEqual(result["status"], "awaiting_confirmation")
+        self.assertEqual(result["block_type"], "tool_preview")
+        self.assertIn("26372000005015205376", result["content"])
+        self.assertEqual(result["data"]["params"]["invoice_no"], "26372000005015205376")
+
+    def test_invoice_delete_forbidden_without_invoice_manage(self):
+        user = {
+            "id": "u-confirm",
+            "permissions": ["assistant.use"],
+        }
+        with self.assertRaises(ToolExecutionError) as ctx:
+            execute_tool(
+                tool_name="erp.invoice.delete",
+                params={"invoice_no": "26372000005015205376"},
+                user_data=user,
+                confirmed=False,
+            )
+        self.assertEqual(ctx.exception.code, "forbidden")
+        self.assertIn("invoice.manage", ctx.exception.message)
+
     @patch("apps.assistant.services.confirmation.execute_tool")
     @patch("apps.assistant.services.confirmation.get_action")
     def test_confirm_success_and_idempotent(self, get_action, execute_mock):

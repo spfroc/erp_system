@@ -446,6 +446,11 @@ LIST_INDEXES: tuple[tuple[str, str, str], ...] = (
     ("notice_parsed", "idx_parsed_site_project", "site_id, project_code"),
     ("notice_parsed", "idx_parsed_publish_time", "publish_time"),
     ("notice_parsed", "idx_parsed_publish_raw", "publish_time, notice_raw_id"),
+    (
+        "notice_parsed",
+        "idx_parsed_stats_cover",
+        "publish_time, site_id, notice_kind, budget_amount, deal_amount",
+    ),
     ("notice_goods", "idx_goods_raw_product", "notice_raw_id, product_name(191)"),
 )
 

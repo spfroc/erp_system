@@ -20,6 +20,18 @@ def _issue_confirmation_token() -> tuple[str, str]:
     return token, token_hash
 
 
+def _preview_copy(tool_name: str, description: str, params: dict[str, Any]) -> tuple[str, str]:
+    """返回 (content, description) 供确认卡片展示。"""
+    if tool_name == "erp.invoice.delete":
+        invoice_no = str(params.get("invoice_no") or params.get("invoice_id") or "").strip()
+        label = f"发票「{invoice_no}」" if invoice_no else "该发票"
+        description = f"删除{label}"
+        content = f"即将删除{label}。请确认后执行（已确认状态的发票不可删除）。"
+        return content, description
+    description = description or tool_name
+    return f"即将执行「{description}」，请确认后继续。", description
+
+
 class ToolExecutionError(Exception):
     def __init__(self, code: str, message: str, status: int = 400):
         self.code = code
@@ -66,6 +78,7 @@ def execute_tool(
 
     if tool.requires_confirmation and not confirmed:
         token, token_hash = _issue_confirmation_token()
+        preview_content, preview_description = _preview_copy(tool.name, tool.description, cleaned)
         record = AssistantToolExecution.objects.create(
             conversation_id=conversation_id,
             user_id=user_id,
@@ -77,7 +90,7 @@ def execute_tool(
             result_json={
                 "preview": True,
                 "risk_level": tool.risk_level,
-                "description": tool.description,
+                "description": preview_description,
             },
         )
         return {
@@ -85,11 +98,11 @@ def execute_tool(
             "tool_name": tool.name,
             "status": "awaiting_confirmation",
             "block_type": "tool_preview",
-            "summary": f"即将执行：{tool.description}",
-            "content": f"即将执行「{tool.description}」，请确认后继续。",
+            "summary": preview_description,
+            "content": preview_content,
             "data": {
                 "tool_name": tool.name,
-                "description": tool.description,
+                "description": preview_description,
                 "risk_level": tool.risk_level,
                 "params": cleaned,
                 "execution_id": record.id,
