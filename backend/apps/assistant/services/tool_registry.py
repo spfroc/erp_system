@@ -17,6 +17,8 @@ class ToolDefinition:
     permission: str
     risk_level: RiskLevel = "read"
     requires_confirmation: bool = False
+    # 写工具默认不对 MCP 暴露；显式开启后可在企微连接器中调用（仍需业务权限）
+    mcp_expose: bool = False
     handler: Callable[..., dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
     def public_dict(self) -> dict[str, Any]:
@@ -27,6 +29,7 @@ class ToolDefinition:
             "permission": self.permission,
             "risk_level": self.risk_level,
             "requires_confirmation": self.requires_confirmation,
+            "mcp_expose": self.mcp_expose,
         }
 
 

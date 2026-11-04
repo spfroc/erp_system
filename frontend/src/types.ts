@@ -851,6 +851,7 @@ export type PermissionKey =
   | "assistant.view"
   | "assistant.use"
   | "assistant.manage"
+  | "mcpLog.view"
   | "user.manage";
 
 export interface NavCategory {

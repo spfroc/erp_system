@@ -9,11 +9,19 @@ def register_all_tools() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    from . import buyer_tools, devops_tools, erp_tools, navigation_tools, notice_tools  # noqa: F401,WPS433
+    from . import (  # noqa: F401,WPS433
+        buyer_tools,
+        devops_tools,
+        erp_tools,
+        navigation_tools,
+        notice_tools,
+        platform_account_tools,
+    )
 
     notice_tools.register()
     buyer_tools.register()
     erp_tools.register()
+    platform_account_tools.register()
     navigation_tools.register()
     devops_tools.register()
     _REGISTERED = True

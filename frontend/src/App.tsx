@@ -36,6 +36,7 @@ import {
   Table2,
   Trash2,
   Truck,
+  UserRound,
   WalletCards,
   Upload,
   UserPlus,
@@ -70,6 +71,8 @@ const CustomerAccountsPanel = lazy(() => import("./CustomerAccounts").then((m) =
 const OfficialSeoPanel = lazy(() => import("./OfficialSeo").then((m) => ({ default: m.OfficialSeoPanel })));
 const OfficialSitesPanel = lazy(() => import("./OfficialSites").then((m) => ({ default: m.OfficialSitesPanel })));
 const SmsPanel = lazy(() => import("./SmsPanel").then((m) => ({ default: m.SmsPanel })));
+const McpCallLogs = lazy(() => import("./McpCallLogs").then((m) => ({ default: m.McpCallLogs })));
+const ProfileCenter = lazy(() => import("./ProfileCenter").then((m) => ({ default: m.ProfileCenter })));
 import { DateTimeField } from "./DateTimeField";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
 import {
@@ -227,7 +230,7 @@ const SESSION_USER_KEY = "yicai-erp-current-user-id";
 const VIEW_STORAGE_KEY = "yicai-erp-active-view";
 
 function isCatalogView(value: string): value is View {
-  return Boolean(VIEW_CATALOG_BY_ID[value as View]);
+  return value === "profile" || Boolean(VIEW_CATALOG_BY_ID[value as keyof typeof VIEW_CATALOG_BY_ID]);
 }
 
 function readStoredView(): View {
@@ -285,7 +288,7 @@ function resolveNavConfig(data: AppData): { categories: NavCategory[]; groups: N
   const items = rawItems
     .filter((item) => item.enabled !== false && catalogEntryForView(item.viewId))
     .map((item) => {
-      const catalog = VIEW_CATALOG_BY_ID[item.viewId as View];
+      const catalog = catalogEntryForView(item.viewId)!;
       const groupKey = item.groupKey || "";
       const categoryKey = item.categoryKey || groupCategory.get(groupKey) || "";
       return {
@@ -465,10 +468,11 @@ const permissionLabels: Record<PermissionKey, string> = {
   "assistant.view": "查看智能助手",
   "assistant.use": "使用智能助手",
   "assistant.manage": "管理智能助手",
+  "mcpLog.view": "查看MCP调用日志",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
   { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
   { title: "客户门户", keys: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe", "portal.order.view", "portal.invoice.view", "portal.contract.view", "portal.account.view", "portal.account.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
@@ -2952,6 +2956,7 @@ function requiredPermissionForLog(log: Omit<OperationLog, "id" | "createdAt">): 
 }
 
 function canAccessView(permissionSet: Set<PermissionKey>, view: View, navItems: ResolvedNavItem[] = []) {
+  if (view === "profile") return true;
   const item = navItems.find((nav) => nav.id === view) || (() => {
     const catalog = catalogEntryForView(view);
     return catalog
@@ -3420,6 +3425,8 @@ export default function App() {
   const [currentUserId, setCurrentUserId] = useState(() => window.localStorage.getItem(SESSION_USER_KEY) ?? "");
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({});
   const [showHelp, setShowHelp] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
   const [smsDraftContacts, setSmsDraftContacts] = useState<LibraryContact[] | undefined>(undefined);
@@ -3455,6 +3462,24 @@ export default function App() {
     const timer = window.setTimeout(() => setNotice(null), notice.type === "success" ? 2600 : 5000);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [userMenuOpen]);
 
   async function loadAppData() {
     setLoadError("");
@@ -3783,20 +3808,82 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           <div>
-            <h1>{visibleNavItems.find((item) => item.id === view)?.label}</h1>
+            <h1>{view === "profile" ? "个人中心" : visibleNavItems.find((item) => item.id === view)?.label}</h1>
           </div>
           <div className="current-user">
-            <div>
-              <strong>{currentUser.name}</strong>
-              <span>{userRoleNames(data, currentUser)}</span>
+            <button className="ghost" type="button" onClick={() => setShowHelp(true)}>
+              <CircleHelp size={16} />
+              帮助
+            </button>
+            <div className={`user-menu${userMenuOpen ? " open" : ""}`} ref={userMenuRef}>
+              <button
+                type="button"
+                className="user-menu-trigger"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((open) => !open)}
+              >
+                <div className="user-menu-avatar" aria-hidden="true">
+                  {(currentUser.name || "?").trim().slice(0, 1)}
+                </div>
+                <div className="user-menu-text">
+                  <strong>{currentUser.name}</strong>
+                  <span>{userRoleNames(data, currentUser)}</span>
+                </div>
+                <ChevronDown size={16} className={userMenuOpen ? "open" : ""} />
+              </button>
+              {userMenuOpen && (
+                <div className="user-menu-dropdown" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setView("profile");
+                    }}
+                  >
+                    <UserRound size={16} />
+                    个人中心
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger-action"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      logout();
+                    }}
+                  >
+                    <LogOut size={16} />
+                    退出登录
+                  </button>
+                </div>
+              )}
             </div>
-            <button className="ghost" onClick={() => setShowHelp(true)}><CircleHelp size={16} />帮助</button>
-            <button className="ghost" onClick={logout}><LogOut size={16} />退出</button>
           </div>
         </header>
 
         {view === "dashboard" && <Dashboard data={data} commit={commit} currentUser={currentUser} />}
         <Suspense fallback={<div className="table-empty">页面加载中…</div>}>
+          {view === "profile" && (
+            <ProfileCenter
+              data={data}
+              currentUser={currentUser}
+              permissions={permissions}
+              permissionLabels={permissionLabels}
+              permissionGroups={permissionGroups}
+              applyUser={(user) => {
+                setData((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    users: prev.users.map((item) => (item.id === user.id ? { ...item, ...user, password: undefined } : item)),
+                  };
+                });
+              }}
+              onNotice={(message, type = "error") => setNotice({ type, message })}
+            />
+          )}
           {view === "assistant" && (
             <AssistantPage
               can={can}
@@ -3869,6 +3956,7 @@ export default function App() {
           {view === "paymentStats" && <CashflowStats data={data} kind="payment" />}
           {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
           {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
+          {view === "mcpLogs" && <McpCallLogs onNotice={setNotice} />}
           {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
           {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
           {view === "devOps" && <DevOps onNotice={setNotice} canManage={can("dev.ops.manage")} />}

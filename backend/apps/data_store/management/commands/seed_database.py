@@ -108,6 +108,7 @@ ALL_PERMISSIONS = [
     "assistant.view",
     "assistant.use",
     "assistant.manage",
+    "mcpLog.view",
     "user.manage",
 ]
 

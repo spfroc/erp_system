@@ -19,6 +19,7 @@ SYSTEM_PROMPT = """ERP意图解析器。只输出JSON选一个工具。禁止SQL
 - notice.stats：公告按类型统计数量（近N天公告类型数量）
 - deal.stats：成交金额
 列表才用：erp.sales_order.search；erp.purchase_order.search；erp.service_order.search；deal.search；notice.search。
+平台账号：erp.platform_account.search；erp.platform_account.create（可用 text 识别添加）；erp.platform_account.update。
 其它：deal.suppliers；erp.customer.expiry；erp.project.status；navigation.find。
 params.relative_period：today|yesterday|this_month|last_month|last_7_days|last_30_days|last_N_days|all；
 未指定时间的「总金额/累计」用 all；「本月销售情况」「本月开票」用 this_month。
@@ -49,6 +50,9 @@ _RULE_FASTPATH_REASONS = frozenset(
         "goods",
         "buyer",
         "buyer_profile",
+        "platform_account_search",
+        "platform_account_create",
+        "platform_account_update",
     }
 )
 

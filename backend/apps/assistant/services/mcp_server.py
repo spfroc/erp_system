@@ -35,6 +35,8 @@ MCP_READ_PERMISSIONS = (
     "serviceOrder.view",
     "finance.view",
     "project.view",
+    "platformAccount.view",
+    "platformAccount.manage",
 )
 
 
@@ -76,19 +78,23 @@ def _allowlist() -> set[str] | None:
     return {item.strip() for item in raw.split(",") if item.strip()}
 
 
-def list_mcp_tools() -> list[dict[str, Any]]:
+def list_mcp_tools(*, user_data: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    from apps.assistant.permissions import user_has_permission
+
     register_all_tools()
     excluded = _excluded_tools()
     allow = _allowlist()
     tools: list[dict[str, Any]] = []
     for tool in list_tools():
-        if tool.risk_level != "read":
-            continue
         if tool.requires_confirmation:
+            continue
+        if tool.risk_level != "read" and not tool.mcp_expose:
             continue
         if tool.name in excluded:
             continue
         if allow is not None and tool.name not in allow:
+            continue
+        if user_data is not None and not user_has_permission(user_data, tool.permission):
             continue
         tools.append(
             {
@@ -162,7 +168,7 @@ def handle_jsonrpc(message: dict[str, Any], *, user_data: dict[str, Any]) -> tup
         return _jsonrpc_result(req_id, {}), 200, {}
 
     if method == "tools/list":
-        return _jsonrpc_result(req_id, {"tools": list_mcp_tools()}), 200, {}
+        return _jsonrpc_result(req_id, {"tools": list_mcp_tools(user_data=user_data)}), 200, {}
 
     if method == "tools/call":
         name = str(params.get("name") or "").strip()
@@ -171,7 +177,7 @@ def handle_jsonrpc(message: dict[str, Any], *, user_data: dict[str, Any]) -> tup
             return _jsonrpc_error(req_id, -32602, "tools/call missing name"), 400, {}
 
         tool = get_tool(name)
-        allowed_names = {item["name"] for item in list_mcp_tools()}
+        allowed_names = {item["name"] for item in list_mcp_tools(user_data=user_data)}
         if not tool or name not in allowed_names:
             return _jsonrpc_result(
                 req_id,
@@ -182,7 +188,12 @@ def handle_jsonrpc(message: dict[str, Any], *, user_data: dict[str, Any]) -> tup
             ), 200, {}
 
         try:
-            payload = execute_tool(tool_name=name, params=arguments, user_data=user_data)
+            payload = execute_tool(
+                tool_name=name,
+                params=arguments,
+                user_data=user_data,
+                source="mcp",
+            )
             text = _tool_result_text(payload)
             return _jsonrpc_result(
                 req_id,

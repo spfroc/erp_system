@@ -99,6 +99,7 @@ DEFAULT_ROLES = [
         "permissions": [
             "dashboard.view", "dev.ops.view", "dev.ops.manage",
             "assistant.view", "assistant.use", "assistant.manage",
+            "mcpLog.view",
         ],
     },
 ]

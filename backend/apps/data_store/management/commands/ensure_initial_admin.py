@@ -49,6 +49,7 @@ class Command(BaseCommand):
                         "lead.manage", "sensitive.view", "profit.view",
                         "dev.ops.view", "dev.ops.manage",
                         "assistant.view", "assistant.use", "assistant.manage",
+                        "mcpLog.view",
                         "user.manage",
                     ],
                 },

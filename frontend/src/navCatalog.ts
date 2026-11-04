@@ -58,6 +58,7 @@ export type CatalogViewId =
   | "paymentStats"
   | "trademarkCertificates"
   | "logs"
+  | "mcpLogs"
   | "collectionAccounts"
   | "optionSettings"
   | "devOps"
@@ -65,7 +66,10 @@ export type CatalogViewId =
   | "menuSettings"
   | "access";
 
-export type View = CatalogViewId;
+/** 侧栏目录外的页面（如个人中心，从右上角进入）。 */
+export type ExtraViewId = "profile";
+
+export type View = CatalogViewId | ExtraViewId;
 
 export type NavIconKey = keyof typeof NAV_ICON_MAP;
 
@@ -134,6 +138,7 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "paymentStats", label: "付款统计", iconKey: "BarChart3", permission: "finance.view" },
   { viewId: "sms", label: "短信日志", iconKey: "MessageCircle", permission: "sms.view" },
   { viewId: "logs", label: "系统操作日志", iconKey: "History", permission: "user.manage" },
+  { viewId: "mcpLogs", label: "MCP调用日志", iconKey: "MessageCircle", permission: "mcpLog.view" },
   { viewId: "collectionAccounts", label: "收款账号管理", iconKey: "Banknote", permission: "user.manage" },
   { viewId: "optionSettings", label: "选项管理", iconKey: "BadgeCheck", permission: "user.manage" },
   { viewId: "devOps", label: "定时任务", iconKey: "Timer", permission: "dev.ops.view" },
@@ -223,6 +228,7 @@ export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-officialSeo", "officialSeo", "web", "official", 20),
   item("nav-item-sms", "sms", "system", "logs", 10),
   item("nav-item-logs", "logs", "system", "logs", 20),
+  item("nav-item-mcpLogs", "mcpLogs", "system", "logs", 30),
   item("nav-item-collectionAccounts", "collectionAccounts", "system", "system", 10),
   item("nav-item-optionSettings", "optionSettings", "system", "system", 20),
   item("nav-item-devOps", "devOps", "system", "system", 25),

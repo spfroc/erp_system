@@ -1,9 +1,10 @@
 from django.urls import path
 
-from . import mcp_views, views
+from . import mcp_log_views, mcp_views, views
 
 urlpatterns = [
     path("mcp/", mcp_views.mcp_endpoint, name="assistant-mcp"),
+    path("assistant/mcp-logs/", mcp_log_views.mcp_call_logs, name="assistant-mcp-logs"),
     path("assistant/status/", views.assistant_status, name="assistant-status"),
     path("assistant/tools/", views.assistant_tools, name="assistant-tools"),
     path("assistant/settings/", views.assistant_settings, name="assistant-settings"),

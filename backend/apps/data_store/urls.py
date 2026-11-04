@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .profile_views import auth_api_token, auth_change_password, auth_my_permissions, auth_profile
 from .views import (
     app_data,
     audit_sensitive_access,
@@ -87,6 +88,10 @@ urlpatterns = [
     path("auth/login/", auth_login, name="auth-login"),
     path("auth/me/", auth_me, name="auth-me"),
     path("auth/logout/", auth_logout, name="auth-logout"),
+    path("auth/profile/", auth_profile, name="auth-profile"),
+    path("auth/change-password/", auth_change_password, name="auth-change-password"),
+    path("auth/api-token/", auth_api_token, name="auth-api-token"),
+    path("auth/permissions/", auth_my_permissions, name="auth-my-permissions"),
     path("audit/sensitive-access/", audit_sensitive_access, name="audit-sensitive-access"),
     path("platform-accounts/<str:record_id>/sensitive/<str:field>/", platform_account_sensitive_value, name="platform-account-sensitive-value"),
     path("validation/finance/", finance_validation, name="finance-validation"),

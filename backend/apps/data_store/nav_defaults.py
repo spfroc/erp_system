@@ -52,6 +52,7 @@ DEFAULT_NAV_ITEMS = [
     {"id": "nav-item-officialSeo", "viewId": "officialSeo", "label": "SEO配置", "categoryKey": "web", "groupKey": "official", "permission": "site.view", "iconKey": "Search", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-sms", "viewId": "sms", "label": "短信日志", "categoryKey": "system", "groupKey": "logs", "permission": "sms.view", "iconKey": "MessageCircle", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-logs", "viewId": "logs", "label": "系统操作日志", "categoryKey": "system", "groupKey": "logs", "permission": "user.manage", "iconKey": "History", "sortOrder": 20, "enabled": True},
+    {"id": "nav-item-mcpLogs", "viewId": "mcpLogs", "label": "MCP调用日志", "categoryKey": "system", "groupKey": "logs", "permission": "mcpLog.view", "iconKey": "MessageCircle", "sortOrder": 30, "enabled": True},
     {"id": "nav-item-collectionAccounts", "viewId": "collectionAccounts", "label": "收款账号管理", "categoryKey": "system", "groupKey": "system", "permission": "user.manage", "iconKey": "Banknote", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-optionSettings", "viewId": "optionSettings", "label": "选项管理", "categoryKey": "system", "groupKey": "system", "permission": "user.manage", "iconKey": "BadgeCheck", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-devOps", "viewId": "devOps", "label": "定时任务", "categoryKey": "system", "groupKey": "system", "permission": "dev.ops.view", "iconKey": "Timer", "sortOrder": 25, "enabled": True},

@@ -190,7 +190,15 @@ export const seedData: AppData = {
       id: "role-developer",
       name: "开发运维",
       description: "仅管理定时任务与脚本，不自动授给业务角色。",
-      permissions: ["dashboard.view", "dev.ops.view", "dev.ops.manage"],
+      permissions: [
+        "dashboard.view",
+        "dev.ops.view",
+        "dev.ops.manage",
+        "assistant.view",
+        "assistant.use",
+        "assistant.manage",
+        "mcpLog.view",
+      ],
     },
   ],
   users: [

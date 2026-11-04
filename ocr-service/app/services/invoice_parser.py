@@ -119,6 +119,10 @@ def money_to_float(value: str | None) -> float | None:
 INVOICE_ITEM_UNITS = (
     "千克",
     "公斤",
+    "平方米",
+    "平米",
+    "立方米",
+    "千瓦时",
     "个",
     "盒",
     "套",
@@ -145,12 +149,47 @@ INVOICE_ITEM_UNITS = (
     "辆",
     "吨",
     "令",
+    "节",  # 蓄电池等常用单位；缺失会导致整行明细被丢弃
+    "块",
+    "根",
+    "片",
+    "面",
+    "副",
+    "盘",
+    "听",
+    "打",
+    "双",
+    "本",
+    "册",
+    "页",
+    "户",
+    "座",
+    "间",
+    "架",
+    "把",
+    "盏",
+    "顶",
+    "床",
+    "扇",
     "kg",
     "g",
+    "m",
+    "m2",
+    "㎡",
 )
-INVOICE_ITEM_UNIT_RE = "|".join(sorted(INVOICE_ITEM_UNITS, key=len, reverse=True))
+INVOICE_ITEM_UNIT_RE = "|".join(sorted(set(INVOICE_ITEM_UNITS), key=len, reverse=True))
+# 未知单位回退：1~3 个汉字，或短英文单位；必须紧挨数量，避免吞掉品名
+INVOICE_ITEM_UNIT_FALLBACK_RE = r"[\u4e00-\u9fff]{1,3}|[A-Za-z]{1,8}|㎡"
 INVOICE_ITEM_TAIL_RE = re.compile(
     rf"(?P<unit>{INVOICE_ITEM_UNIT_RE})\s+"
+    r"(?P<quantity>[0-9]+(?:\.[0-9]+)?)\s+"
+    r"(?P<unit_price>[0-9]+(?:\.[0-9]+)?)\s+"
+    r"(?P<amount>[0-9]+(?:\.[0-9]+)?)\s+"
+    r"(?P<tax_rate>[0-9]+(?:\.[0-9]+)?%)\s+"
+    r"(?P<tax_amount>[0-9]+(?:\.[0-9]+)?)\s*$",
+)
+INVOICE_ITEM_TAIL_FALLBACK_RE = re.compile(
+    rf"(?P<unit>{INVOICE_ITEM_UNIT_FALLBACK_RE})\s+"
     r"(?P<quantity>[0-9]+(?:\.[0-9]+)?)\s+"
     r"(?P<unit_price>[0-9]+(?:\.[0-9]+)?)\s+"
     r"(?P<amount>[0-9]+(?:\.[0-9]+)?)\s+"
@@ -161,6 +200,14 @@ INVOICE_ITEM_TAIL_RE = re.compile(
 # Require decimals on unit_price/amount so quantity is not swallowed (4 vs 41592...).
 INVOICE_ITEM_TAIL_COMPACT_RE = re.compile(
     rf"(?P<unit>{INVOICE_ITEM_UNIT_RE})"
+    r"(?P<quantity>[0-9]+(?:\.[0-9]+)?)"
+    r"(?P<unit_price>[0-9]+\.[0-9]+)"
+    r"(?P<amount>[0-9]+\.[0-9]+)"
+    r"(?P<tax_rate>[0-9]+(?:\.[0-9]+)?%)"
+    r"(?P<tax_amount>[0-9]+(?:\.[0-9]+)?)\s*$",
+)
+INVOICE_ITEM_TAIL_COMPACT_FALLBACK_RE = re.compile(
+    rf"(?P<unit>{INVOICE_ITEM_UNIT_FALLBACK_RE})"
     r"(?P<quantity>[0-9]+(?:\.[0-9]+)?)"
     r"(?P<unit_price>[0-9]+\.[0-9]+)"
     r"(?P<amount>[0-9]+\.[0-9]+)"
@@ -194,7 +241,20 @@ def _invoice_detail_lines(text: str) -> list[str]:
 
 
 def _match_invoice_item_tail(line: str) -> re.Match[str] | None:
-    return INVOICE_ITEM_TAIL_RE.search(line) or INVOICE_ITEM_TAIL_COMPACT_RE.search(line)
+    """先匹配已知单位，再回退到短中文/英文单位，避免「节」等未收录单位整行丢失。"""
+    return (
+        INVOICE_ITEM_TAIL_RE.search(line)
+        or INVOICE_ITEM_TAIL_COMPACT_RE.search(line)
+        or INVOICE_ITEM_TAIL_FALLBACK_RE.search(line)
+        or INVOICE_ITEM_TAIL_COMPACT_FALLBACK_RE.search(line)
+    )
+
+
+def _line_items_amount_gap(items: list[dict[str, Any]], amount_without_tax: float | None) -> float | None:
+    if amount_without_tax is None or not items:
+        return None
+    total = sum(float(item.get("amount") or 0) for item in items)
+    return round(amount_without_tax - total, 2)
 
 
 def _merge_invoice_item_lines(lines: list[str]) -> list[str]:
@@ -437,6 +497,7 @@ def parse_invoice_text(text: str) -> dict[str, Any]:
     if match:
         total_amount = money_to_float(match.group(1))
 
+    line_items = parse_invoice_line_items(text) or parse_invoice_line_items(prepare_line_item_text(text))
     fields = {
         "invoice_no": invoice_no,
         "invoice_date": invoice_date,
@@ -447,10 +508,13 @@ def parse_invoice_text(text: str) -> dict[str, Any]:
         "amount_without_tax": amount_without_tax,
         "tax_amount": tax_amount,
         "total_amount": total_amount,
-        "line_items": parse_invoice_line_items(text) or parse_invoice_line_items(prepare_line_item_text(text)),
+        "line_items": line_items,
     }
     _fill_missing_invoice_fields(squeezed, fields)
-    scalar_values = [value for key, value in fields.items() if key != "line_items"]
+    gap = _line_items_amount_gap(fields["line_items"], fields["amount_without_tax"])
+    if gap is not None and abs(gap) >= 0.05:
+        fields["line_items_amount_gap"] = gap
+    scalar_values = [value for key, value in fields.items() if key not in {"line_items", "line_items_amount_gap"}]
     matched_count = sum(1 for value in scalar_values if value not in ("", None))
     return {
         **fields,
@@ -551,6 +615,11 @@ def parse_invoice_pdf_bytes(content: bytes) -> dict[str, Any]:
         item_count = len(parsed.get("line_items") or [])
         if item_count:
             message = f"{message}共识别 {item_count} 个商品明细。"
+        gap = parsed.get("line_items_amount_gap")
+        if isinstance(gap, (int, float)) and abs(float(gap)) >= 0.05:
+            message = (
+                f"{message}明细金额合计与发票合计相差 {float(gap):.2f}，请核对是否有明细未识别。"
+            )
         parsed["source"] = source
         return {
             "status": "recognized",

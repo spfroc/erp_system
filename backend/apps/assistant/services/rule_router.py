@@ -335,6 +335,35 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "reason": "customer_sales_orders",
         }
 
+    # 平台账号
+    if _has_any(text, ("平台账号", "入驻账号", "店铺账号")):
+        if _has_any(text, ("添加", "新增", "录入", "创建")):
+            return {
+                "intent": "erp.platform_account.create",
+                "tool_name": "erp.platform_account.create",
+                "params": {"text": text},
+                "confidence": 0.82,
+                "needs_clarification": False,
+                "reason": "platform_account_create",
+            }
+        if _has_any(text, ("修改", "编辑", "更新", "改一下", "改下")):
+            return {
+                "intent": "erp.platform_account.update",
+                "tool_name": "erp.platform_account.update",
+                "params": {"text": text},
+                "confidence": 0.8,
+                "needs_clarification": False,
+                "reason": "platform_account_update",
+            }
+        return {
+            "intent": "erp.platform_account.search",
+            "tool_name": "erp.platform_account.search",
+            "params": {"keyword": text},
+            "confidence": 0.78,
+            "needs_clarification": False,
+            "reason": "platform_account_search",
+        }
+
     # 采购人（公告侧，避免盖住「客户购买」）
     if _has_any(text, ("采购人", "采购单位", "医院", "学校", "这家单位")) and _has_any(
         text, ("查", "分析", "画像", "买过", "采购过")

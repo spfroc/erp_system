@@ -207,6 +207,62 @@ def test_parse_invoice_text_reads_doubled_glyph_line_items():
     assert round(sum(item["amount"] for item in result["line_items"]), 2) == 15000.0
 
 
+def test_parse_invoice_text_reads_battery_section_unit():
+    """蓄电池单位「节」必须识别；否则最大金额明细整行丢失。"""
+    text = """
+电子发票（增值税专用发票）
+发票号码：26372000004069009306
+开票日期：2026年08月19日
+购 名称：山东壹知产数字科技有限公司 销 名称：山东泉世信息技术有限公司
+买 售
+方 方
+信 统一社会信用代码/纳税人识别号：91370103MA3T1BXA6N 信 统一社会信用代码/纳税人识别号：91370102MAE593JEX7
+息 息
+项目名称 规格型号 单 位 数 量 单 价 金 额 税率/征收率 税 额
+*计算机配套产品*主机 SKGH33-30KL 台 1 11079.6460176991 11079.65 13% 1440.35
+*蓄电池*电池 SK120-12V 节 32 610.619469026549 19539.82 13% 2540.18
+*配电控制设备*电池柜 A32 套 1 796.46017699115 796.46 13% 103.54
+*电线电缆*电池连接线 BVR16 套 1 353.982300884956 353.98 13% 46.02
+*配电控制设备*直流空开 3P100 个 1 88.4955752212389 88.50 13% 11.50
+合 计 ¥31858.41 ¥4141.59
+价税合计（大写） 叁万陆仟圆整 （小写）¥36000.00
+"""
+    result = parse_invoice_text(text)
+    assert result["invoice_no"] == "26372000004069009306"
+    assert result["buyer_name"] == "山东壹知产数字科技有限公司"
+    assert result["seller_name"] == "山东泉世信息技术有限公司"
+    assert result["amount_without_tax"] == 31858.41
+    assert result["tax_amount"] == 4141.59
+    assert result["total_amount"] == 36000.0
+    assert len(result["line_items"]) == 5
+    battery = next(item for item in result["line_items"] if item["product_name"] == "电池")
+    assert battery["unit"] == "节"
+    assert battery["quantity"] == 32
+    assert battery["amount"] == 19539.82
+    assert battery["specification"] == "SK120-12V"
+    assert round(sum(item["amount"] for item in result["line_items"]), 2) == 31858.41
+    assert "line_items_amount_gap" not in result
+
+
+def test_parse_invoice_text_fallback_unknown_unit():
+    """未收录单位也应靠尾部结构回退识别，避免整行丢失。"""
+    text = """
+电子发票（增值税专用发票）
+发票号码：26372000004069009999
+开票日期：2026年08月19日
+购 名称：山东壹知产数字科技有限公司 销 名称：山东泉世信息技术有限公司
+项目名称 规格型号 单 位 数 量 单 价 金 额 税率/征收率 税 额
+*日用杂品*测试商品 XYZ-1 捆 3 10.00 30.00 13% 3.90
+合 计 ¥30.00 ¥3.90
+价税合计（大写） 叁拾叁圆玖角整 （小写）¥33.90
+"""
+    result = parse_invoice_text(text)
+    assert len(result["line_items"]) == 1
+    assert result["line_items"][0]["unit"] == "捆"
+    assert result["line_items"][0]["quantity"] == 3
+    assert result["line_items"][0]["amount"] == 30.0
+
+
 def test_parse_invoice_text_reads_ream_unit_line_items():
     """纸品常用单位「令」，且品名可能换行。"""
     text = """

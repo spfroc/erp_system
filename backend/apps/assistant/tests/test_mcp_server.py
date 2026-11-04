@@ -18,6 +18,9 @@ class McpServerTests(SimpleTestCase):
             names = {item["name"] for item in list_mcp_tools()}
         self.assertIn("notice.search", names)
         self.assertIn("erp.product.search", names)
+        self.assertIn("erp.platform_account.search", names)
+        self.assertIn("erp.platform_account.create", names)
+        self.assertIn("erp.platform_account.update", names)
         self.assertNotIn("erp.invoice.delete", names)
         self.assertNotIn("devops.run_safe_job", names)
         self.assertNotIn("navigation.find", names)

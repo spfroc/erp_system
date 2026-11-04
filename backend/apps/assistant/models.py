@@ -97,6 +97,8 @@ class AssistantToolExecution(models.Model):
     )
     user_id = models.CharField(max_length=64, db_index=True)
     tool_name = models.CharField(max_length=64, db_index=True)
+    # assistant=后台智能助手；mcp=企微连接器等 MCP 调用
+    source = models.CharField(max_length=32, default="assistant", db_index=True, blank=True)
     parameters_json = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     result_summary = models.TextField(blank=True, default="")

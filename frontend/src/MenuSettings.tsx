@@ -58,6 +58,7 @@ const PERMISSION_OPTIONS: Array<{ id: PermissionKey; label: string }> = [
   { id: "mallCustomer.manage", label: "管理资料库" },
   { id: "sms.view", label: "查看短信日志" },
   { id: "sms.manage", label: "管理短信" },
+  { id: "mcpLog.view", label: "查看MCP调用日志" },
   { id: "customerAccount.view", label: "查看登录账号" },
   { id: "customerAccount.manage", label: "管理登录账号" },
   { id: "menu.view", label: "查看菜单配置" },

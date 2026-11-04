@@ -427,6 +427,25 @@ class ManagedFile(models.Model):
         db_table = "managed_files"
 
 
+class UserApiToken(models.Model):
+    """个人中心生成的连接器 / MCP 凭证（明文仅创建时返回一次）。"""
+
+    id = models.CharField(max_length=64, primary_key=True)
+    user_id = models.CharField(max_length=64, db_index=True)
+    name = models.CharField(max_length=128, default="默认凭证")
+    token_prefix = models.CharField(max_length=16)
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "user_api_tokens"
+        indexes = [
+            models.Index(fields=["user_id", "revoked_at"], name="uat_user_revoked_idx"),
+        ]
+
+
 from apps.data_store.notice_tag_models import (  # noqa: E402,F401
     NoticeBuyerProfile,
     NoticeDictItem,

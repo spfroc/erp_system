@@ -62,6 +62,7 @@ def execute_tool(
     conversation_id: int | None = None,
     confirmed: bool = False,
     reuse_execution_id: int | None = None,
+    source: str = "assistant",
 ) -> dict[str, Any]:
     if not user_has_permission(user_data, ASSISTANT_USE):
         raise ToolExecutionError("forbidden", "无助手使用权限", status=403)
@@ -83,6 +84,7 @@ def execute_tool(
             conversation_id=conversation_id,
             user_id=user_id,
             tool_name=tool.name,
+            source=(source or "assistant")[:32],
             parameters_json=cleaned,
             status=AssistantToolExecution.STATUS_AWAITING_CONFIRMATION,
             confirmation_token_hash=token_hash,
@@ -124,6 +126,7 @@ def execute_tool(
             conversation_id=conversation_id,
             user_id=user_id,
             tool_name=tool.name,
+            source=(source or "assistant")[:32],
             parameters_json=cleaned,
             status=AssistantToolExecution.STATUS_RUNNING,
         )
