@@ -70,6 +70,7 @@ services:
       ASSISTANT_ENABLED: "true"
       ASSISTANT_FALLBACK_ENABLED: "true"
       ASSISTANT_LLM_MAX_OUTPUT_TOKENS: "256"
+      # MCP 连接器开关/Token 放 .env.assistant.local，避免写死密钥
     env_file:
       - .env.assistant.defaults
       - .env.assistant.local
