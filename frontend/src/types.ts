@@ -309,11 +309,18 @@ export interface OnboardingRecord {
   note?: string;
 }
 
+/** 齐鲁云采账号细分：电商/代理商 与 定点可并存于同一客户。 */
+export type QiluAccountType = "电商/代理商" | "定点";
+
 export interface PlatformAccount {
   id: string;
   projectId?: string;
   customerOrgId: string;
+  /** 列表/详情接口附带的客户名称，不落库 */
+  customerName?: string;
   platform: "泉E采" | "青慧采" | "齐鲁云采" | "政采云" | "公采云" | "国铁" | "其他";
+  /** 仅平台为齐鲁云采时有意义 */
+  qiluAccountType?: QiluAccountType;
   accountName?: string;
   accountPasswordMasked?: string;
   merchantId?: string;

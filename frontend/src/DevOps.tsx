@@ -114,7 +114,10 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
     fetch(backendApiUrl("/api/dev-ops/scripts/"), { credentials: "include" })
       .then((response) => readJson<{ items: ScriptItem[] }>(response))
       .then((data) => setScripts(data.items || []))
-      .catch((error: Error) => onNotice({ type: "error", message: error.message || "加载脚本目录失败" }));
+      .catch((error: Error) => {
+        if (error instanceof AuthExpiredError) return;
+        onNotice({ type: "error", message: error.message || "加载脚本目录失败" });
+      });
   }, [onNotice]);
 
   useEffect(() => {
@@ -131,7 +134,8 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
         else setRuns((data.items as RunItem[]) || []);
       })
       .catch((error: Error) => {
-        if (!cancelled) onNotice({ type: "error", message: error.message || "加载失败" });
+        if (cancelled || error instanceof AuthExpiredError) return;
+        onNotice({ type: "error", message: error.message || "加载失败" });
       });
     return () => {
       cancelled = true;
@@ -185,6 +189,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
       });
       if (isNew) setTab("jobs");
     } catch (error) {
+      if (error instanceof AuthExpiredError) return;
       onNotice({ type: "error", message: error instanceof Error ? error.message : "保存失败" });
     } finally {
       setSaving(false);
@@ -203,6 +208,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
       const saved = await readJson<JobItem>(response);
       setJobs((rows) => rows.map((row) => (row.id === saved.id ? saved : row)));
     } catch (error) {
+      if (error instanceof AuthExpiredError) return;
       onNotice({ type: "error", message: error instanceof Error ? error.message : "更新失败" });
     }
   }
@@ -218,6 +224,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
       onNotice({ type: "success", message: "已入队执行" });
       setTab("runs");
     } catch (error) {
+      if (error instanceof AuthExpiredError) return;
       onNotice({ type: "error", message: error instanceof Error ? error.message : "执行失败" });
     }
   }
@@ -234,6 +241,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
       setJobs((rows) => rows.filter((row) => row.id !== job.id));
       onNotice({ type: "success", message: "已删除" });
     } catch (error) {
+      if (error instanceof AuthExpiredError) return;
       onNotice({ type: "error", message: error instanceof Error ? error.message : "删除失败" });
     }
   }

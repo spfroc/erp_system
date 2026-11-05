@@ -199,7 +199,7 @@ import {
   findDuplicateServiceProjects,
   normalizeServiceEndDate,
 } from "./serviceProjectDuplicate";
-import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, NavCategory, NavGroup, NavMenuItem, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
+import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, NavCategory, NavGroup, NavMenuItem, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, QiluAccountType, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
 type OrderFocus = { projectId?: string };
@@ -756,7 +756,6 @@ async function prepareOcrUpload(file: File) {
 
 function throwIfAuthExpired(response: Response) {
   if (response.status !== 401) return;
-  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
   throw new AuthExpiredError();
 }
 
@@ -785,10 +784,7 @@ async function uploadBusinessDocument(
   } catch {
     // 非 JSON 响应走统一错误文案。
   }
-  if (response.status === 401) {
-    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-    throw new AuthExpiredError();
-  }
+  if (response.status === 401) throw new AuthExpiredError();
   if (!response.ok || !payload.data) throw new Error(payload.detail || "文件保存失败。");
   return payload.data;
 }
@@ -3368,6 +3364,10 @@ function LoginScreen({ onLogin, notice }: { onLogin: (identifier: string, passwo
   const [error, setError] = useState(notice ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (notice) setError(notice);
+  }, [notice]);
+
   async function submitLogin(event?: FormEvent) {
     event?.preventDefault();
     if (isSubmitting) return;
@@ -3427,8 +3427,19 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
-  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loginNotice, setLoginNotice] = useState("");
+  const [notice, setNoticeState] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const setNotice = (next: { type: "success" | "error"; message: string } | null) => {
+    // 兜底：业务页若把“登录已过期”当普通 toast，仍清会话并回登录页。
+    if (next?.type === "error" && next.message.includes("登录已过期")) {
+      window.localStorage.removeItem(SESSION_USER_KEY);
+      setCurrentUserId("");
+      setLoginNotice("登录已过期，请重新登录。");
+      setNoticeState(null);
+      return;
+    }
+    setNoticeState(next);
+  };
   const [smsDraftContacts, setSmsDraftContacts] = useState<LibraryContact[] | undefined>(undefined);
 
   function setView(next: View) {
@@ -4756,6 +4767,7 @@ function Projects({
   const [editingServiceAccountId, setEditingServiceAccountId] = useState("");
   const [serviceAccountDraft, setServiceAccountDraft] = useState({
     platform: "泉E采" as PlatformAccount["platform"],
+    qiluAccountType: "电商/代理商" as QiluAccountType,
     accountName: "",
     accountPasswordMasked: "",
     merchantId: "",
@@ -4769,6 +4781,7 @@ function Projects({
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
   const emptyServiceAccountDraft = {
     platform: "泉E采" as PlatformAccount["platform"],
+    qiluAccountType: "电商/代理商" as QiluAccountType,
     accountName: "",
     accountPasswordMasked: "",
     merchantId: "",
@@ -4777,6 +4790,7 @@ function Projects({
   };
   const sourcePlatformOptions = optionValues(data, "platform", ["框架协议", "泉E采", "青慧采", "齐鲁云采", "美云销", "渠道", "直客", "其他"]);
   const onboardingPlatformOptions = optionValues(data, "platform", ["泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"]);
+  const qiluAccountTypeOptions = optionValues(data, "qilu_account_type", ["电商/代理商", "定点"]) as QiluAccountType[];
   const projectStatusValues = optionValues(data, "project_status", projectStatusOptions) as ProjectStatus[];
   const logisticsStatusOptions = optionValues(data, "logistics_status", ["待发货", "已发货", "已签收"]) as LogisticsStatus[];
   const acceptanceStatusOptions = optionValues(data, "acceptance_status", ["待验收", "验收中", "已验收"]) as AcceptanceStatus[];
@@ -5243,6 +5257,7 @@ function Projects({
       projectId: activeProject.id,
       customerOrgId: activeProject.customerOrgId,
       platform: serviceAccountDraft.platform,
+      qiluAccountType: serviceAccountDraft.platform === "齐鲁云采" ? serviceAccountDraft.qiluAccountType : undefined,
       accountName: serviceAccountDraft.accountName || undefined,
       accountPasswordMasked: serviceAccountDraft.accountPasswordMasked || undefined,
       merchantId: serviceAccountDraft.merchantId || undefined,
@@ -5258,6 +5273,9 @@ function Projects({
       currentStatus: existingAccount?.currentStatus || "已付款待办理",
       note: existingAccount?.note,
     };
+    if (account.platform !== "齐鲁云采") {
+      delete account.qiluAccountType;
+    }
     const nextAccounts = editingServiceAccountId
       ? data.platformAccounts.map((item) => item.id === editingServiceAccountId ? account : item)
       : [account, ...data.platformAccounts];
@@ -5284,6 +5302,7 @@ function Projects({
     setEditingServiceAccountId(account.id);
     setServiceAccountDraft({
       platform: account.platform,
+      qiluAccountType: account.qiluAccountType || "电商/代理商",
       accountName: account.accountName || "",
       accountPasswordMasked: account.accountPasswordMasked || "",
       merchantId: account.merchantId || "",
@@ -7815,10 +7834,11 @@ function Projects({
                 <h3 id="project-platform-accounts">平台账号</h3>
                 {serviceAccountCopyTip && <div className="copy-tip">{serviceAccountCopyTip}</div>}
                 <div className="table">
-                  <div className="table-row service-account-table head"><span>平台</span><span>账号</span><span>密码</span><span>商家ID</span><span>店铺ID</span><span>店铺名称</span><span>操作</span></div>
+                  <div className="table-row service-account-table head"><span>平台</span><span>类型</span><span>账号</span><span>密码</span><span>商家ID</span><span>店铺ID</span><span>店铺名称</span><span>操作</span></div>
                   {projectPlatformAccounts.length > 0 ? projectPlatformAccounts.map((account) => (
                     <div className="table-row service-account-table" key={account.id}>
                       <span>{account.platform}</span>
+                      <span>{account.platform === "齐鲁云采" ? (account.qiluAccountType || "未分类") : "—"}</span>
                       <span><button className="copy-link" onClick={() => void copyServiceAccountText(account.accountName, "平台账号", account, "accountName")}>{maskedServiceAccountValue(account.accountName)}</button></span>
                       <span>{can("sensitive.view") ? <button className="copy-secret" onClick={() => void copyServiceAccountText(account.accountPasswordMasked, "平台密码", account, "accountPasswordMasked")}>{maskedServiceAccountValue(account.accountPasswordMasked)}</button> : account.accountPasswordMasked ? "已保存" : "未录入"}</span>
                       <span>{account.merchantId || "未录入"}</span>
@@ -7846,6 +7866,15 @@ function Projects({
                     <select value={serviceAccountDraft.platform} onChange={(event) => setServiceAccountDraft({ ...serviceAccountDraft, platform: event.target.value as PlatformAccount["platform"] })} aria-label="平台">
                       {onboardingPlatformOptions.map((item) => <option key={item}>{item}</option>)}
                     </select>
+                    {serviceAccountDraft.platform === "齐鲁云采" && (
+                      <select
+                        value={serviceAccountDraft.qiluAccountType}
+                        onChange={(event) => setServiceAccountDraft({ ...serviceAccountDraft, qiluAccountType: event.target.value as QiluAccountType })}
+                        aria-label="齐鲁云采类型"
+                      >
+                        {qiluAccountTypeOptions.map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    )}
                     <input value={serviceAccountDraft.accountName} onChange={(event) => setServiceAccountDraft({ ...serviceAccountDraft, accountName: event.target.value })} placeholder="账号" />
                     <input type="text" value={serviceAccountDraft.accountPasswordMasked} onChange={(event) => setServiceAccountDraft({ ...serviceAccountDraft, accountPasswordMasked: event.target.value })} placeholder="密码" autoComplete="off" />
                     <input value={serviceAccountDraft.merchantId} onChange={(event) => setServiceAccountDraft({ ...serviceAccountDraft, merchantId: event.target.value })} placeholder="商家ID（可选）" />
@@ -11376,6 +11405,13 @@ function Entities({
     pageSize: 10,
     refreshKey: data.organizations,
   });
+  const selectedOrgAccountsPage = useServerPagedList<PlatformAccount>({
+    collection: "platformAccounts",
+    filters: { customerOrgId: selectedOrgId || undefined },
+    pageSize: 50,
+    enabled: Boolean(selectedOrgId),
+    refreshKey: data.platformAccounts,
+  });
 
   function resetEntityForm() {
     setName("");
@@ -11593,7 +11629,9 @@ function Entities({
     }
   }
 
-  const selectedOrganization = data.organizations.find((org) => org.id === selectedOrgId);
+  const selectedOrganization =
+    filteredPage.items.find((org) => org.id === selectedOrgId)
+    ?? data.organizations.find((org) => org.id === selectedOrgId);
   const selectedOrgProjects = selectedOrganization
     ? data.projects.filter((project) =>
         project.customerOrgId === selectedOrganization.id
@@ -11608,9 +11646,7 @@ function Entities({
         || invoice.counterpartyOrgId === selectedOrganization.id,
       )
     : [];
-  const selectedOrgAccounts = selectedOrganization
-    ? data.platformAccounts.filter((account) => account.customerOrgId === selectedOrganization.id)
-    : [];
+  const selectedOrgAccounts = selectedOrgAccountsPage.items;
 
   return (
     <div className="stack">
@@ -11772,7 +11808,7 @@ function Entities({
               <Info label="状态" value={selectedOrganization.status} />
               <Info label="关联项目" value={`${selectedOrgProjects.length} 个`} />
               <Info label="关联发票" value={`${selectedOrgInvoices.length} 张`} />
-              <Info label="平台账号" value={`${selectedOrgAccounts.length} 个`} />
+              <Info label="平台账号" value={selectedOrgAccountsPage.loading ? "加载中…" : `${selectedOrgAccountsPage.total} 个`} />
             </div>
             <h3>关联项目</h3>
             <div className="table">
@@ -11787,6 +11823,24 @@ function Entities({
                     </div>
                   ))
                 : <div className="table-row"><span>暂无关联项目</span><span></span><span></span><span></span></div>}
+            </div>
+            <h3>平台账号</h3>
+            <div className="table">
+              <div className="table-row head"><span>平台</span><span>类型</span><span>账号</span><span>状态</span></div>
+              {selectedOrgAccountsPage.loading && selectedOrgAccounts.length === 0 && (
+                <div className="table-row"><span>加载中…</span><span></span><span></span><span></span></div>
+              )}
+              {!selectedOrgAccountsPage.loading && selectedOrgAccounts.length === 0 && (
+                <div className="table-row"><span>暂无关联平台账号</span><span></span><span></span><span></span></div>
+              )}
+              {selectedOrgAccounts.map((account) => (
+                <div className="table-row" key={account.id}>
+                  <span>{account.platform}</span>
+                  <span>{account.platform === "齐鲁云采" ? (account.qiluAccountType || "未分类") : "—"}</span>
+                  <span>{account.accountName || "未录入"}</span>
+                  <span>{account.currentStatus || "—"}</span>
+                </div>
+              ))}
             </div>
             <div className="modal-actions">
               {can("entity.create") && <button className="ghost" onClick={() => openEntityModal(selectedOrganization)}><UserPlus size={16} />合并/编辑身份</button>}
@@ -12355,6 +12409,7 @@ function PlatformAccounts({
 }) {
   const customers = data.organizations.filter((org) => isCustomerOrganization(org));
   const [platformFilter, setPlatformFilter] = useState<PlatformAccount["platform"] | "全部">("全部");
+  const [qiluTypeFilter, setQiluTypeFilter] = useState<QiluAccountType | "全部">("全部");
   const [customerSearch, setCustomerSearch] = useState("");
   const [expandedAccountId, setExpandedAccountId] = useState("");
   const [copyTip, setCopyTip] = useState("");
@@ -12366,6 +12421,7 @@ function PlatformAccounts({
     projectId: "",
     customerOrgId: "",
     platform: "泉E采" as PlatformAccount["platform"],
+    qiluAccountType: "电商/代理商" as QiluAccountType,
     accountName: "",
     accountPasswordMasked: "",
     merchantId: "",
@@ -12382,11 +12438,15 @@ function PlatformAccounts({
   const rowsPage = useServerPagedList<PlatformAccount>({
     collection: "platformAccounts",
     search: customerSearch,
-    filters: { platform: platformFilter === "全部" ? undefined : platformFilter },
+    filters: {
+      platform: platformFilter === "全部" ? undefined : platformFilter,
+      qiluAccountType: platformFilter === "齐鲁云采" && qiluTypeFilter !== "全部" ? qiluTypeFilter : undefined,
+    },
     pageSize: 10,
     refreshKey: data.platformAccounts,
   });
   const platformOptions = optionValues(data, "platform", ["泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "其他"]) as PlatformAccount["platform"][];
+  const qiluTypeOptions = optionValues(data, "qilu_account_type", ["电商/代理商", "定点"]) as QiluAccountType[];
   const platformCustomerOptions = sortByCreatedDesc(customers).map((customer) => ({
     value: customer.id,
     label: customer.name,
@@ -12449,6 +12509,24 @@ function PlatformAccounts({
       setCopyTip("请完整填写客户、平台、账号和密码。");
       return;
     }
+    if (form.platform === "齐鲁云采" && !form.qiluAccountType) {
+      setCopyTip("齐鲁云采账号请选择类型：电商/代理商 或 定点。");
+      return;
+    }
+    const localDup = data.platformAccounts.find((item) => (
+      item.id !== editingAccountId
+      && item.customerOrgId === form.customerOrgId
+      && item.platform === form.platform
+      && (form.platform !== "齐鲁云采" || (item.qiluAccountType || "电商/代理商") === form.qiluAccountType)
+    ));
+    if (localDup) {
+      const tip = form.platform === "齐鲁云采"
+        ? `该客户在「${form.platform}」「${form.qiluAccountType}」已有账号，不能重复添加。`
+        : `该客户在「${form.platform}」已有账号，不能重复添加。`;
+      setCopyTip(tip);
+      onNotice({ type: "error", message: tip });
+      return;
+    }
     const customer = data.organizations.find((org) => org.id === form.customerOrgId);
     const existingAccount = (editingAccountId
       ? data.platformAccounts.find((item) => item.id === editingAccountId) ?? rowsPage.items.find((item) => item.id === editingAccountId)
@@ -12462,6 +12540,7 @@ function PlatformAccounts({
       projectId: form.projectId || existingAccount?.projectId,
       customerOrgId: form.customerOrgId,
       platform: form.platform,
+      qiluAccountType: form.platform === "齐鲁云采" ? form.qiluAccountType : undefined,
       accountName: form.accountName.trim() || undefined,
       accountPasswordMasked: form.accountPasswordMasked || undefined,
       merchantId: form.merchantId.trim() || undefined,
@@ -12479,6 +12558,9 @@ function PlatformAccounts({
       currentStatus: form.currentStatus || existingAccount?.currentStatus || "已付款待办理",
       note: form.note || existingAccount?.note,
     };
+    if (account.platform !== "齐鲁云采") {
+      delete account.qiluAccountType;
+    }
     const log = platformAccountLog(existingAccount, account, customer?.name || editingCustomerName);
     setSavingAccount(true);
     try {
@@ -12523,6 +12605,7 @@ function PlatformAccounts({
       projectId: "",
       customerOrgId: "",
       platform: "泉E采",
+      qiluAccountType: "电商/代理商",
       accountName: "",
       accountPasswordMasked: "",
       merchantId: "",
@@ -12546,6 +12629,7 @@ function PlatformAccounts({
       projectId: account.projectId ?? "",
       customerOrgId: account.customerOrgId,
       platform: account.platform,
+      qiluAccountType: account.qiluAccountType ?? "电商/代理商",
       accountName: account.accountName ?? "",
       accountPasswordMasked: account.accountPasswordMasked ?? "",
       merchantId: account.merchantId ?? "",
@@ -12560,6 +12644,11 @@ function PlatformAccounts({
       note: account.note ?? "",
     });
     setShowAccountModal(true);
+  }
+
+  function platformTypeLabel(account: PlatformAccount) {
+    if (account.platform !== "齐鲁云采") return "—";
+    return account.qiluAccountType || "未分类";
   }
 
   async function deleteAccount(account: PlatformAccount) {
@@ -12603,9 +12692,27 @@ function PlatformAccounts({
         <div className="platform-account-toolbar">
           <div className="segmented">
             {(["全部", ...platformOptions] as Array<PlatformAccount["platform"] | "全部">).map((item) => (
-              <button key={item} className={platformFilter === item ? "active" : ""} onClick={() => setPlatformFilter(item)}>{item}</button>
+              <button
+                key={item}
+                className={platformFilter === item ? "active" : ""}
+                onClick={() => {
+                  setPlatformFilter(item);
+                  if (item !== "齐鲁云采") setQiluTypeFilter("全部");
+                }}
+              >
+                {item}
+              </button>
             ))}
           </div>
+          {platformFilter === "齐鲁云采" && (
+            <div className="segmented" aria-label="齐鲁云采账号类型">
+              {(["全部", ...qiluTypeOptions] as Array<QiluAccountType | "全部">).map((item) => (
+                <button key={item} className={qiluTypeFilter === item ? "active" : ""} onClick={() => setQiluTypeFilter(item)}>
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
           <SearchField
             value={customerSearch}
             onChange={setCustomerSearch}
@@ -12614,12 +12721,12 @@ function PlatformAccounts({
           />
         </div>
         <div className="table platform-account-list">
-          <div className="table-row platform-table head"><span>客户</span><span>平台</span><span>账号</span><span>密码</span><span>商家ID</span><span>店铺ID</span><span>店铺名称</span><span>创建/更新</span><span>操作</span></div>
+          <div className="table-row platform-table head"><span>客户</span><span>平台</span><span>类型</span><span>账号</span><span>密码</span><span>商家ID</span><span>店铺ID</span><span>店铺名称</span><span>创建/更新</span><span>操作</span></div>
           {rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">加载中…</div>}
           {!rowsPage.loading && rowsPage.items.length === 0 && <div className="table-empty">暂无平台账号</div>}
           {rowsPage.items.map((account) => {
             const customer = data.organizations.find((org) => org.id === account.customerOrgId);
-            const customerName = customer?.name ?? "";
+            const customerName = account.customerName || customer?.name || "";
             const expanded = expandedAccountId === account.id;
             const customerAddress = [customer?.city, customer?.district, customer?.address].filter(Boolean).join("");
             return (
@@ -12640,6 +12747,11 @@ function PlatformAccounts({
                     ) : "未知客户"}
                   </span>
                   <span>{account.platform}</span>
+                  <span className="platform-type-cell">
+                    {account.platform === "齐鲁云采" ? (
+                      <em className={`platform-type-tag${account.qiluAccountType === "定点" ? " is-designated" : ""}`}>{platformTypeLabel(account)}</em>
+                    ) : "—"}
+                  </span>
                   <span>
                     <button className="copy-link" onClick={() => void copyText(account.accountName, "平台账号", account, "accountName")}>{masked(account.accountName)}</button>
                   </span>
@@ -12726,6 +12838,8 @@ function PlatformAccounts({
                           <strong>{customer.taxpayerType || "未设置"}</strong>
                         </div>
                       </div>
+                    ) : customerName ? (
+                      <p className="platform-customer-detail-empty">客户「{customerName}」已关联；详细资料未在本地缓存，可到客户基础信息查看。</p>
                     ) : (
                       <p className="platform-customer-detail-empty">未找到关联客户资料</p>
                     )}
@@ -12741,7 +12855,7 @@ function PlatformAccounts({
         <div className="modal-backdrop" role="presentation">
           <div className="modal platform-account-modal" role="dialog" aria-modal="true" aria-label={editingAccountId ? "编辑平台账号" : "新增平台账号"}>
             <div className="modal-head">
-              <div><h2>{editingAccountId ? "编辑平台账号" : "新增平台账号"}</h2><p>选择企业/单位和平台后录入账号密码。</p></div>
+              <div><h2>{editingAccountId ? "编辑平台账号" : "新增平台账号"}</h2><p>选择企业/单位和平台后录入账号密码。同一客户同一平台同一类型只能有一条。</p></div>
               <button className="icon-button" onClick={() => setShowAccountModal(false)} aria-label="关闭">×</button>
             </div>
             <div className="form-grid platform-account-form">
@@ -12751,6 +12865,13 @@ function PlatformAccounts({
               <label className="field span-12"><span>平台</span><select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value as PlatformAccount["platform"] })}>
                 {platformOptions.map((item) => <option key={item}>{item}</option>)}
               </select></label>
+              {form.platform === "齐鲁云采" && (
+                <label className="field span-12"><span>齐鲁云采类型</span>
+                  <select value={form.qiluAccountType} onChange={(event) => setForm({ ...form, qiluAccountType: event.target.value as QiluAccountType })}>
+                    {qiluTypeOptions.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="field span-12"><span>账号</span><input value={form.accountName} onChange={(event) => setForm({ ...form, accountName: event.target.value })} placeholder="请输入账号" /></label>
               <label className="field span-12"><span>密码</span><input type="text" value={form.accountPasswordMasked} onChange={(event) => setForm({ ...form, accountPasswordMasked: event.target.value })} placeholder="请输入密码" autoComplete="off" /></label>
               <label className="field span-12"><span>商家ID（可选）</span><input value={form.merchantId} onChange={(event) => setForm({ ...form, merchantId: event.target.value })} placeholder="请输入商家ID" /></label>

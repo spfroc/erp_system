@@ -12,6 +12,13 @@ const optionGroupDefinitions = [
     values: ["泉E采", "青慧采", "齐鲁云采", "政采云", "公采云", "国铁", "美云销", "渠道", "直客", "其他"],
   },
   {
+    key: "qilu_account_type",
+    name: "齐鲁云采账号类型",
+    description: "齐鲁云采平台账号细分：电商/代理商与定点可并存。",
+    usages: ["平台账号：齐鲁云采类型筛选/新增"],
+    values: ["电商/代理商", "定点"],
+  },
+  {
     key: "project_status",
     name: "商品项目状态",
     description: "商品项目主流程状态。",

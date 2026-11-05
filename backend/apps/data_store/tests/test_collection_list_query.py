@@ -22,6 +22,8 @@ class CollectionListQueryTests(TestCase):
             "name": "管理员",
             "permissions": [
                 "onboarding.manage",
+                "platformAccount.view",
+                "platformAccount.manage",
                 "product.view",
                 "product.manage",
             "project.view",
@@ -302,9 +304,43 @@ class CollectionListQueryTests(TestCase):
         self.assertEqual(payload["page_size"], 10)
         self.assertEqual(len(payload["items"]), 1)
         self.assertEqual(payload["items"][0]["id"], "pa-1")
+        self.assertEqual(payload["items"][0]["customerName"], "济南客户甲")
         # onboarding.manage 可查看敏感字段；脱敏由无权限用户触发
         self.assertEqual(payload["items"][0]["accountName"], "acc-a")
         self.assertEqual(payload["items"][0]["createdAt"], "2026-08-03T10:00:00")
+
+    def test_platform_accounts_filter_by_customer_org_id(self):
+        response = self.client.get(
+            "/api/collections/platformAccounts/",
+            {"page": 1, "page_size": 10, "customerOrgId": "org-a"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["items"][0]["id"], "pa-1")
+        self.assertEqual(payload["items"][0]["customerName"], "济南客户甲")
+
+    def test_platform_accounts_reject_duplicate_customer_platform_type(self):
+        response = self.client.post(
+            "/api/collections/platformAccounts/",
+            data={
+                "data": {
+                    "id": "pa-dup",
+                    "customerOrgId": "org-a",
+                    "platform": "泉E采",
+                    "accountName": "acc-a-2",
+                    "accountPasswordMasked": "secret-2",
+                    "currentStatus": "已付款待办理",
+                    "licenseDisplayStatus": "未处理",
+                    "publicSecurityStatus": "未处理",
+                    "backendTemplateStatus": "未录入",
+                    "caStatus": "未办理",
+                }
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("只能保留一条", response.json()["detail"])
 
     def test_platform_accounts_hydrate_timestamps_from_db_columns(self):
         from datetime import datetime, timezone as dt_timezone

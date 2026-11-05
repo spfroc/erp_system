@@ -140,6 +140,7 @@ def _serialize(record: PlatformAccountRecord, names: dict[str, str], *, include_
         "customerOrgId": record.customer_org_id or data.get("customerOrgId") or "",
         "customerName": names.get(record.customer_org_id) or "",
         "platform": record.platform or data.get("platform") or "",
+        "qiluAccountType": data.get("qiluAccountType") or "",
         "accountName": record.account_name or data.get("accountName") or "",
         "merchantId": data.get("merchantId") or "",
         "shopId": data.get("shopId") or "",
@@ -171,8 +172,10 @@ def _format_confirm_lines(item: dict[str, Any]) -> str:
         f"ID：{item.get('id') or '—'}",
         f"客户：{item.get('customerName') or item.get('customerOrgId') or '—'}",
         f"平台：{item.get('platform') or '—'}",
-        f"账号：{item.get('accountName') or '—'}",
     ]
+    if item.get("platform") == "齐鲁云采" or item.get("qiluAccountType"):
+        lines.append(f"类型：{item.get('qiluAccountType') or '—'}")
+    lines.append(f"账号：{item.get('accountName') or '—'}")
     if item.get("accountPassword"):
         lines.append(f"密码：{item.get('accountPassword')}")
     elif item.get("hasPassword"):
@@ -306,6 +309,12 @@ def _merge_create_params(params: dict[str, Any]) -> dict[str, Any]:
         "note": params.get("note") or parsed.get("note") or "",
         "serviceYears": params.get("serviceYears") or params.get("service_years") or 1,
         "projectId": params.get("projectId") or params.get("project_id") or "",
+        "qiluAccountType": params.get("qiluAccountType")
+        or params.get("qilu_account_type")
+        or params.get("accountType")
+        or parsed.get("qiluAccountType")
+        or parsed.get("类型")
+        or "",
         "_parsed": parsed,
     }
     merged["platform"] = _normalize_platform(str(merged["platform"]))
@@ -339,10 +348,16 @@ def _platform_account_create(*, params: dict[str, Any], user_data: dict) -> dict
     assert org is not None
     now = timezone.now().isoformat()
     record_id = f"pa-{uuid.uuid4().hex[:12]}"
+    qilu_type = str(merged.get("qiluAccountType") or "").strip()
+    if platform == "齐鲁云采" and qilu_type not in {"电商/代理商", "定点"}:
+        qilu_type = "电商/代理商"
+    if platform != "齐鲁云采":
+        qilu_type = ""
     payload = {
         "id": record_id,
         "customerOrgId": org.id,
         "platform": platform,
+        "qiluAccountType": qilu_type or None,
         "accountName": account_name,
         "accountPasswordMasked": password,
         "merchantId": str(merged.get("merchantId") or "").strip() or None,

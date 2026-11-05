@@ -165,7 +165,8 @@ export function NoticeStats({ onNotice }: { onNotice: (notice: { type: "success"
         if (data.detail) onNotice({ type: "error", message: data.detail });
       })
       .catch((error: Error) => {
-        if (!cancelled) onNotice({ type: "error", message: error.message || "加载统计失败" });
+        if (cancelled || error instanceof AuthExpiredError) return;
+        onNotice({ type: "error", message: error.message || "加载统计失败" });
       });
     return () => {
       cancelled = true;

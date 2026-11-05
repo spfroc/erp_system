@@ -492,13 +492,32 @@ async function clearLocalData(): Promise<void> {
   await db.delete(STORE, KEY);
 }
 
+export const AUTH_EXPIRED_EVENT = "erp-auth-expired";
+
+function notifyAuthExpired() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
+/** 任意路径抛出本错误都会清会话并回到登录页；勿只 toast 吞掉。 */
+export class AuthExpiredError extends Error {
+  constructor() {
+    super("登录已过期，请重新登录");
+    this.name = "AuthExpiredError";
+    notifyAuthExpired();
+  }
+}
+
+function isAuthLoginRequest(input: RequestInfo | URL) {
+  return String(input).includes("/api/auth/login/");
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(input, { credentials: "include", ...init, signal: controller.signal });
     if (response.status === 401 && !isAuthLoginRequest(input)) {
-      notifyAuthExpired();
       throw new AuthExpiredError();
     }
     return response;
@@ -511,23 +530,6 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-export const AUTH_EXPIRED_EVENT = "erp-auth-expired";
-
-export class AuthExpiredError extends Error {
-  constructor() {
-    super("登录已过期，请重新登录");
-    this.name = "AuthExpiredError";
-  }
-}
-
-function isAuthLoginRequest(input: RequestInfo | URL) {
-  return String(input).includes("/api/auth/login/");
-}
-
-function notifyAuthExpired() {
-  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
 }
 
 function purchaseOrderRepairFingerprint(data: Partial<AppData> | AppData) {

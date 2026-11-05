@@ -513,6 +513,15 @@ def _collection_public_data(collection: str, record) -> dict:
     data = dict(record.data) if isinstance(record.data, dict) else {}
     if collection == "platformAccounts":
         data = _ensure_platform_account_timestamps(data, record)
+        # 列与 JSON 双写，列表/详情统一以列为准补全，避免迁移或旧数据缺 customerOrgId。
+        if getattr(record, "customer_org_id", ""):
+            data["customerOrgId"] = record.customer_org_id
+        if getattr(record, "platform", ""):
+            data.setdefault("platform", record.platform)
+        if getattr(record, "account_name", ""):
+            data.setdefault("accountName", record.account_name)
+        if getattr(record, "current_status", ""):
+            data.setdefault("currentStatus", record.current_status)
     if collection == "websiteLeads":
         data.setdefault("id", record.id)
         if getattr(record, "company_name", ""):
@@ -527,6 +536,58 @@ def _collection_public_data(collection: str, record) -> dict:
         if not isinstance(data.get("memos"), list):
             data["memos"] = []
     return data
+
+
+def _platform_account_type_key(data: dict) -> str:
+    platform = str(data.get("platform") or "").strip()
+    if platform != "齐鲁云采":
+        return ""
+    return str(data.get("qiluAccountType") or "").strip()
+
+
+def _platform_account_conflict(data: dict, existing=None) -> JsonResponse | None:
+    """同一客户 + 同一平台 + 同一类型（齐鲁云采）只允许一条有效账号。"""
+    org_id = str(data.get("customerOrgId") or "").strip()
+    platform = str(data.get("platform") or "").strip()
+    if not org_id:
+        return JsonResponse({"detail": "请选择关联客户企业。"}, status=400)
+    if not platform:
+        return JsonResponse({"detail": "请选择平台。"}, status=400)
+    qilu_type = _platform_account_type_key(data)
+    if platform == "齐鲁云采" and qilu_type not in {"电商/代理商", "定点"}:
+        return JsonResponse({"detail": "齐鲁云采账号请选择类型：电商/代理商 或 定点。"}, status=400)
+
+    queryset = PlatformAccountRecord.objects.filter(is_deleted=False, customer_org_id=org_id, platform=platform)
+    exclude_id = (existing.id if existing is not None else None) or data.get("id")
+    if exclude_id:
+        queryset = queryset.exclude(id=exclude_id)
+    if platform == "齐鲁云采":
+        queryset = queryset.filter(data__qiluAccountType=qilu_type)
+    else:
+        # 非齐鲁云采不区分类型；历史误写 qiluAccountType 也视作同平台冲突。
+        pass
+    duplicate = queryset.first()
+    if not duplicate:
+        return None
+    account_name = str((duplicate.data or {}).get("accountName") or duplicate.account_name or "").strip()
+    type_label = f"「{qilu_type}」" if qilu_type else ""
+    detail = f"该客户在「{platform}」{type_label}已有平台账号"
+    if account_name:
+        detail += f"（{account_name}）"
+    detail += "，同一客户同一平台同一类型只能保留一条。"
+    return JsonResponse({"detail": detail}, status=409)
+
+
+def _enrich_platform_account_items(items: list[dict]) -> list[dict]:
+    org_ids = sorted({str(item.get("customerOrgId") or "").strip() for item in items if item.get("customerOrgId")})
+    names: dict[str, str] = {}
+    if org_ids:
+        for org in OrganizationRecord.objects.filter(id__in=org_ids, is_deleted=False).only("id", "name"):
+            names[org.id] = org.name or ""
+    for item in items:
+        org_id = str(item.get("customerOrgId") or "").strip()
+        item["customerName"] = names.get(org_id, "")
+    return items
 
 
 def _sanitize_record_data(collection: str, data: dict, can_view_sensitive: bool = False) -> dict:
@@ -1615,9 +1676,15 @@ def _apply_collection_list_query(collection: str, queryset, request):
         platform = (get("platform") or "").strip()
         if platform and platform != "全部":
             queryset = queryset.filter(platform=platform)
+        qilu_type = (get("qiluAccountType") or "").strip()
+        if qilu_type and qilu_type != "全部":
+            queryset = queryset.filter(data__qiluAccountType=qilu_type)
+        customer_org_id = (get("customerOrgId") or "").strip()
+        if customer_org_id:
+            queryset = queryset.filter(customer_org_id=customer_org_id)
         if search:
             org_ids = _org_ids_matching_name(search)
-            queryset = queryset.filter(Q(customer_org_id__in=org_ids) | Q(account_name__icontains=search) | Q(data__merchantId__icontains=search) | Q(data__shopId__icontains=search) | Q(data__shopName__icontains=search))
+            queryset = queryset.filter(Q(customer_org_id__in=org_ids) | Q(account_name__icontains=search) | Q(data__merchantId__icontains=search) | Q(data__shopId__icontains=search) | Q(data__shopName__icontains=search) | Q(data__qiluAccountType__icontains=search))
     elif collection == "products":
         kind = (get("kind") or "").strip()
         if kind:
@@ -2310,6 +2377,8 @@ def collection_items(request, collection):
                     )
                     for item in queryset[start : start + page_size]
                 ]
+                if collection == "platformAccounts":
+                    items = _enrich_platform_account_items(items)
             return JsonResponse(
                 {
                     "items": items,
@@ -2324,14 +2393,17 @@ def collection_items(request, collection):
                 {"detail": "libraryContacts 请使用分页查询：paged=1&page=1&page_size=20"},
                 status=400,
             )
-        return JsonResponse({"data": [
+        items = [
             _sanitize_record_data(
                 collection,
                 _collection_public_data(collection, item),
                 can_view_sensitive,
             )
             for item in queryset
-        ]})
+        ]
+        if collection == "platformAccounts":
+            items = _enrich_platform_account_items(items)
+        return JsonResponse({"data": items})
 
     if collection == "operationLogs":
         user_data, permission_error = _require_login(request)
@@ -2355,6 +2427,9 @@ def collection_items(request, collection):
             return conflict
     if collection == "platformAccounts":
         data = _ensure_platform_account_timestamps(data, existing)
+        conflict = _platform_account_conflict(data, existing)
+        if conflict:
+            return conflict
     if collection == "trademarkCertificates":
         data = {**data, "registrationNo": _normalize_registration_no(data.get("registrationNo"))}
         conflict = _trademark_registration_conflict(data.get("registrationNo"), exclude_id=data.get("id"))
@@ -2367,7 +2442,10 @@ def collection_items(request, collection):
     if collection == "users":
         _patch_app_state_snapshot(collection, record.id, record.data)
     can_view_sensitive = _can_view_sensitive(user_data)
-    return JsonResponse({"data": _sanitize_record_data(collection, record.data, can_view_sensitive)}, status=201 if created else 200)
+    payload = _sanitize_record_data(collection, _collection_public_data(collection, record), can_view_sensitive)
+    if collection == "platformAccounts":
+        payload = _enrich_platform_account_items([payload])[0]
+    return JsonResponse({"data": payload}, status=201 if created else 200)
 
 
 @csrf_exempt
@@ -2388,7 +2466,10 @@ def collection_item(request, collection, record_id):
 
     if request.method == "GET":
         can_view_sensitive = _can_view_sensitive(user_data)
-        return JsonResponse({"data": _sanitize_record_data(collection, record.data, can_view_sensitive)})
+        payload = _sanitize_record_data(collection, _collection_public_data(collection, record), can_view_sensitive)
+        if collection == "platformAccounts":
+            payload = _enrich_platform_account_items([payload])[0]
+        return JsonResponse({"data": payload})
 
     if request.method == "DELETE":
         if model is OrganizationRecord:
@@ -2435,6 +2516,9 @@ def collection_item(request, collection, record_id):
         if request.method in {"PUT", "PATCH"} and not incoming.get("updatedAt"):
             data["updatedAt"] = timezone.now().isoformat()
         data = _ensure_platform_account_timestamps(data, record)
+        conflict = _platform_account_conflict(data, record)
+        if conflict:
+            return conflict
     if collection == "trademarkCertificates":
         data = {**data, "registrationNo": _normalize_registration_no(data.get("registrationNo"))}
         conflict = _trademark_registration_conflict(data.get("registrationNo"), exclude_id=record.id)
@@ -2449,7 +2533,10 @@ def collection_item(request, collection, record_id):
     if collection == "users":
         _patch_app_state_snapshot(collection, record.id, record.data)
     can_view_sensitive = _can_view_sensitive(user_data)
-    return JsonResponse({"data": _sanitize_record_data(collection, record.data, can_view_sensitive)})
+    payload = _sanitize_record_data(collection, _collection_public_data(collection, record), can_view_sensitive)
+    if collection == "platformAccounts":
+        payload = _enrich_platform_account_items([payload])[0]
+    return JsonResponse({"data": payload})
 
 
 @csrf_exempt
