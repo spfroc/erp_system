@@ -3,7 +3,7 @@ import { FileText, RefreshCw, Search, X } from "lucide-react";
 import { backendApiUrl } from "./apiConfig";
 import { DateTimeField } from "./DateTimeField";
 import { AuthExpiredError } from "./db";
-import { CopyableLine, SearchField } from "./listUi";
+import { CopyableLine, Pagination, SearchField } from "./listUi";
 import {
   fetchNoticeDetail,
   NoticeDetailModal,
@@ -198,7 +198,11 @@ export function Notices({
 }) {
   const [draft, setDraft] = useState<NoticeQuery>(EMPTY_NOTICE_QUERY);
   const [request, setRequest] = useState({ filters: EMPTY_NOTICE_QUERY, page: 1, nonce: 0 });
-  const [pageSize] = useState(15);
+  const [pageSize, setPageSizeState] = useState(20);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setRequest((prev) => ({ ...prev, page: 1, nonce: Date.now() }));
+  };
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<NoticeListItem[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
@@ -661,25 +665,14 @@ export function Notices({
             );
           })}
         </div>
-        <div className="pager">
-          <button
-            className="ghost"
-            disabled={page <= 1 || loading}
-            onClick={() => setRequest((prev) => ({ ...prev, page: prev.page - 1, nonce: Date.now() }))}
-          >
-            上一页
-          </button>
-          <span>
-            第 {page} / {totalPages} 页 · 共 {total} 条
-          </span>
-          <button
-            className="ghost"
-            disabled={page >= totalPages || loading}
-            onClick={() => setRequest((prev) => ({ ...prev, page: prev.page + 1, nonce: Date.now() }))}
-          >
-            下一页
-          </button>
-        </div>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={(next) => setRequest((prev) => ({ ...prev, page: next, nonce: Date.now() }))}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {detail && (

@@ -100,16 +100,22 @@ def notice_defaults(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# 官网筛选：与爬虫/门户类型对齐（旧 CMS「竞价项目」仍兼容兜底列表）
 PUBLIC_NOTICE_KINDS = [
-    "竞价项目",
-    "意向公开",
     "采购公告",
+    "竞价公告",
+    "询比公告",
+    "意向公开",
+    "成交公告",
     "结果公告",
-    "更正公告",
     "终止公告",
+    "失败公告",
+    "废标公告",
+    "更正公告",
     "合同公告",
     "验收公告",
     "单一来源公示",
+    "竞价项目",
     "其他",
 ]
 
@@ -137,6 +143,105 @@ def public_notice_payload(record: NoticeRecord) -> dict[str, Any]:
     }
 
 
+def _money_float(value) -> float:
+    if value in (None, ""):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _public_payload_from_crawled(item: dict[str, Any]) -> dict[str, Any]:
+    """把爬虫列表/详情字段映射成官网 notices 页使用的结构。"""
+    amount = item.get("dealAmount")
+    if amount in (None, ""):
+        amount = item.get("budgetAmount")
+    published = item.get("publishTime") or item.get("publishedAt") or ""
+    return {
+        "id": str(item.get("id") or ""),
+        "title": item.get("title") or "",
+        "projectNumber": item.get("projectCode") or "",
+        "department": item.get("buyerName") or "",
+        "category": item.get("procurementMode") or item.get("siteLabel") or "",
+        "noticeKind": item.get("noticeKind") or "其他",
+        "bidStatus": item.get("progressLabel") or "",
+        "amount": _money_float(amount),
+        "contactName": item.get("buyerContactName") or "",
+        "contactPhone": item.get("buyerPhone") or "",
+        "detailUrl": item.get("sourceUrl") or "",
+        "content": item.get("contentText") or "",
+        "publisher": item.get("siteLabel") or "",
+        "supplierName": item.get("dealSupplier") or "",
+        "startAt": item.get("startTime") or "",
+        "endAt": item.get("endTime") or "",
+        "publishedAt": published,
+        "siteId": item.get("siteId") or "",
+        "siteLabel": item.get("siteLabel") or "",
+    }
+
+
+def _list_public_notices_from_crawler(
+    *,
+    page: int,
+    page_size: int,
+    search: str,
+    notice_kind: str,
+) -> dict[str, Any] | None:
+    """优先读爬虫公告；表不存在或不可用时返回 None，走 CMS 兜底。"""
+    try:
+        from django.db.utils import OperationalError, ProgrammingError
+
+        from .notice_views import query_crawled_notices
+    except Exception:
+        return None
+    try:
+        payload = query_crawled_notices(
+            page=page,
+            page_size=page_size,
+            search=search,
+            notice_kind=notice_kind if notice_kind and notice_kind != "全部" else "",
+            site_ids=None,
+        )
+    except (ProgrammingError, OperationalError):
+        return None
+    total = int(payload.get("total") or 0)
+    if total <= 0 and not (search or (notice_kind and notice_kind != "全部")):
+        # 空库时仍允许 CMS 样例公告，避免开发/测试环境完全空白
+        return None
+    return {
+        "items": [_public_payload_from_crawled(item) for item in (payload.get("items") or [])],
+        "total": total,
+        "page": int(payload.get("page") or page),
+        "page_size": int(payload.get("page_size") or page_size),
+        "kinds": PUBLIC_NOTICE_KINDS,
+        "source": "crawler",
+    }
+
+
+def _get_public_notice_from_crawler(notice_id: str) -> dict[str, Any] | None:
+    try:
+        raw_id = int(str(notice_id).strip())
+    except (TypeError, ValueError):
+        return None
+    try:
+        from django.db.utils import OperationalError, ProgrammingError
+
+        from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
+        from .notice_views import _serialize_detail
+    except Exception:
+        return None
+    try:
+        raw = NoticeRaw.objects.filter(id=raw_id).first()
+        if not raw:
+            return None
+        parsed = NoticeParsed.objects.filter(notice_raw_id=raw.id).first()
+        goods = list(NoticeGoods.objects.filter(notice_raw_id=raw.id).order_by("line_no", "id"))
+        return _public_payload_from_crawled(_serialize_detail(raw, parsed, goods))
+    except (ProgrammingError, OperationalError):
+        return None
+
+
 def list_public_notices(
     *,
     page: int = 1,
@@ -146,6 +251,15 @@ def list_public_notices(
 ) -> dict[str, Any]:
     page = max(1, int(page or 1))
     page_size = min(50, max(1, int(page_size or 20)))
+    crawled = _list_public_notices_from_crawler(
+        page=page,
+        page_size=page_size,
+        search=search,
+        notice_kind=notice_kind,
+    )
+    if crawled is not None:
+        return crawled
+
     queryset = NoticeRecord.objects.filter(is_deleted=False, is_public=True)
     kind = (notice_kind or "").strip()
     if kind and kind != "全部":
@@ -171,10 +285,14 @@ def list_public_notices(
         "page": page,
         "page_size": page_size,
         "kinds": PUBLIC_NOTICE_KINDS,
+        "source": "cms",
     }
 
 
 def get_public_notice(notice_id: str) -> dict[str, Any] | None:
+    crawled = _get_public_notice_from_crawler(notice_id)
+    if crawled is not None:
+        return crawled
     record = NoticeRecord.objects.filter(id=notice_id, is_deleted=False, is_public=True).first()
     if not record:
         return None

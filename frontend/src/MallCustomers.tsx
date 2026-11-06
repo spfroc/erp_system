@@ -7,7 +7,6 @@ import type { PermissionKey, User } from "./types";
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
-const PAGE_SIZE = 20;
 
 const ORIGIN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "1", label: "百度" },
@@ -174,10 +173,15 @@ export function MallCustomersPanel({
   const [signedFilter, setSignedFilter] = useState("");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<MallCustomerItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [editing, setEditing] = useState<MallCustomerItem | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -191,7 +195,7 @@ export function MallCustomersPanel({
     setLoading(true);
     const params = new URLSearchParams({
       page: String(page),
-      page_size: String(PAGE_SIZE),
+      page_size: String(pageSize),
     });
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (signedFilter) params.set("signed", signedFilter);
@@ -211,9 +215,9 @@ export function MallCustomersPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, signedFilter, reloadTick, onNotice]);
+  }, [page, pageSize, debouncedSearch, signedFilter, reloadTick, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function openEdit(item: MallCustomerItem) {
     setEditing(item);
@@ -390,7 +394,7 @@ export function MallCustomersPanel({
           {items.length === 0 && <div className="table-empty">{loading ? "加载中…" : "暂无数据"}</div>}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {editing && (

@@ -7,8 +7,6 @@ import type { Organization, PermissionKey } from "./types";
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
-const PAGE_SIZE = 20;
-
 export const PORTAL_PERMISSION_OPTIONS = [
   { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
   { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、成交标签分析与近两周趋势" },
@@ -84,10 +82,15 @@ export function CustomerAccountsPanel({
   const [status, setStatus] = useState("全部");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<CustomerAccount[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [editing, setEditing] = useState<CustomerAccount | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -120,7 +123,7 @@ export function CustomerAccountsPanel({
     setLoading(true);
     void queryCollection<CustomerAccount>("customerAccounts", {
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: debouncedSearch,
       filters: { status },
     })
@@ -141,9 +144,9 @@ export function CustomerAccountsPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, reloadTick, onNotice]);
+  }, [page, pageSize, debouncedSearch, status, reloadTick, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function displayCustomerName(item: CustomerAccount) {
     if (item.customerOrgId && orgNameById.get(item.customerOrgId)) {
@@ -322,7 +325,7 @@ export function CustomerAccountsPanel({
           {loading && items.length === 0 && <div className="table-empty">加载中…</div>}
           {!loading && items.length === 0 && <div className="table-empty">暂无客户账号</div>}
         </div>
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
       {showForm && (
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>

@@ -1,6 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Check, Copy, Search, X } from "lucide-react";
+
+/**
+ * 后台列表统一可选每页条数。
+ * 新模块分页必须用下方 `Pagination`（首页/尾页/上下页/跳转/每页条数），见规则 admin-list-ui 与 skill admin-list-pagination。
+ */
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
 
 export async function writeClipboardText(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -143,24 +150,93 @@ export function Pagination({
   total,
   pageSize,
   onPageChange,
+  onPageSizeChange,
+  setPageSize,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: {
   page: number;
   totalPages: number;
   total: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  /** 兼容 useServerPagedList 展开：`{...pageState}` */
+  setPageSize?: (pageSize: number) => void;
+  pageSizeOptions?: readonly number[];
 }) {
-  if (total <= pageSize) return null;
+  const changePageSize = onPageSizeChange ?? setPageSize;
+  const safeTotalPages = Math.max(1, totalPages || 1);
+  const [jumpValue, setJumpValue] = useState(String(page));
+
+  useEffect(() => {
+    setJumpValue(String(page));
+  }, [page]);
+
+  if (total <= 0) return null;
+
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
+  const sizeChoices = pageSizeOptions.includes(pageSize)
+    ? pageSizeOptions
+    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
+
+  function goJump() {
+    const next = Number.parseInt(String(jumpValue).trim(), 10);
+    if (!Number.isFinite(next)) {
+      setJumpValue(String(page));
+      return;
+    }
+    onPageChange(Math.min(safeTotalPages, Math.max(1, next)));
+  }
+
   return (
-    <div className="pagination">
-      <span>{start}-{end} / {total}</span>
-      <button className="ghost" disabled={page <= 1} onClick={() => onPageChange(1)}>首页</button>
-      <button className="ghost" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>上一页</button>
-      <strong>{page} / {totalPages}</strong>
-      <button className="ghost" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>下一页</button>
-      <button className="ghost" disabled={page >= totalPages} onClick={() => onPageChange(totalPages)}>末页</button>
+    <div className="pagination" role="navigation" aria-label="分页">
+      <span className="pagination-summary">{start}-{end} / {total}</span>
+      <label className="pagination-size">
+        <span>每页</span>
+        <select
+          value={pageSize}
+          disabled={!changePageSize}
+          aria-label="每页条数"
+          onChange={(event) => {
+            if (!changePageSize) return;
+            const next = Number(event.target.value);
+            if (!Number.isFinite(next) || next === pageSize) return;
+            changePageSize(next);
+          }}
+        >
+          {sizeChoices.map((size) => (
+            <option key={size} value={size}>{size}</option>
+          ))}
+        </select>
+        <span>条</span>
+      </label>
+      <div className="pagination-actions">
+        <button type="button" className="ghost" disabled={page <= 1} onClick={() => onPageChange(1)}>首页</button>
+        <button type="button" className="ghost" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>上一页</button>
+        <strong className="pagination-page">{page} / {safeTotalPages}</strong>
+        <button type="button" className="ghost" disabled={page >= safeTotalPages} onClick={() => onPageChange(page + 1)}>下一页</button>
+        <button type="button" className="ghost" disabled={page >= safeTotalPages} onClick={() => onPageChange(safeTotalPages)}>末页</button>
+      </div>
+      <label className="pagination-jump">
+        <span>跳至</span>
+        <input
+          type="number"
+          min={1}
+          max={safeTotalPages}
+          value={jumpValue}
+          aria-label="跳转到页码"
+          onChange={(event) => setJumpValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              goJump();
+            }
+          }}
+        />
+        <span>页</span>
+        <button type="button" className="ghost" onClick={goJump}>跳转</button>
+      </label>
     </div>
   );
 }

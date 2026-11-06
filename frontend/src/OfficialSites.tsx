@@ -49,7 +49,6 @@ export const DEFAULT_OFFICIAL_INDUSTRIES: OfficialIndustryItem[] = [
 type CanAccess = (permission: PermissionKey) => boolean;
 type EditTab = "basic" | "contact" | "industries" | "platforms" | "footer" | "beian";
 
-const PAGE_SIZE = 20;
 const TABS: Array<{ id: EditTab; label: string }> = [
   { id: "basic", label: "基本信息" },
   { id: "contact", label: "联系方式" },
@@ -196,10 +195,15 @@ export function OfficialSitesPanel({
   const [statusFilter, setStatusFilter] = useState<"全部" | "启用" | "停用">("全部");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<OfficialSite[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [homePages, setHomePages] = useState<Record<string, OfficialPage>>({});
   const [editing, setEditing] = useState<OfficialSite | null>(null);
   const [creating, setCreating] = useState(false);
@@ -228,7 +232,7 @@ export function OfficialSitesPanel({
     setLoading(true);
     void queryCollection<OfficialSite>("officialSites", {
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: debouncedSearch,
       filters: { status: statusFilter === "全部" ? undefined : statusFilter },
     })
@@ -258,9 +262,9 @@ export function OfficialSitesPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, statusFilter, reloadTick, data.officialSites, data.officialPages, onNotice]);
+  }, [page, pageSize, debouncedSearch, statusFilter, reloadTick, data.officialSites, data.officialPages, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const modalOpen = creating || Boolean(editing);
 
   function closeModal() {
@@ -555,7 +559,7 @@ export function OfficialSitesPanel({
           })}
           {!loading && items.length === 0 && <div className="table-empty">暂无站点。可点「新增站点」。</div>}
         </div>
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {modalOpen && (

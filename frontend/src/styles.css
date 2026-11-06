@@ -3055,12 +3055,15 @@ nav button:hover {
   word-break: break-all;
 }
 
+/* 旧 .pager 已统一到 .pagination */
 .pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 12px;
+  color: #697586;
 }
 
 .empty-hint {
@@ -6278,9 +6281,63 @@ nav button:hover {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 8px 10px;
   margin-top: 12px;
   color: #697586;
+  font-size: 13px;
+}
+
+.pagination-summary,
+.pagination-page {
+  color: #263241;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination-size,
+.pagination-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.pagination-size select,
+.pagination-jump input {
+  min-height: 32px;
+  border: 1px solid #d8e0e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0 8px;
+  color: #263241;
+  outline: 0;
+}
+
+.pagination-size select {
+  min-width: 64px;
+}
+
+.pagination-jump input {
+  width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-jump input::-webkit-outer-spin-button,
+.pagination-jump input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pagination-jump input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .pagination strong {
@@ -6290,6 +6347,12 @@ nav button:hover {
 .pagination button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .pagination {
+    justify-content: flex-start;
+  }
 }
 
 .product-form {

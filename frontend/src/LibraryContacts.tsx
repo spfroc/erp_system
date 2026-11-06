@@ -14,7 +14,6 @@ import type {
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
-const PAGE_SIZE = 20;
 const SIGNED_OPTIONS: Array<LibrarySigned | "全部"> = ["全部", "有效", "已签约", "无效"];
 const TYPE_OPTIONS: LibraryContactType[] = ["超市电商", "定点供应商", "代理商", "经销商", "超市厂商", "其他"];
 const ORIGIN_OPTIONS: LibraryOrigin[] = [
@@ -80,10 +79,15 @@ export function LibraryContactsPanel({
   const [signedFilter, setSignedFilter] = useState<LibrarySigned | "全部">("全部");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<LibraryContact[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<LibraryContact | null>(null);
   const [creating, setCreating] = useState(false);
@@ -101,7 +105,7 @@ export function LibraryContactsPanel({
     setLoading(true);
     void queryCollection<LibraryContact>("libraryContacts", {
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: debouncedSearch,
       filters: { signed: signedFilter === "全部" ? undefined : signedFilter },
     })
@@ -120,9 +124,9 @@ export function LibraryContactsPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, signedFilter, reloadTick, data.libraryContacts, onNotice]);
+  }, [page, pageSize, debouncedSearch, signedFilter, reloadTick, data.libraryContacts, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function openCreate() {
     setCreating(true);
@@ -361,7 +365,7 @@ export function LibraryContactsPanel({
           {items.length === 0 && <div className="table-empty">{loading ? "加载中…" : "暂无数据"}</div>}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {(creating || editing) && (

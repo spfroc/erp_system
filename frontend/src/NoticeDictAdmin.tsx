@@ -52,7 +52,11 @@ export function NoticeDictAdmin({
   const [refreshKey, setRefreshKey] = useState(0);
   const [editing, setEditing] = useState<Partial<DictItem> | null>(null);
   const [saving, setSaving] = useState(false);
-  const pageSize = 20;
+  const [pageSize, setPageSizeState] = useState(20);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const canManage = kind === "org_type" ? canManageOrgType : canManageNature;
   const kindLabel = TABS.find((item) => item.kind === kind)?.label || "选项";
 
@@ -92,7 +96,7 @@ export function NoticeDictAdmin({
     return () => {
       cancelled = true;
     };
-  }, [kind, page, query, refreshKey, onNotice]);
+  }, [kind, page, pageSize, query, refreshKey, onNotice]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -216,7 +220,7 @@ export function NoticeDictAdmin({
           {!loading && items.length === 0 && <div className="table-empty">暂无数据</div>}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {editing && (

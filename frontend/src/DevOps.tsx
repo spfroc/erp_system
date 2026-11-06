@@ -99,7 +99,11 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
   const [editing, setEditing] = useState<Partial<JobItem> & { args?: Record<string, unknown> } | null>(null);
   const [runDetail, setRunDetail] = useState<RunItem | null>(null);
   const [saving, setSaving] = useState(false);
-  const pageSize = 20;
+  const [pageSize, setPageSizeState] = useState(20);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search.trim()), 300);
@@ -140,7 +144,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
     return () => {
       cancelled = true;
     };
-  }, [page, query, tab, onNotice]);
+  }, [page, pageSize, query, tab, onNotice]);
 
   function openCreate() {
     const first = scripts[0];
@@ -358,7 +362,7 @@ export function DevOps({ onNotice, canManage }: { onNotice: NoticeFn; canManage:
             )}
           </div>
         )}
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {editing && (

@@ -3,7 +3,6 @@ import { backendApiUrl } from "./apiConfig";
 import { AuthExpiredError } from "./db";
 import { CopyableLine, Pagination, SearchField } from "./listUi";
 
-const PAGE_SIZE = 20;
 
 const STATUS_FILTERS = [
   { key: "", label: "全部" },
@@ -94,9 +93,14 @@ export function McpCallLogs({
   const debouncedSearch = useDebounced(search);
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<McpLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
 
   useEffect(() => {
     setPage(1);
@@ -107,7 +111,7 @@ export function McpCallLogs({
     setLoading(true);
     void fetchMcpLogs({
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: debouncedSearch,
       status,
     })
@@ -126,9 +130,9 @@ export function McpCallLogs({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, onNotice]);
+  }, [page, pageSize, debouncedSearch, status, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="stack">
@@ -199,7 +203,7 @@ export function McpCallLogs({
           )}
         </div>
 
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   );

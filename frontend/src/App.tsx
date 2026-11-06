@@ -2799,16 +2799,22 @@ async function backfillMissingCollectionTx(params: {
   return true;
 }
 
-function usePagedItems<T>(items: T[], pageSize = 10, preserveOrder = false) {
+function usePagedItems<T>(items: T[], initialPageSize = 10, preserveOrder = false) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(initialPageSize);
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   useEffect(() => {
     setPage((current) => Math.min(Math.max(current, 1), totalPages));
   }, [totalPages]);
+  const setPageSize = (next: number) => {
+    setPageSizeState(Math.max(1, Math.floor(next) || 10));
+    setPage(1);
+  };
   const start = (page - 1) * pageSize;
   return {
     page,
     pageSize,
+    setPageSize,
     total: items.length,
     totalPages,
     items: (preserveOrder ? items : sortByCreatedDesc(items)).slice(start, start + pageSize),
@@ -2850,9 +2856,9 @@ function useServerPagedList<T>(options: {
   enabled?: boolean;
   refreshKey?: unknown;
 }) {
-  const pageSize = options.pageSize ?? 10;
   const enabled = options.enabled !== false;
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(options.pageSize ?? 10);
   const [items, setItems] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -2861,6 +2867,12 @@ function useServerPagedList<T>(options: {
   const debouncedSearch = useDebouncedValue(options.search ?? "", 300);
   const filtersKey = JSON.stringify(options.filters ?? {});
   const refreshToken = stabilizeRefreshKey(options.refreshKey);
+
+  const setPageSize = (next: number) => {
+    const size = Math.max(1, Math.floor(next) || 10);
+    setPageSizeState(size);
+    setPage(1);
+  };
 
   useEffect(() => {
     setPage(1);
@@ -2905,6 +2917,7 @@ function useServerPagedList<T>(options: {
     page,
     setPage,
     pageSize,
+    setPageSize,
     items,
     total,
     totalPages,

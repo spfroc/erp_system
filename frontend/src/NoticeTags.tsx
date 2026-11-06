@@ -94,7 +94,11 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
   const [identifyingId, setIdentifyingId] = useState<number | null>(null);
   const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(null);
   const [noticeDetailLoading, setNoticeDetailLoading] = useState(false);
-  const pageSize = 20;
+  const [pageSize, setPageSizeState] = useState(20);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const orgFilters = ["全部", ...orgTypes];
   const natureFilters = ["全部", ...natures];
   const dealKindFilters = ["全部", ...dealKinds];
@@ -160,7 +164,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
     return () => {
       cancelled = true;
     };
-  }, [page, query, regionQuery, orgType, nature, dealKind, onNotice, refreshKey]);
+  }, [page, pageSize, query, regionQuery, orgType, nature, dealKind, onNotice, refreshKey]);
 
   function toggleSelect(id: number) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -475,7 +479,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
           ))}
           {!loading && items.length === 0 && <div className="table-empty">暂无标签。有结果公告后，可先执行一次识别。</div>}
         </div>
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
       {noticeDetail && (
         <NoticeDetailModal

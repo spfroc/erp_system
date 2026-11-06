@@ -6,7 +6,6 @@ import type { AppData, LibraryContact, PermissionKey, SmsRecord, SmsTemplate, Us
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
-const PAGE_SIZE = 20;
 
 function apiUrl(path: string) {
   const url = new URL(path, window.location.origin);
@@ -76,11 +75,16 @@ export function SmsPanel({
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<SmsRecord[]>([]);
   const [templates, setTemplates] = useState<SmsTemplate[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [channel, setChannel] = useState<{ configured: boolean; dryRun: boolean; baseUrl: string } | null>(null);
 
   const [sendOpen, setSendOpen] = useState(false);
@@ -123,7 +127,7 @@ export function SmsPanel({
     if (tab === "records") {
       void queryCollection<SmsRecord>("smsRecords", {
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
         search: debouncedSearch,
       })
         .then((result) => {
@@ -160,9 +164,9 @@ export function SmsPanel({
     return () => {
       cancelled = true;
     };
-  }, [tab, page, debouncedSearch, reloadTick, data.smsRecords, data.smsTemplates, onNotice]);
+  }, [tab, page, pageSize, debouncedSearch, reloadTick, data.smsRecords, data.smsTemplates, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const remnant = Math.max(0, 100 - content.length);
 
   function openSend() {
@@ -396,7 +400,7 @@ export function SmsPanel({
               ))}
               {items.length === 0 && <div className="table-empty">{loading ? "加载中…" : "暂无发送记录"}</div>}
             </div>
-            <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+            <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         ) : (
           <div className="table">

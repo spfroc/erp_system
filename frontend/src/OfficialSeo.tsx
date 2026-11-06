@@ -6,7 +6,6 @@ import type { AppData, OfficialPage, OfficialSite, PermissionKey } from "./types
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
-const PAGE_SIZE = 20;
 
 function apiUrl(path: string) {
   const url = new URL(path, window.location.origin);
@@ -62,10 +61,15 @@ export function OfficialSeoPanel({
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(20);
   const [items, setItems] = useState<OfficialSite[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const setPageSize = (next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  };
   const [editing, setEditing] = useState<OfficialSite | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [importing, setImporting] = useState(false);
@@ -80,7 +84,7 @@ export function OfficialSeoPanel({
     setLoading(true);
     void queryCollection<OfficialSite>("officialSites", {
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search: debouncedSearch,
     })
       .then((result) => {
@@ -98,9 +102,9 @@ export function OfficialSeoPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, reloadTick, data.officialSites, onNotice]);
+  }, [page, pageSize, debouncedSearch, reloadTick, data.officialSites, onNotice]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function openEdit(site: OfficialSite) {
     setEditing(site);
@@ -312,7 +316,7 @@ export function OfficialSeoPanel({
             ))}
           {!loading && items.length === 0 && <div className="table-empty">暂无站点，请先在「官网站点」中创建。</div>}
         </div>
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       {editing && (
