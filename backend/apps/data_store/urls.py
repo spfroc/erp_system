@@ -51,7 +51,12 @@ from .portal import (
     portal_notices,
     portal_stats,
     portal_subscription,
+    portal_subscription_options,
+    portal_wechat_bind_url,
+    portal_wechat_unbind,
     public_crawled_notices,
+    wechat_mp_callback,
+    wechat_mp_oauth_callback,
 )
 from .portal_enterprise import (
     portal_account_detail,
@@ -65,6 +70,7 @@ from .portal_enterprise import (
     portal_order_detail,
     portal_orders,
 )
+from .notice_push_views import customer_account_manual_notice_push
 
 
 urlpatterns = [
@@ -75,6 +81,11 @@ urlpatterns = [
     path("portal/notices/<int:notice_id>/", portal_notice_detail, name="portal-notice-detail"),
     path("portal/stats/", portal_stats, name="portal-stats"),
     path("portal/subscription/", portal_subscription, name="portal-subscription"),
+    path("portal/subscription/options/", portal_subscription_options, name="portal-subscription-options"),
+    path("portal/wechat/bind-url/", portal_wechat_bind_url, name="portal-wechat-bind-url"),
+    path("portal/wechat/unbind/", portal_wechat_unbind, name="portal-wechat-unbind"),
+    path("wechat/mp/callback/", wechat_mp_callback, name="wechat-mp-callback"),
+    path("wechat/mp/oauth/callback/", wechat_mp_oauth_callback, name="wechat-mp-oauth-callback"),
     path("portal/orders/", portal_orders, name="portal-orders"),
     path("portal/orders/<str:order_id>/", portal_order_detail, name="portal-order-detail"),
     path("portal/invoices/", portal_invoices, name="portal-invoices"),
@@ -104,6 +115,11 @@ urlpatterns = [
     path("app-data/", app_data, name="app-data"),
     path("collections/<str:collection>/", collection_items, name="collection-items"),
     path("collections/<str:collection>/<str:record_id>/", collection_item, name="collection-item"),
+    path(
+        "customer-accounts/<str:account_id>/notice-digest/send/",
+        customer_account_manual_notice_push,
+        name="customer-account-manual-notice-push",
+    ),
     path("website-leads/", website_leads, name="website-leads"),
     path("website-leads", website_leads, name="website-leads-no-slash"),
     path("public/official-site/", public_official_site, name="public-official-site"),

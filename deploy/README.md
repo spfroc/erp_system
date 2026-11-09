@@ -1,5 +1,7 @@
 # Deploy
 
+生产环境（huawei_52）交接说明见 [PROD.md](./PROD.md)。
+
 Development stack:
 
 ```bash

@@ -199,6 +199,7 @@ export const seedData: AppData = {
       description: "仅管理定时任务与脚本，不自动授给业务角色。",
       permissions: [
         "dashboard.view",
+        "customerAccount.view",
         "dev.ops.view",
         "dev.ops.manage",
         "assistant.view",

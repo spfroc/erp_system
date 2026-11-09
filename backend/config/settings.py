@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
@@ -180,7 +182,21 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.data_store.dev_ops_tasks.tick_scheduled_jobs",
         "schedule": 60.0,
     },
+    "daily-notice-digest": {
+        "task": "apps.data_store.notice_digest_tasks.run_daily_notice_digest",
+        # 每天 18:00（CELERY_TIMEZONE / TIME_ZONE）
+        "schedule": crontab(hour=18, minute=0),
+    },
 }
+
+# 微信认证服务号（公众平台 AppID/AppSecret，非开放平台）
+WECHAT_MP_APP_ID = os.getenv("WECHAT_MP_APP_ID", "").strip()
+WECHAT_MP_APP_SECRET = os.getenv("WECHAT_MP_APP_SECRET", "").strip()
+WECHAT_MP_TOKEN = os.getenv("WECHAT_MP_TOKEN", "").strip()
+WECHAT_MP_AES_KEY = os.getenv("WECHAT_MP_AES_KEY", "").strip()
+WECHAT_MP_TEMPLATE_ID_NOTICE_DIGEST = os.getenv("WECHAT_MP_TEMPLATE_ID_NOTICE_DIGEST", "").strip()
+WECHAT_MP_OAUTH_REDIRECT_URI = os.getenv("WECHAT_MP_OAUTH_REDIRECT_URI", "").strip()
+WECHAT_MP_PORTAL_NOTICE_URL = os.getenv("WECHAT_MP_PORTAL_NOTICE_URL", "").strip()
 NOTICE_CRAWLER_DIR = os.getenv("NOTICE_CRAWLER_DIR", str(BASE_DIR.parent / "notice_crawler"))
 # 若设置，devops crawler 脚本经 docker exec 进该容器执行（生产 notice-crawler 已有依赖/SOCKS）。
 NOTICE_CRAWLER_DOCKER_CONTAINER = os.getenv("NOTICE_CRAWLER_DOCKER_CONTAINER", "").strip()

@@ -118,6 +118,16 @@
     .danger-btn:hover { background: linear-gradient(180deg, #b24b2c, #8f2f22); }
     .login-card .primary { width: 100%; margin-top: 6px; }
     .error { color: var(--danger); min-height: 1.2em; font-size: 13px; }
+    .muted { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+    .subscription-card h3 { margin: 18px 0 8px; font-size: 16px; }
+    .subscription-card h3:first-child { margin-top: 0; }
+    .chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .chip {
+      height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-strong);
+      background: #fff; color: var(--ink); font-size: 13px;
+    }
+    .chip.active { background: rgba(27,104,68,.12); border-color: var(--green); color: var(--green-dark); font-weight: 600; }
+    .row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
 
     .app { height: 100%; display: grid; grid-template-columns: 228px 1fr; overflow: hidden; }
     .side {
@@ -170,6 +180,9 @@
     .home-site-block .charts-wrap { width: 100%; }
     .home-site-block .charts { height: 300px; flex: none; }
     .home-site-block .chart { height: 260px; flex: none; min-height: 0; }
+    .charts-wrap { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+    .chart { position: relative; overflow: hidden; }
+    .chart > div { width: 100% !important; height: 100% !important; }
     .home-site-grid { display: grid; gap: 14px; grid-template-columns: 1fr; margin-top: 16px; width: 100%; }
     @media (min-width: 1280px) {
       .home-site-grid:has(> :nth-child(2)) { grid-template-columns: 1fr 1fr; }
@@ -342,10 +355,32 @@
       .login, .app { height: auto; min-height: 100%; overflow: visible; }
       .app { display: block; }
       .content { overflow: visible; display: block; }
-      .list-card, .charts > .card { overflow: visible; display: block; }
+      .list-card { overflow: visible; display: block; }
+      /* 微信/窄屏：图表行改为自适应高度，避免两图挤在固定 300px 里叠画布 */
+      #panel.stats-panel > .charts,
+      .home-site-block .charts {
+        height: auto !important;
+        min-height: 0;
+      }
+      .charts > .card {
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 300px;
+        margin: 0;
+      }
+      .charts > .card > .chart,
+      .home-site-block .chart,
+      .chart {
+        height: 260px !important;
+        min-height: 260px;
+        flex: none;
+        width: 100%;
+        position: relative;
+        overflow: hidden;
+      }
       .notice { display: flex; padding: 12px 0; }
       .notice h3, .notice p { white-space: normal; }
-      .chart { height: 280px; }
     }
   </style>
 </head>
@@ -498,7 +533,8 @@
 
     function readSavedTab() {
       const hash = (location.hash || "").replace(/^#/, "").trim();
-      if (hash) return hash;
+      const tab = hash.split("?")[0].trim();
+      if (tab) return tab;
       try {
         return localStorage.getItem(TAB_STORAGE_KEY) || "";
       } catch {
@@ -506,12 +542,35 @@
       }
     }
 
+    function readHashQuery() {
+      const hash = (location.hash || "").replace(/^#/, "").trim();
+      const q = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+      return new URLSearchParams(q);
+    }
+
+    function readWechatBindStatus() {
+      const fromSearch = new URLSearchParams(location.search || "").get("wechat");
+      if (fromSearch) return fromSearch;
+      return readHashQuery().get("wechat") || "";
+    }
+
+    function clearWechatBindStatusFromUrl() {
+      const hashTab = ((location.hash || "").replace(/^#/, "").split("?")[0] || "subscription").trim() || "subscription";
+      const url = new URL(location.href);
+      if (!url.searchParams.has("wechat") && !(location.hash || "").includes("wechat=")) return;
+      url.searchParams.delete("wechat");
+      url.hash = hashTab;
+      history.replaceState(null, "", url.pathname + url.search + "#" + hashTab);
+    }
+
     function saveTab(id) {
       try {
         localStorage.setItem(TAB_STORAGE_KEY, id);
       } catch (_) {}
-      if (location.hash.replace(/^#/, "") !== id) {
-        history.replaceState(null, "", "#" + id);
+      const current = (location.hash || "").replace(/^#/, "").split("?")[0];
+      if (current !== id) {
+        const url = new URL(location.href);
+        history.replaceState(null, "", url.pathname + url.search + "#" + id);
       }
     }
 
@@ -527,8 +586,23 @@
     }
 
     function disposeCharts() {
-      charts.forEach((chart) => chart.dispose());
+      charts.forEach((chart) => {
+        try {
+          chart.dispose();
+        } catch (_) {}
+      });
       charts = [];
+      if (window.echarts) {
+        document.querySelectorAll(".chart").forEach((el) => {
+          const existing = window.echarts.getInstanceByDom(el);
+          if (existing) {
+            try {
+              existing.dispose();
+            } catch (_) {}
+          }
+          el.replaceChildren();
+        });
+      }
     }
 
     function showLogin() {
@@ -559,8 +633,9 @@
         button.onclick = () => openTab(item[0]);
         nav.appendChild(button);
       });
+      const bindStatus = readWechatBindStatus();
       const saved = readSavedTab();
-      const preferred = saved || "home";
+      const preferred = bindStatus ? "subscription" : (saved || "home");
       const known = new Set(allowed.map((item) => item[0]));
       known.add("account");
       const next = known.has(preferred) ? preferred : (allowed[0] ? allowed[0][0] : "account");
@@ -598,7 +673,7 @@
         if (id === "home") await renderHome(panel);
         else if (id === "stats") await renderStats(panel);
         else if (id === "notices") await renderNotices(panel);
-        else if (id === "subscription") renderSubscription(panel);
+        else if (id === "subscription") await renderSubscription(panel);
         else if (id === "orders") await renderOrders(panel);
         else if (id === "invoices") await renderInvoices(panel);
         else if (id === "contracts") await renderContracts(panel);
@@ -1275,14 +1350,36 @@
     }
 
     function mountChart(el, option) {
-      const chart = echarts.init(el);
-      chart.setOption(option);
+      if (!el) return null;
+      const existing = echarts.getInstanceByDom(el);
+      if (existing) {
+        try {
+          existing.dispose();
+        } catch (_) {}
+      }
+      el.replaceChildren();
+      const width = Math.max(el.clientWidth || el.parentElement?.clientWidth || 320, 240);
+      const height = Math.max(el.clientHeight || 260, 220);
+      const chart = echarts.init(el, null, { renderer: "canvas", width, height });
+      chart.setOption(option, true);
       charts.push(chart);
       return chart;
     }
 
     function fitCharts() {
-      requestAnimationFrame(() => charts.forEach((chart) => chart.resize()));
+      const run = () => {
+        charts.forEach((chart) => {
+          try {
+            chart.resize();
+          } catch (_) {}
+        });
+      };
+      // 微信 WebView 首屏布局滞后，多次 resize 避免画布尺寸错乱叠层
+      requestAnimationFrame(() => {
+        requestAnimationFrame(run);
+        window.setTimeout(run, 80);
+        window.setTimeout(run, 320);
+      });
     }
 
     function formatMoney(value) {
@@ -1763,27 +1860,188 @@
       fillNoticePager(pager, panel, body);
     }
 
-    function renderSubscription(panel) {
+    function renderChipGroup(container, items, selected, onToggle) {
+      container.innerHTML = "";
+      container.className = "chip-group";
+      (items || []).forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip" + (selected.includes(item) ? " active" : "");
+        btn.textContent = item;
+        btn.onclick = () => onToggle(item);
+        container.appendChild(btn);
+      });
+    }
+
+    async function renderSubscription(panel) {
       panel.innerHTML = "";
       const card = document.createElement("form");
-      card.className = "card";
-      card.innerHTML = '<label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔" /></label><label class="check-row"><input name="enabled" type="checkbox" /> 开启订阅</label><button class="primary" type="submit">保存</button><p class="error"></p>';
+      card.className = "card subscription-card";
+      card.innerHTML = `
+        <h3>微信推送</h3>
+        <p class="muted" id="wechat-status"></p>
+        <div class="row-actions" id="wechat-actions"></div>
+        <h3>订阅条件</h3>
+        <p class="muted">维度之间为「且」：填了的条件都要满足；同一维度内多个选项为「或」。每天汇总一条微信提醒。</p>
+        <label>采购内容标签<div class="chip-group" id="content-tags"></div></label>
+        <label>单位类型<div class="chip-group" id="org-types"></div></label>
+        <label>地区（省）
+          <select name="province">
+            <option value="">不限</option>
+          </select>
+        </label>
+        <label>地区（市，可选）<input name="city" placeholder="如：济南市" /></label>
+        <label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔，匹配标题/项目名" /></label>
+        <label>采购人（可多条，逗号分隔）<input name="buyers" placeholder="如：交通管理支队, 审计局" /></label>
+        <label class="check-row"><input name="enabled" type="checkbox" /> 开启每日推送</label>
+        <div class="row-actions"><button class="primary" type="submit">保存订阅</button></div>
+        <p class="error" id="sub-msg"></p>
+      `;
+      panel.appendChild(card);
+
+      const selectedTags = new Set(me.subscription?.contentTags || []);
+      const selectedOrgTypes = new Set(me.subscription?.orgTypes || []);
+      const region0 = (me.subscription?.regions && me.subscription.regions[0]) || {};
       card.keywords.value = me.subscription?.keywords || "";
+      card.buyers.value = (me.subscription?.buyers || []).join(", ");
+      card.city.value = region0.city || "";
       card.enabled.checked = Boolean(me.subscription?.enabled);
+
+      const statusEl = card.querySelector("#wechat-status");
+      const actionsEl = card.querySelector("#wechat-actions");
+      const msgEl = card.querySelector("#sub-msg");
+      const bindStatus = readWechatBindStatus();
+      if (bindStatus === "ok") msgEl.textContent = "微信绑定成功。";
+      else if (bindStatus === "fail") msgEl.textContent = "微信绑定失败，请重试。";
+      else if (bindStatus === "conflict") msgEl.textContent = "该微信已绑定其他账号。";
+      if (bindStatus) clearWechatBindStatusFromUrl();
+
+      function refreshWechatUi(options) {
+        const bound = Boolean(me.wechatBound);
+        const follow = me.wechatFollowStatus || "unknown";
+        statusEl.textContent = bound
+          ? `已绑定微信${follow === "unsubscribed" ? "（已取关服务号，将无法收到推送）" : "，可开启每日汇总推送"}`
+          : "尚未绑定微信。开启推送前请先关注服务号并完成绑定。";
+        actionsEl.innerHTML = "";
+        if (!options?.wechatConfigured) {
+          const tip = document.createElement("p");
+          tip.className = "muted";
+          tip.textContent = "管理员尚未配置微信服务号，绑定按钮暂不可用。";
+          actionsEl.appendChild(tip);
+          return;
+        }
+        if (!bound) {
+          const bindBtn = document.createElement("button");
+          bindBtn.type = "button";
+          bindBtn.className = "primary";
+          bindBtn.textContent = "绑定微信";
+          bindBtn.onclick = async () => {
+            try {
+              const body = await api("/api/portal/wechat/bind-url/");
+              if (body.url) location.href = body.url;
+            } catch (error) {
+              msgEl.textContent = error.message;
+            }
+          };
+          actionsEl.appendChild(bindBtn);
+        } else {
+          const unbindBtn = document.createElement("button");
+          unbindBtn.type = "button";
+          unbindBtn.className = "ghost";
+          unbindBtn.textContent = "解除绑定";
+          unbindBtn.onclick = async () => {
+            try {
+              const body = await api("/api/portal/wechat/unbind/", { method: "POST", body: "{}" });
+              me = body.data;
+              card.enabled.checked = Boolean(me.subscription?.enabled);
+              refreshWechatUi(options);
+              msgEl.textContent = "已解除微信绑定，推送已关闭。";
+            } catch (error) {
+              msgEl.textContent = error.message;
+            }
+          };
+          actionsEl.appendChild(unbindBtn);
+        }
+      }
+
+      let options = { contentTags: [], orgTypes: [], provinces: [], wechatConfigured: false };
+      try {
+        if (bindStatus) {
+          const latest = await api("/api/portal/me/");
+          me = latest.data;
+        }
+        options = await api("/api/portal/subscription/options/");
+      } catch (error) {
+        msgEl.textContent = error.message || msgEl.textContent;
+      }
+
+      const provinceSelect = card.province;
+      (options.provinces || []).forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        provinceSelect.appendChild(opt);
+      });
+      provinceSelect.value = region0.province || "";
+
+      const redrawTags = () => renderChipGroup(
+        card.querySelector("#content-tags"),
+        options.contentTags || [],
+        [...selectedTags],
+        (item) => {
+          if (selectedTags.has(item)) selectedTags.delete(item);
+          else selectedTags.add(item);
+          redrawTags();
+        },
+      );
+      const redrawOrgs = () => renderChipGroup(
+        card.querySelector("#org-types"),
+        options.orgTypes || [],
+        [...selectedOrgTypes],
+        (item) => {
+          if (selectedOrgTypes.has(item)) selectedOrgTypes.delete(item);
+          else selectedOrgTypes.add(item);
+          redrawOrgs();
+        },
+      );
+      redrawTags();
+      redrawOrgs();
+      refreshWechatUi(options);
+
       card.onsubmit = async (event) => {
         event.preventDefault();
+        msgEl.textContent = "";
+        const buyers = String(card.buyers.value || "")
+          .split(/[\s,，;；]+/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const regions = [];
+        if (provinceSelect.value || card.city.value.trim()) {
+          regions.push({
+            province: provinceSelect.value || "",
+            city: card.city.value.trim(),
+            district: "",
+          });
+        }
         try {
           const body = await api("/api/portal/subscription/", {
             method: "PUT",
-            body: JSON.stringify({ keywords: card.keywords.value, enabled: card.enabled.checked }),
+            body: JSON.stringify({
+              enabled: card.enabled.checked,
+              keywords: card.keywords.value,
+              contentTags: [...selectedTags],
+              orgTypes: [...selectedOrgTypes],
+              buyers,
+              regions,
+            }),
           });
           me = body.data;
-          card.querySelector(".error").textContent = "已保存。";
+          msgEl.textContent = "订阅已保存。";
+          refreshWechatUi(options);
         } catch (error) {
-          card.querySelector(".error").textContent = error.message;
+          msgEl.textContent = error.message;
         }
       };
-      panel.appendChild(card);
     }
 
     function renderAccount(panel) {
@@ -1837,7 +2095,12 @@
       showLogin();
     };
     document.addEventListener("click", () => { dropdown.hidden = true; });
-    window.addEventListener("resize", () => charts.forEach((chart) => chart.resize()));
+    window.addEventListener("resize", () => fitCharts());
+    window.addEventListener("orientationchange", () => window.setTimeout(fitCharts, 200));
+    window.addEventListener("pageshow", () => window.setTimeout(fitCharts, 50));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") window.setTimeout(fitCharts, 80);
+    });
     window.addEventListener("hashchange", () => {
       if (!me) return;
       const next = readSavedTab() || "home";

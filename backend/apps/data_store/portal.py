@@ -1,18 +1,22 @@
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 import hashlib
+import html
+import json
+from urllib.parse import urlencode
 
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable
 from django.core import signing
 from django.core.cache import cache
 from django.db import OperationalError, ProgrammingError, connection
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import CustomerAccountRecord
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
+from .notice_subscription import normalize_subscription, subscription_has_filters
 from .notice_tagging import DEAL_KINDS, normalize_stats_period, period_bounds, safe_stats
 from .notice_views import (
     NOTICE_TYPE_LABELS,
@@ -20,6 +24,7 @@ from .notice_views import (
     _serialize_detail,
     query_crawled_notices,
 )
+from . import wechat_mp
 PORTAL_COOKIE = "portal_session"
 PORTAL_SALT = "portal-account"
 PORTAL_MAX_AGE = 60 * 60 * 12
@@ -77,11 +82,19 @@ def public_account(record: CustomerAccountRecord) -> dict:
     data["customerOrgId"] = record.customer_org_id or data.get("customerOrgId") or ""
     data["status"] = record.status or data.get("status") or "启用"
     data["permissions"] = normalize_portal_permissions(data.get("permissions"))
-    subscription = data.get("subscription") if isinstance(data.get("subscription"), dict) else {}
+    subscription = normalize_subscription(
+        data.get("subscription") if isinstance(data.get("subscription"), dict) else {}
+    )
+    # 兼容旧前端：keywords 仍可为字符串
     data["subscription"] = {
-        "enabled": bool(subscription.get("enabled")),
-        "keywords": str(subscription.get("keywords") or ""),
+        **subscription,
+        "keywords": subscription.get("keywordsText") or " ".join(subscription.get("keywords") or []),
     }
+    wechat = data.get("wechat") if isinstance(data.get("wechat"), dict) else {}
+    openid = str(wechat.get("openid") or "").strip()
+    data["wechatBound"] = bool(openid)
+    data["wechatFollowStatus"] = str(wechat.get("followStatus") or ("subscribed" if openid else "unknown"))
+    data.pop("wechat", None)
     if "allowedSiteIds" in (record.data or {}):
         data["allowedSiteIds"] = normalize_allowed_site_ids((record.data or {}).get("allowedSiteIds"))
     else:
@@ -94,13 +107,15 @@ def public_account(record: CustomerAccountRecord) -> dict:
 
 def account_defaults(payload: dict) -> dict:
     permissions = normalize_portal_permissions(payload.get("permissions"))
-    subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
+    subscription = normalize_subscription(
+        payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
+    )
     data = {
         **payload,
         "permissions": permissions,
         "subscription": {
-            "enabled": bool(subscription.get("enabled")),
-            "keywords": str(subscription.get("keywords") or "").strip(),
+            **subscription,
+            "keywords": subscription.get("keywordsText") or " ".join(subscription.get("keywords") or []),
         },
         "status": (payload.get("status") or "启用").strip() or "启用",
     }
@@ -112,6 +127,8 @@ def account_defaults(payload: dict) -> dict:
             data["allowedSiteIds"] = normalize_allowed_site_ids(raw) or []
     data.pop("allowedSites", None)
     data.pop("siteScope", None)
+    data.pop("wechatBound", None)
+    data.pop("wechatFollowStatus", None)
     return {
         "data": data,
         "name": str(payload.get("name") or "").strip(),
@@ -837,14 +854,242 @@ def portal_subscription(request):
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
         return JsonResponse({"detail": "订阅内容无效。"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"detail": "订阅内容无效。"}, status=400)
+    wanted_enabled = bool(payload.get("enabled"))
+    normalized = normalize_subscription(payload)
+    if wanted_enabled and not subscription_has_filters(normalized):
+        return JsonResponse({"detail": "请至少设置标签、地区、关键词、采购人或单位中的一项。"}, status=400)
+    account = public_account(record)
+    if wanted_enabled and not account.get("wechatBound"):
+        return JsonResponse({"detail": "请先绑定微信后再开启推送。"}, status=400)
     data = dict(record.data or {})
     data["subscription"] = {
-        "enabled": bool(payload.get("enabled")),
-        "keywords": str(payload.get("keywords") or "").strip(),
+        "enabled": normalized["enabled"],
+        "keywords": normalized.get("keywordsText") or " ".join(normalized.get("keywords") or []),
+        "contentTags": normalized.get("contentTags") or [],
+        "regions": normalized.get("regions") or [],
+        "buyers": normalized.get("buyers") or [],
+        "orgTypes": normalized.get("orgTypes") or [],
     }
     record.data = data
     record.save(update_fields=["data", "updated_at"])
     return JsonResponse({"data": public_account(record)})
+
+
+@require_http_methods(["GET"])
+def portal_subscription_options(request):
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    from django.db.models import Count
+
+    from .notice_dict import KIND_ORG_TYPE, list_dict_names
+    from .notice_tag_models import NoticeResultTag
+
+    content_tags = list(
+        NoticeResultTag.objects.exclude(content_tag="")
+        .values("content_tag")
+        .annotate(total=Count("id"))
+        .order_by("-total", "content_tag")
+        .values_list("content_tag", flat=True)[:40]
+    )
+    # 兜底常用标签，避免库空时无法勾选
+    for item in ("印刷", "运维服务", "办公用品", "空调", "LED屏幕", "车辆加油", "宣传项目", "家具", "计算机"):
+        if item not in content_tags:
+            content_tags.append(item)
+    provinces = [
+        "山东省",
+        "北京市",
+        "上海市",
+        "天津市",
+        "河北省",
+        "河南省",
+        "江苏省",
+        "浙江省",
+        "广东省",
+        "四川省",
+    ]
+    return JsonResponse(
+        {
+            "contentTags": content_tags,
+            "orgTypes": list(list_dict_names(KIND_ORG_TYPE, enabled_only=True))
+            or ["机关", "教育", "医疗卫生", "公安系统", "事业单位", "其他"],
+            "provinces": provinces,
+            "wechatConfigured": wechat_mp.mp_configured(),
+        }
+    )
+
+
+def _set_account_wechat(record: CustomerAccountRecord, *, openid: str, follow_status: str = "subscribed") -> None:
+    data = dict(record.data or {})
+    data["wechat"] = {
+        "openid": openid,
+        "boundAt": timezone.now().isoformat(),
+        "followStatus": follow_status,
+    }
+    record.data = data
+    record.save(update_fields=["data", "updated_at"])
+
+
+def _clear_account_wechat(record: CustomerAccountRecord) -> None:
+    data = dict(record.data or {})
+    data.pop("wechat", None)
+    record.data = data
+    record.save(update_fields=["data", "updated_at"])
+
+
+def _find_account_by_openid(openid: str) -> CustomerAccountRecord | None:
+    openid = (openid or "").strip()
+    if not openid:
+        return None
+    for record in CustomerAccountRecord.objects.filter(is_deleted=False).iterator(chunk_size=200):
+        wechat = (record.data or {}).get("wechat") if isinstance(record.data, dict) else None
+        if isinstance(wechat, dict) and str(wechat.get("openid") or "").strip() == openid:
+            return record
+    return None
+
+
+@require_http_methods(["GET"])
+def portal_wechat_bind_url(request):
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    if not wechat_mp.mp_configured():
+        return JsonResponse({"detail": "微信服务号尚未配置，请联系管理员。"}, status=503)
+    state = signing.dumps({"aid": record.id, "ts": timezone.now().timestamp()}, salt="portal-wechat-bind")
+    url = wechat_mp.build_oauth_url(state=state)
+    if not url:
+        return JsonResponse({"detail": "无法生成微信授权链接，请检查回调域名配置。"}, status=503)
+    return JsonResponse({"url": url, "wechatBound": public_account(record).get("wechatBound")})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def portal_wechat_unbind(request):
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    data = dict(record.data or {})
+    sub = data.get("subscription") if isinstance(data.get("subscription"), dict) else {}
+    if sub:
+        sub = dict(sub)
+        sub["enabled"] = False
+        data["subscription"] = sub
+    data.pop("wechat", None)
+    record.data = data
+    record.save(update_fields=["data", "updated_at"])
+    return JsonResponse({"data": public_account(record), "ok": True})
+
+
+def _portal_bind_result_page(*, status: str) -> HttpResponse:
+    """微信内 302 Location 带 #hash 常被代理剥掉，导致白页；改用结果页 + JS 跳转。"""
+    status = (status or "fail").strip() or "fail"
+    if status not in {"ok", "fail", "conflict"}:
+        status = "fail"
+    messages = {
+        "ok": "微信绑定成功",
+        "fail": "微信绑定失败，请重试",
+        "conflict": "该微信已绑定其他账号",
+    }
+    title = messages[status]
+    portal_home = (wechat_mp.portal_notice_url() or "/").rstrip("/") + "/"
+    target = f"{portal_home}?{urlencode({'wechat': status})}#subscription"
+    safe_title = html.escape(title)
+    safe_href = html.escape(target, quote=True)
+    js_target = json.dumps(target, ensure_ascii=False)
+    page = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{safe_title}</title>
+  <style>
+    body {{ margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f7f5; color: #17382d; }}
+    .box {{ width: min(88vw, 360px); padding: 28px 22px; border-radius: 16px;
+      background: #fff; box-shadow: 0 10px 30px rgba(23,56,45,.08); text-align: center; }}
+    h1 {{ margin: 0 0 10px; font-size: 20px; }}
+    p {{ margin: 0; color: #5b7368; font-size: 14px; line-height: 1.6; }}
+    a {{ color: #1f7a57; }}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>{safe_title}</h1>
+    <p>正在返回订阅页面…</p>
+    <p style="margin-top:12px"><a href="{safe_href}">如未自动跳转请点这里</a></p>
+  </div>
+  <script>location.replace({js_target});</script>
+</body>
+</html>"""
+    return HttpResponse(page, content_type="text/html; charset=utf-8")
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def wechat_mp_oauth_callback(request):
+    try:
+        code = (request.GET.get("code") or "").strip()
+        state = (request.GET.get("state") or "").strip()
+        if not code or not state:
+            return _portal_bind_result_page(status="fail")
+        try:
+            payload = signing.loads(state, salt="portal-wechat-bind", max_age=600)
+        except signing.BadSignature:
+            return _portal_bind_result_page(status="fail")
+        account_id = str((payload or {}).get("aid") or "").strip()
+        record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
+        if not record or (record.status or "") != "启用":
+            return _portal_bind_result_page(status="fail")
+        exchanged = wechat_mp.exchange_oauth_code(code)
+        openid = exchanged.get("openid") or ""
+        if not openid:
+            return _portal_bind_result_page(status="fail")
+        existing = _find_account_by_openid(openid)
+        if existing and existing.id != record.id:
+            return _portal_bind_result_page(status="conflict")
+        _set_account_wechat(record, openid=openid, follow_status="subscribed")
+        return _portal_bind_result_page(status="ok")
+    except Exception:  # noqa: BLE001
+        return _portal_bind_result_page(status="fail")
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def wechat_mp_callback(request):
+    from django.http import HttpResponse
+
+    signature = request.GET.get("signature") or ""
+    timestamp = request.GET.get("timestamp") or ""
+    nonce = request.GET.get("nonce") or ""
+    echostr = request.GET.get("echostr") or ""
+    if not wechat_mp.verify_callback_signature(signature=signature, timestamp=timestamp, nonce=nonce):
+        return HttpResponse("invalid signature", status=403)
+    if request.method == "GET":
+        return HttpResponse(echostr)
+    event = wechat_mp.parse_callback_xml(request.body or b"")
+    msg_type = (event.get("MsgType") or "").lower()
+    event_name = (event.get("Event") or "").lower()
+    openid = (event.get("FromUserName") or "").strip()
+    if msg_type == "event" and openid:
+        record = _find_account_by_openid(openid)
+        if record:
+            data = dict(record.data or {})
+            wechat = dict(data.get("wechat") or {})
+            if event_name == "subscribe":
+                wechat["followStatus"] = "subscribed"
+                wechat["openid"] = openid
+                data["wechat"] = wechat
+                record.data = data
+                record.save(update_fields=["data", "updated_at"])
+            elif event_name == "unsubscribe":
+                wechat["followStatus"] = "unsubscribed"
+                data["wechat"] = wechat
+                record.data = data
+                record.save(update_fields=["data", "updated_at"])
+    return HttpResponse("success")
 
 
 @require_http_methods(["GET"])

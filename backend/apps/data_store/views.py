@@ -522,6 +522,18 @@ def _collection_public_data(collection: str, record) -> dict:
             data.setdefault("accountName", record.account_name)
         if getattr(record, "current_status", ""):
             data.setdefault("currentStatus", record.current_status)
+    if collection == "customerAccounts":
+        data.setdefault("id", record.id)
+        data["name"] = getattr(record, "name", "") or data.get("name") or ""
+        data["phone"] = getattr(record, "phone", "") or data.get("phone") or ""
+        data["customerName"] = getattr(record, "customer_name", "") or data.get("customerName") or ""
+        data["customerOrgId"] = getattr(record, "customer_org_id", "") or data.get("customerOrgId") or ""
+        data["status"] = getattr(record, "status", "") or data.get("status") or "启用"
+        wechat = data.get("wechat") if isinstance(data.get("wechat"), dict) else {}
+        openid = str(wechat.get("openid") or "").strip()
+        data["wechatBound"] = bool(openid)
+        data["wechatFollowStatus"] = str(wechat.get("followStatus") or ("subscribed" if openid else "unknown"))
+        data.pop("wechat", None)  # 不回传 openid
     if collection == "websiteLeads":
         data.setdefault("id", record.id)
         if getattr(record, "company_name", ""):
@@ -2523,6 +2535,11 @@ def collection_item(request, collection, record_id):
         conflict = _customer_account_conflict(data, record)
         if conflict:
             return conflict
+        # 管理端保存时不要误清门户微信绑定信息
+        if "wechat" not in incoming:
+            existing_wechat = existing_data.get("wechat") if isinstance(existing_data.get("wechat"), dict) else None
+            if existing_wechat:
+                data["wechat"] = existing_wechat
     if collection == "platformAccounts":
         if request.method in {"PUT", "PATCH"} and not incoming.get("updatedAt"):
             data["updatedAt"] = timezone.now().isoformat()

@@ -953,5 +953,7 @@ export interface CustomerAccount {
   status: "启用" | "停用";
   permissions: string[];
   subscription?: { enabled?: boolean; keywords?: string };
+  wechatBound?: boolean;
+  wechatFollowStatus?: string;
   createdAt?: string;
 }

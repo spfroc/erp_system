@@ -453,5 +453,6 @@ from apps.data_store.notice_tag_models import (  # noqa: E402,F401
     NoticeResultTag,
     NoticeTagRule,
 )
+from apps.data_store.notice_push_models import NoticePushLog  # noqa: E402,F401
 from apps.data_store.dev_ops_models import DevOpsJob, DevOpsJobRun  # noqa: E402,F401
 

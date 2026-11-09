@@ -11,6 +11,8 @@ docs
 .env.official
 deploy/.env.assistant.local
 **/.env.assistant.local
+deploy/.env.wechat.mp.local
+**/.env.wechat.mp.local
 backend/media/
 npm-debug.log*
 .DS_Store

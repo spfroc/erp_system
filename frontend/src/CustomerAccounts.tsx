@@ -7,10 +7,16 @@ import type { Organization, PermissionKey } from "./types";
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
+function apiUrl(path: string) {
+  const url = new URL(path, window.location.origin);
+  if (import.meta.env.DEV) url.port = "8000";
+  return url.toString();
+}
+
 export const PORTAL_PERMISSION_OPTIONS = [
   { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
   { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、成交标签分析与近两周趋势" },
-  { id: "portal.notice.subscribe", label: "订阅消息", hint: "按关键词保存订阅（短信发送后续开通）" },
+  { id: "portal.notice.subscribe", label: "订阅消息", hint: "门户按标签/地区/关键词等订阅，微信服务号每日汇总推送" },
   { id: "portal.order.view", label: "企业订单", hint: "查看本企业销售/服务订单" },
   { id: "portal.invoice.view", label: "企业发票", hint: "查看本企业作为买方的发票" },
   { id: "portal.contract.view", label: "企业合同", hint: "查看本企业相关合同附件" },
@@ -37,7 +43,15 @@ export interface CustomerAccount {
   /** null/undefined = 不限制；[] = 无平台；有值 = 白名单 */
   allowedSiteIds?: string[] | null;
   subscription?: { enabled?: boolean; keywords?: string };
+  wechatBound?: boolean;
+  wechatFollowStatus?: string;
   createdAt?: string;
+}
+
+function wechatStatusLabel(item: CustomerAccount) {
+  if (!item.wechatBound) return "未绑定";
+  if (item.wechatFollowStatus === "unsubscribed") return "已绑定（已取关）";
+  return "已绑定";
 }
 
 const emptyForm = {
@@ -78,6 +92,7 @@ export function CustomerAccountsPanel({
   can: CanAccess;
 }) {
   const canManage = can("customerAccount.manage");
+  const canManualPush = can("dev.ops.manage");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("全部");
   const debouncedSearch = useDebounced(search);
@@ -95,6 +110,14 @@ export function CustomerAccountsPanel({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [pushTarget, setPushTarget] = useState<CustomerAccount | null>(null);
+  const [pushForm, setPushForm] = useState({
+    project: "",
+    bidTime: "",
+    initiator: "",
+    projectCode: "",
+  });
+  const [pushing, setPushing] = useState(false);
 
   const orgOptions = useMemo(
     () =>
@@ -206,6 +229,52 @@ export function CustomerAccountsPanel({
     }));
   }
 
+  function openPushForm(item: CustomerAccount) {
+    if (!item.wechatBound || item.wechatFollowStatus === "unsubscribed" || item.status !== "启用") return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+    setPushTarget(item);
+    setPushForm({
+      project: "公告订阅测试推送",
+      bidTime: stamp,
+      initiator: item.name || "系统",
+      projectCode: `TEST-${item.id.slice(-6) || "000000"}`,
+    });
+  }
+
+  async function submitPushForm() {
+    if (!pushTarget) return;
+    if (!pushForm.project.trim() || !pushForm.bidTime.trim() || !pushForm.initiator.trim() || !pushForm.projectCode.trim()) {
+      onNotice({ type: "error", message: "请完整填写竞标项目、时间、发起人、项目编码" });
+      return;
+    }
+    setPushing(true);
+    try {
+      const response = await fetch(apiUrl(`/api/customer-accounts/${encodeURIComponent(pushTarget.id)}/notice-digest/send/`), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          project: pushForm.project.trim(),
+          bidTime: pushForm.bidTime.trim(),
+          initiator: pushForm.initiator.trim(),
+          projectCode: pushForm.projectCode.trim(),
+        }),
+      });
+      if (response.status === 401) throw new AuthExpiredError();
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || body.message || "推送失败");
+      setPushTarget(null);
+      onNotice({ type: "success", message: body.message || "推送成功" });
+    } catch (error) {
+      if (error instanceof AuthExpiredError) return;
+      onNotice({ type: "error", message: error instanceof Error ? error.message : "推送失败" });
+    } finally {
+      setPushing(false);
+    }
+  }
+
   async function save() {
     if (!form.customerOrgId.trim()) {
       onNotice({ type: "error", message: "请选择关联客户企业" });
@@ -286,6 +355,7 @@ export function CustomerAccountsPanel({
             <span>手机号</span>
             <span>门户权限</span>
             <span>可查看平台</span>
+            <span>微信</span>
             <span>状态</span>
             <span>操作</span>
           </div>
@@ -311,11 +381,22 @@ export function CustomerAccountsPanel({
               <span>{item.phone}</span>
               <span>{PORTAL_PERMISSION_OPTIONS.filter((option) => item.permissions?.includes(option.id)).map((option) => option.label).join("、") || "—"}</span>
               <span>{siteScopeLabel(item)}</span>
+              <span>{wechatStatusLabel(item)}</span>
               <span>{item.status}</span>
               <div className="option-actions">
                 {canManage && (
                   <button className="copy-link" type="button" onClick={() => openEdit(item)}>
                     编辑
+                  </button>
+                )}
+                {canManualPush && item.wechatBound && item.wechatFollowStatus !== "unsubscribed" && item.status === "启用" && (
+                  <button
+                    className="copy-link"
+                    type="button"
+                    title="仅开发可见：按模板手动推送"
+                    onClick={() => openPushForm(item)}
+                  >
+                    手动推送
                   </button>
                 )}
               </div>
@@ -327,6 +408,66 @@ export function CustomerAccountsPanel({
         </div>
         <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
+      {pushTarget && (
+        <div className="modal-backdrop" onClick={() => !pushing && setPushTarget(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h3>手动推送微信消息</h3>
+              <button className="icon-button" type="button" onClick={() => !pushing && setPushTarget(null)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="muted" style={{ margin: "0 0 12px" }}>
+              接收账号：{pushTarget.name} / {pushTarget.phone}。模板：竞标结果通知。
+            </p>
+            <div className="form-grid customer-account-form">
+              <label className="span-12">
+                竞标项目（thing1）
+                <input
+                  value={pushForm.project}
+                  maxLength={20}
+                  onChange={(event) => setPushForm({ ...pushForm, project: event.target.value })}
+                  placeholder="如：办公室电脑采购竞标"
+                />
+              </label>
+              <label className="span-12">
+                竞标时间（time2）
+                <input
+                  value={pushForm.bidTime}
+                  onChange={(event) => setPushForm({ ...pushForm, bidTime: event.target.value })}
+                  placeholder="如：2023-11-17 09:01:00"
+                />
+              </label>
+              <label>
+                发起人（thing3）
+                <input
+                  value={pushForm.initiator}
+                  maxLength={20}
+                  onChange={(event) => setPushForm({ ...pushForm, initiator: event.target.value })}
+                  placeholder="如：张三"
+                />
+              </label>
+              <label>
+                竞标项目编码（character_string5）
+                <input
+                  value={pushForm.projectCode}
+                  maxLength={32}
+                  onChange={(event) => setPushForm({ ...pushForm, projectCode: event.target.value })}
+                  placeholder="如：PRO-20240321-001"
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost" type="button" disabled={pushing} onClick={() => setPushTarget(null)}>
+                取消
+              </button>
+              <button className="primary" type="button" disabled={pushing} onClick={() => void submitPushForm()}>
+                {pushing ? "发送中…" : "确认推送"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showForm && (
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
           <div className="modal" onClick={(event) => event.stopPropagation()}>
