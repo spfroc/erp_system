@@ -10,7 +10,7 @@ from clients.jd_quan import JdQuanClient, jd_site_configs
 from clients.sd_ccgp import SITE_ID as CCGP_SITE
 from clients.sd_ccgp import SdCcgpClient, decode_notice_body
 from clients.sd_mall import SITE_ID as MALL_SITE
-from clients.sd_mall import SdMallClient
+from clients.sd_mall import SdMallClient, is_connection_failure
 from sqlalchemy import select
 
 from db import NoticeRaw, _ensure_notice_key_width, get_session, raw_exists, save_cursor, upsert_raw
@@ -88,6 +88,22 @@ def _parse_after_detail(session, raw: NoticeRaw, *, html: str = "", text: str = 
     save_parsed(session, raw, parsed)
 
 
+def _mall_wait_proxy(client: SdMallClient, *, rounds: int = 3) -> bool:
+    """全量/增量开始前探活 SOCKS；失败则退避重试，避免连续空跑各类别。"""
+    for i in range(1, rounds + 1):
+        try:
+            client.probe()
+            if i > 1:
+                tqdm.write(f"{MALL_SITE} 代理探活成功（第 {i} 次）")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            wait = min(180.0, 30.0 * i)
+            tqdm.write(f"{MALL_SITE} 代理探活失败 {i}/{rounds}：{exc}；{wait:.0f}s 后重试")
+            client.reset_session()
+            time.sleep(wait)
+    return False
+
+
 def crawl_sd_mall(
     *,
     max_pages: Optional[int] = None,
@@ -102,14 +118,22 @@ def crawl_sd_mall(
     start_arg = start_day.isoformat() if start_day else None
     end_arg = end_day.isoformat() if end_day else None
     client = SdMallClient()
+    if not _mall_wait_proxy(client):
+        tqdm.write(f"{MALL_SITE} 代理不可用，跳过本轮商城采集")
+        return
     session = get_session()
+    conn_skip_streak = 0
     try:
         for project_type, notice_type, label in client.iter_categories():
+            if conn_skip_streak >= 3:
+                tqdm.write(f"{MALL_SITE} 连续 {conn_skip_streak} 类因连接失败跳过，中止本轮剩余类别")
+                break
             cursor_key = f"{project_type}:{notice_type}"
             page = 1
             total_pages = None
             dup = _DupStop(stop_dup)
             stop_category = False
+            page1_retries = 0
             pbar = tqdm(desc=f"{MALL_SITE}/{label}", unit="page")
             try:
                 while True:
@@ -125,9 +149,25 @@ def crawl_sd_mall(
                             end_date=end_arg,
                         )
                     except Exception as exc:  # noqa: BLE001
+                        # 首页遇 SOCKS 抖动：重建会话后再试，避免整类直接跳过
+                        if page == 1 and is_connection_failure(exc) and page1_retries < 2:
+                            page1_retries += 1
+                            wait = 45.0 * page1_retries
+                            tqdm.write(
+                                f"{MALL_SITE}/{label} 第 1 页连接失败，"
+                                f"{wait:.0f}s 后重试该类 ({page1_retries}/2)：{exc}"
+                            )
+                            client.reset_session()
+                            time.sleep(wait)
+                            continue
                         # 列表接口重试耗尽后跳过该类，避免整次全量任务中断
                         tqdm.write(f"{MALL_SITE}/{label} 第 {page} 页列表失败，跳过该类：{exc}")
+                        if is_connection_failure(exc):
+                            conn_skip_streak += 1
+                        else:
+                            conn_skip_streak = 0
                         break
+                    conn_skip_streak = 0
                     items = data.get("data") or []
                     total = int(data.get("total") or 0)
                     if total_pages is None:

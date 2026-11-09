@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 
 from apps.data_store.notice_tagging import (
     classify_buyer,
+    classify_content_tag,
     classify_deal_kind,
     is_result_notice,
     parse_region,
@@ -256,3 +257,24 @@ class NoticeTagRuleTests(SimpleTestCase):
             rules=[{"kind": "deal_kind", "pattern": "自定义标题", "value": "服务"}],
         )
         self.assertEqual(ruled["dealKind"], "服务")
+
+    def test_classify_content_tag_from_title(self):
+        cases = [
+            ("空调26年第四季度采购一", "空调"),
+            ("日照市审计局印刷服务008项目", "印刷"),
+            ("山东航空学院年鉴（2026年卷）印刷服务项目", "印刷"),
+            ("车辆加油", "车辆加油"),
+            ("济南市公安局交通管理支队视频专网网络安全运行维护服务项目", "运维服务"),
+            ("济南市老干部活动中心LED屏幕询比采购项目", "LED屏幕"),
+            ("金诚公司办公耗材、办公用纸询比采购", "办公用品"),
+            ("济南市人防工程质量中心人防质监业务及政策宣传项目", "宣传项目"),
+            ("济南市公安局交通管理支队2026年度视频监控平台运行维护服务项目", "运维服务"),
+        ]
+        for title, expected in cases:
+            result = classify_content_tag(title=title)
+            self.assertEqual(result["contentTag"], expected, title)
+        ruled = classify_content_tag(
+            title="某单位特殊采购项目",
+            rules=[{"kind": "content_tag", "pattern": "某单位特殊采购项目", "value": "定制标签"}],
+        )
+        self.assertEqual(ruled["contentTag"], "定制标签")

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Settings, Trash2 } from "lucide-react";
 import { fetchNoticeDetail, NoticeDetailModal, type NoticeDetail } from "../NoticeDetailModal";
 import type { PermissionKey, User } from "../types";
@@ -22,25 +22,8 @@ import type {
   AssistantLlmUsage,
   AssistantMessageItem,
   AssistantMessagePayload,
-  AssistantQuickPrompt,
   AssistantUserSettings,
 } from "./assistantTypes";
-
-const QUICK_PROMPTS: AssistantQuickPrompt[] = [
-  { id: "notice", label: "查询采购公告", text: "查找最近一个月济南市办公设备采购公告", permission: "notice.view" },
-  { id: "goods", label: "搜索采购商品", text: "查找惠普打印机相关采购记录", permission: "notice.view" },
-  { id: "buyer", label: "分析采购单位", text: "查询这家医院过去一年采购过什么商品", permission: "notice.view" },
-  { id: "deal", label: "查询历史成交", text: "查询最近成交的办公设备公告", permission: "notice.view" },
-  { id: "product", label: "查询 ERP 商品", text: "查找商品名称中包含交换机的商品", permission: "product.view" },
-  { id: "sales", label: "查询销售订单", text: "查询最近三十天未完成的销售订单", permission: "salesOrder.view" },
-  { id: "purchase", label: "查询采购订单", text: "查询最近三十天未完成的采购订单", permission: "purchaseOrder.view" },
-  { id: "expiry", label: "客户到期时间", text: "查询客户的到期时间", permission: "project.view" },
-  { id: "serviceOrder", label: "客户服务订单", text: "查询客户的服务订单", permission: "serviceOrder.view" },
-  { id: "customerSales", label: "客户商品订单", text: "查询某个客户购买的商品订单", permission: "salesOrder.view" },
-  { id: "projectStatus", label: "项目开票状态", text: "查询项目开票状态", permission: "project.view" },
-  { id: "devops", label: "查看采集任务", text: "查看最近执行失败的采集任务", permission: "dev.ops.view" },
-  { id: "nav", label: "查找后台功能", text: "打开销售订单管理" },
-];
 
 function messageMode(payload?: AssistantMessagePayload): string | undefined {
   return payload?.mode || payload?.route?.mode;
@@ -95,11 +78,15 @@ export function AssistantPage({
   can,
   currentUser,
   onNavigate,
+  onOpenProject,
+  onOpenOrganization,
   onNotice,
 }: {
   can: (permission: PermissionKey) => boolean;
   currentUser?: User;
   onNavigate?: (viewId: string) => void;
+  onOpenProject?: (projectId: string) => void;
+  onOpenOrganization?: (orgId: string) => void;
   onNotice?: (message: string, type?: "success" | "error") => void;
 }) {
   const canUse = can("assistant.use");
@@ -126,11 +113,6 @@ export function AssistantPage({
     (settings?.display_avatar_url || "").trim() ||
     (settings?.user_avatar_url || "").trim() ||
     userAvatarFromProfile(currentUser);
-
-  const prompts = useMemo(
-    () => QUICK_PROMPTS.filter((item) => !item.permission || can(item.permission as PermissionKey)),
-    [can]
-  );
 
   useEffect(() => {
     if (booting) return;
@@ -393,7 +375,7 @@ export function AssistantPage({
             <div className="assistant-messages" ref={messagesRef}>
               <div className="assistant-messages-inner">
                 {messages.length === 0 && !loading && (
-                  <div className="table-empty">选择快捷提示或直接输入问题开始查询。</div>
+                  <div className="table-empty">直接输入问题开始查询。</div>
                 )}
                 {messages.map((msg) => {
                   const mode = messageMode(msg.payload);
@@ -429,7 +411,10 @@ export function AssistantPage({
                             onNavigate={onNavigate}
                             onFollowUp={(text) => void submit(text)}
                             onOpenNotice={(noticeId) => void openNoticeDetail(noticeId)}
+                            onOpenProject={onOpenProject}
+                            onOpenOrganization={onOpenOrganization}
                             onConfirmAction={(executionId, token) => void handleConfirm(executionId, token)}
+                            onNotice={onNotice}
                             confirming={confirming}
                           />
                         ) : null}
@@ -456,19 +441,27 @@ export function AssistantPage({
             </div>
 
             <div className="assistant-composer">
-              <div className="assistant-prompts segmented">
-                {prompts.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={!canUse || loading}
-                    onClick={() => void submit(item.text)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
+              {(settings?.quick_prompts || []).length > 0 ? (
+                <div className="assistant-prompts segmented">
+                  {(settings?.quick_prompts || []).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={!canUse || loading}
+                      title={item.direct_send ? `直接发送：${item.content}` : item.content}
+                      onClick={() => {
+                        if (item.direct_send) {
+                          void submit(item.content);
+                        } else {
+                          setInput(item.content);
+                        }
+                      }}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <form
                 className="assistant-input-row"
                 onSubmit={(event) => {

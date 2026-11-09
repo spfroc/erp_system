@@ -76,11 +76,17 @@ class PlatformAccountToolsTests(TestCase):
 
         searched = execute_tool(
             tool_name="erp.platform_account.search",
-            params={"keyword": "济南", "platform": "泉E采"},
+            params={"keyword": "济南", "platform": "泉E采", "include_password": True},
             user_data=self.user_data,
         )
         self.assertEqual(searched["data"]["total"], 1)
-        self.assertEqual(searched["data"]["items"][0]["accountName"], "acc-demo")
+        row = searched["data"]["items"][0]
+        self.assertEqual(row["accountName"], "acc-demo")
+        self.assertEqual(row["accountPassword"], "Pass@123")
+        self.assertEqual(row["platform"], "泉E采")
+        self.assertIn("泉E采", row["name"])
+        self.assertIn("账号:acc-demo", row["summary"])
+        self.assertTrue(any(a.get("type") == "copy_text" for a in row.get("actions") or []))
 
         updated = execute_tool(
             tool_name="erp.platform_account.update",

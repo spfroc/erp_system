@@ -601,8 +601,11 @@ export function Notices({
                   ) : (
                     <em>—</em>
                   )}
-                  {(item.tagDealKind || item.tagOrgType || item.tagNature || item.tagProvince || item.tagCity || item.tagDistrict) && (
+                  {(item.tagContent || item.tagDealKind || item.tagOrgType || item.tagNature || item.tagProvince || item.tagCity || item.tagDistrict) && (
                     <span className="notice-list-tags">
+                      {item.tagContent ? (
+                        <span className="notice-list-tag tone-content">{item.tagContent}</span>
+                      ) : null}
                       {item.tagDealKind ? (
                         <span className={`notice-list-tag tone-${dealKindTagTone(item.tagDealKind)}`}>{item.tagDealKind}</span>
                       ) : null}

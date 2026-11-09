@@ -1,4 +1,4 @@
-"""规则优先意图路由：能确定则直接选工具，否则要求澄清（P1 不调 LLM）。"""
+"""规则意图解析：有模型时由 intent_router 优先走 LLM；本模块作危险拦截与离线降级。"""
 
 from __future__ import annotations
 
@@ -269,7 +269,24 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
     if _has_any(text, ("到期时间", "服务到期", "到期日", "续费时间", "过期", "到期")) and _has_any(
         text, ("客户", "用户", "服务", "项目", "月内", "天内")
     ):
+        # 带筛选条件（续费/周期/排除等）交给模型，避免规则误抽客户名后「未使用模型」空结果
+        if _has_any(
+            text,
+            ("续费", "周期", "按次", "不要查", "不要看", "排除", "只要", "仅查", "类型", "首次客户", "续费客户"),
+        ):
+            return {
+                "intent": "clarification",
+                "tool_name": None,
+                "params": {},
+                "confidence": 0.25,
+                "needs_clarification": True,
+                "reason": "defer_customer_expiry_to_llm",
+                "clarification": "这条到期查询含筛选条件，需要模型解析。",
+            }
         customer = _extract_customer_name(text)
+        # 残余说明性碎片不当客户名
+        if customer and _has_any(customer, ("续费", "不要", "只要", "周期", "按次", "类型", "服务项目", "排除")):
+            customer = ""
         params: dict[str, Any] = {"customer": customer, "keyword": customer, "page": 1, "page_size": 20}
         within_months = _extract_within_months(text)
         if within_months:
@@ -277,8 +294,8 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
         within_days = _extract_within_days(text)
         if within_days:
             params["within_days"] = within_days
-        # 「过期」默认带上同窗口内已过期；纯「到期」只看未来窗口
-        if _has_any(text, ("过期", "已过期", "过期了")) or params.get("within_months") or params.get("within_days"):
+        # 「过期」才含已过期；纯「到期」只看未来窗口
+        if _has_any(text, ("过期", "已过期", "过期了")):
             params["include_overdue"] = True
         return {
             "intent": "erp.customer.expiry",
@@ -355,10 +372,33 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
                 "needs_clarification": False,
                 "reason": "platform_account_update",
             }
+        keyword = _extract_keyword(
+            text,
+            (
+                "查询",
+                "查找",
+                "搜索",
+                "给我",
+                "发我",
+                "发给我",
+                "看下",
+                "看一下",
+                "平台账号",
+                "入驻账号",
+                "店铺账号",
+                "账号",
+                "密码",
+                "口令",
+                "的",
+                "和",
+                "与",
+            ),
+        )
+        keyword = re.sub(r"\s+", " ", (keyword or "")).strip(" ，,。；;：:和与")
         return {
             "intent": "erp.platform_account.search",
             "tool_name": "erp.platform_account.search",
-            "params": {"keyword": text},
+            "params": {"keyword": keyword or text},
             "confidence": 0.78,
             "needs_clarification": False,
             "reason": "platform_account_search",
@@ -483,6 +523,24 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "needs_clarification": False,
             "reason": "goods",
         }
+
+    # 带政府采购项目编号的公告查询：精确匹配，走规则快路径，避免模型漏参扫全库
+    project_code = _extract_gov_project_code(text)
+    if project_code and _has_any(text, ("公告", "项目", "编号", "查询", "查找")):
+        if not _has_any(text, ("开票", "发票状态", "付款状态")):
+            return {
+                "intent": "notice.search",
+                "tool_name": "notice.search",
+                "params": {
+                    "project_code": project_code,
+                    "search": project_code,
+                    "page": 1,
+                    "page_size": 50,
+                },
+                "confidence": 0.95,
+                "needs_clarification": False,
+                "reason": "notice_project_code",
+            }
 
     # 采购公告列表（统计/图表类交给模型，避免误走列表搜索）
     if _has_any(text, ("公告", "采购公告", "竞价", "询比", "济南", "办公设备", "发布的")):
@@ -620,6 +678,12 @@ def _extract_buyer_name(text: str) -> str:
     return ""
 
 
+def _extract_gov_project_code(text: str) -> str:
+    """抽出 SDGP/SCJJ 等政府采购项目编号。"""
+    match = re.search(r"(?i)((?:SDGP|SDKJXY|SCJJ|ECJJ|SDKJ)[0-9A-Za-z_\-]{6,})", text or "")
+    return match.group(1) if match else ""
+
+
 def _extract_notice_params(text: str) -> dict[str, Any]:
     """把自然语言拆成日期 / 采购单位 / 残余关键词，避免整句 LIKE。"""
     params: dict[str, Any] = {"page": 1, "page_size": 20}
@@ -629,6 +693,11 @@ def _extract_notice_params(text: str) -> dict[str, Any]:
     buyer = _extract_buyer_name(text)
     if buyer:
         params["buyer_name"] = buyer
+    project_code = _extract_gov_project_code(text)
+    if project_code:
+        params["project_code"] = project_code
+        params["search"] = project_code
+        return params
     stopwords = (
         "查找",
         "查询",
@@ -760,6 +829,19 @@ def _extract_customer_name(text: str) -> str:
             "两个月内",
             "近一个月",
             "近半年",
+            "服务项目",
+            "已经续费",
+            "续费客户",
+            "首次客户",
+            "不要查",
+            "不要看",
+            "只要查",
+            "仅查",
+            "周期类型",
+            "周期",
+            "按次",
+            "类型",
+            "排除",
         ),
     )
     value = re.sub(
@@ -767,10 +849,14 @@ def _extract_customer_name(text: str) -> str:
         " ",
         value,
     )
+    value = re.sub(r"要到期|已到期|将到期|即将到期", " ", value)
     value = re.sub(r"\s+", " ", value).strip(" ，,。；;：:")
-    if not value or value in {"用户名称", "名称", "用户", "客户"}:
+    value = re.sub(r"^要\s+|\s+要$", " ", value).strip()
+    if not value or value in {"用户名称", "名称", "用户", "客户", "服务", "要", "要 服务", "服务 项目"}:
         return ""
-    if re.fullmatch(r"[0-9一二两三四五六七八九十个个月内过期用户名称近天\s]+", value):
+    if re.fullmatch(r"[0-9一二两三四五六七八九十个个月内过期用户名称近天要服务\s]+", value):
+        return ""
+    if _has_any(value, ("续费", "不要", "只要", "周期", "按次", "类型", "排除", "服务项目")):
         return ""
     return value[:40]
 
@@ -817,7 +903,10 @@ def _extract_within_days(text: str) -> int | None:
 
 
 def _extract_project_code(text: str) -> str:
-    match = re.search(r"([0-9A-Za-z\-]{8,})", text or "")
+    gov = _extract_gov_project_code(text)
+    if gov:
+        return gov
+    match = re.search(r"([0-9A-Za-z_\-]{8,})", text or "")
     return match.group(1) if match else ""
 
 

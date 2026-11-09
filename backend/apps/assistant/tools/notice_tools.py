@@ -100,9 +100,28 @@ def _sanitize_buyer_name(name: str) -> str:
 
 def _notice_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
     del user_data
+    from apps.data_store.notice_views import extract_gov_project_codes
+
     publish_from, publish_to = _resolve_period(params)
     buyer_name = _sanitize_buyer_name(str(params.get("buyer_name") or params.get("buyerName") or "").strip())
-    search = _clean_search(str(params.get("search") or params.get("keyword") or ""), buyer_name)
+    raw_search = str(
+        params.get("search")
+        or params.get("keyword")
+        or params.get("project_code")
+        or params.get("projectCode")
+        or ""
+    ).strip()
+    # 编排层可能注入用户原话，避免模型漏传项目编号时扫全库
+    user_message = str(params.get("_user_message") or params.get("user_message") or "").strip()
+    project_code = str(params.get("project_code") or params.get("projectCode") or "").strip()
+    if not project_code:
+        codes = extract_gov_project_codes(raw_search) or extract_gov_project_codes(user_message)
+        if codes:
+            project_code = codes[0]
+    search = _clean_search(raw_search, buyer_name)
+    if project_code:
+        # 精确编号查询时不要残留「项目相关的」等中文拖累过滤
+        search = project_code
     result = search_notices(
         page=int(params.get("page") or 1),
         page_size=int(params.get("page_size") or params.get("pageSize") or 20),
@@ -112,12 +131,17 @@ def _notice_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]
         publish_date_from=publish_from,
         publish_date_to=publish_to,
         buyer_name=buyer_name,
+        project_code=project_code,
     )
     total = int(result.get("total") or 0)
+    if project_code:
+        summary = f"按项目编号「{project_code}」找到 {total} 条公告。"
+    else:
+        summary = f"找到 {total} 条公告。"
     return {
         "block_type": "notice_list",
-        "summary": f"找到 {total} 条公告。",
-        "content": f"找到 {total} 条公告。",
+        "summary": summary,
+        "content": summary,
         "data": result,
     }
 
@@ -337,11 +361,15 @@ def register() -> None:
     register_tool(
         ToolDefinition(
             name="notice.search",
-            description="搜索采购公告（关键词、采购单位、站点、类型、发布日期）",
+            description="搜索采购公告。有项目编号（如 SDGP…）时必须传 project_code，做精确匹配，禁止空搜扫全库。",
             input_schema={
                 "type": "object",
                 "properties": {
-                    "search": {"type": "string", "description": "关键词"},
+                    "search": {"type": "string", "description": "关键词；若已有项目编号可与 project_code 相同"},
+                    "project_code": {
+                        "type": "string",
+                        "description": "政府采购项目编号，如 SDGP371400000202601002301_A；精确查询必填",
+                    },
                     "buyer_name": {"type": "string", "description": "采购单位"},
                     "site_id": {"type": "string"},
                     "notice_kind": {"type": "string"},

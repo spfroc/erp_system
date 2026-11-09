@@ -10,6 +10,13 @@ class RuleRouterTests(SimpleTestCase):
         self.assertFalse(routed["needs_clarification"])
         self.assertEqual(routed["params"].get("relative_period"), "last_30_days")
 
+    def test_notice_search_by_project_code(self):
+        routed = route_intent("查询SDGP371400000202601002301_A项目相关的公告")
+        self.assertEqual(routed["tool_name"], "notice.search")
+        self.assertEqual(routed["reason"], "notice_project_code")
+        self.assertEqual(routed["params"].get("project_code"), "SDGP371400000202601002301_A")
+        self.assertEqual(routed["params"].get("search"), "SDGP371400000202601002301_A")
+
     def test_notice_yesterday_buyer(self):
         routed = route_intent("查询昨天 平度市财政局 发布的公告")
         self.assertEqual(routed["tool_name"], "notice.search")
@@ -44,6 +51,25 @@ class RuleRouterTests(SimpleTestCase):
     def test_customer_expiry(self):
         routed = route_intent("查询客户的到期时间")
         self.assertEqual(routed["tool_name"], "erp.customer.expiry")
+
+    def test_customer_expiry_complex_defers_to_llm(self):
+        routed = route_intent("两个月内要到期的服务项目，已经续费的客户的项目不要查，只要查周期类型的")
+        self.assertIsNone(routed.get("tool_name"))
+        self.assertEqual(routed.get("reason"), "defer_customer_expiry_to_llm")
+        self.assertTrue(routed.get("needs_clarification"))
+
+    def test_customer_expiry_simple_keeps_params(self):
+        routed = route_intent("查询两个月内要到期的服务项目")
+        self.assertEqual(routed["tool_name"], "erp.customer.expiry")
+        self.assertEqual(routed["params"].get("within_months"), 2)
+        self.assertFalse(routed["params"].get("include_overdue"))
+        self.assertFalse(routed["params"].get("customer"))
+        self.assertFalse(routed["params"].get("keyword"))
+
+    def test_platform_account_search_strips_request_noise(self):
+        routed = route_intent("山东云谷的平台账号和密码发我")
+        self.assertEqual(routed["tool_name"], "erp.platform_account.search")
+        self.assertEqual(routed["params"].get("keyword"), "山东云谷")
 
     def test_deal_today_count_has_no_junk_buyer(self):
         routed = route_intent("今天发布了多少成交公告？")

@@ -135,20 +135,28 @@ def _parse_labeled_text(text: str) -> dict[str, str]:
 
 def _serialize(record: PlatformAccountRecord, names: dict[str, str], *, include_password: bool = False) -> dict[str, Any]:
     data = _data(record)
+    customer_name = names.get(record.customer_org_id) or ""
+    platform = record.platform or data.get("platform") or ""
+    account_name = record.account_name or data.get("accountName") or ""
+    password = str(data.get("accountPasswordMasked") or "") if include_password else ""
+    status = record.current_status or data.get("currentStatus") or ""
     item = {
         "id": record.id,
         "customerOrgId": record.customer_org_id or data.get("customerOrgId") or "",
-        "customerName": names.get(record.customer_org_id) or "",
-        "platform": record.platform or data.get("platform") or "",
+        "customerName": customer_name,
+        "customer_name": customer_name,
+        "platform": platform,
         "qiluAccountType": data.get("qiluAccountType") or "",
-        "accountName": record.account_name or data.get("accountName") or "",
+        "accountName": account_name,
+        "account_name": account_name,
         "merchantId": data.get("merchantId") or "",
         "shopId": data.get("shopId") or "",
         "shopName": data.get("shopName") or "",
         "domain": data.get("domain") or "",
         "icpRecordNo": data.get("icpRecordNo") or "",
         "cloudAccount": data.get("cloudAccount") or "",
-        "currentStatus": record.current_status or data.get("currentStatus") or "",
+        "currentStatus": status,
+        "status": status,
         "salesOwner": data.get("salesOwner") or "",
         "serviceYears": data.get("serviceYears"),
         "expireDate": data.get("expireDate") or "",
@@ -161,9 +169,36 @@ def _serialize(record: PlatformAccountRecord, names: dict[str, str], *, include_
         "createdAt": data.get("createdAt") or "",
         "updatedAt": data.get("updatedAt") or "",
         "hasPassword": bool(data.get("accountPasswordMasked")),
+        # 列表展示字段（避免前端只落到 id）
+        "name": " / ".join([part for part in (customer_name, platform, account_name) if part]) or record.id,
+        "summary": " · ".join(
+            [
+                part
+                for part in (
+                    f"平台:{platform}" if platform else "",
+                    f"账号:{account_name}" if account_name else "",
+                    f"密码:{password}" if password else ("密码:已设置" if data.get("accountPasswordMasked") else "密码:未设置"),
+                    f"状态:{status}" if status else "",
+                    f"类型:{data.get('qiluAccountType')}" if data.get("qiluAccountType") else "",
+                )
+                if part
+            ]
+        ),
     }
     if include_password:
-        item["accountPassword"] = data.get("accountPasswordMasked") or ""
+        item["accountPassword"] = password
+        item["account_password"] = password
+        item["password"] = password
+    actions: list[dict[str, Any]] = [
+        {"type": "open_platform_accounts", "label": "打开平台账号", "account_id": record.id},
+    ]
+    if record.customer_org_id:
+        actions.append({"type": "open_customer", "label": "客户资料", "org_id": record.customer_org_id})
+    if account_name:
+        actions.append({"type": "copy_text", "label": "复制账号", "text": account_name})
+    if password:
+        actions.append({"type": "copy_text", "label": "复制密码", "text": password})
+    item["actions"] = actions
     return item
 
 
@@ -198,10 +233,15 @@ def _format_confirm_lines(item: dict[str, Any]) -> str:
 
 
 def _platform_account_search(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
-    del user_data
+    from apps.data_store.views import _can_view_sensitive
+
     keyword = str(params.get("keyword") or params.get("search") or params.get("customer") or "").strip()
     platform = _normalize_platform(str(params.get("platform") or "").strip())
     page, page_size = _page_params(params)
+    want_password = bool(params.get("include_password") or params.get("includePassword"))
+    can_pwd = _can_view_sensitive(user_data)
+    # 有敏感权限时默认带回密码，方便客服「发我账号密码」；无权限则仅提示已设置
+    include_password = can_pwd
 
     qs = PlatformAccountRecord.objects.filter(is_deleted=False)
     if platform:
@@ -226,19 +266,24 @@ def _platform_account_search(*, params: dict[str, Any], user_data: dict) -> dict
     total = qs.count()
     rows = list(qs.order_by("-created_at", "-id")[(page - 1) * page_size : page * page_size])
     names = _org_name_map({row.customer_org_id for row in rows})
-    items = [_serialize(row, names) for row in rows]
+    items = [_serialize(row, names, include_password=include_password) for row in rows]
+    note = ""
+    if want_password and not can_pwd:
+        note = "当前账号无敏感信息权限，密码未明文返回。"
     return {
         "block_type": "erp_record_list",
-        "summary": f"找到 {total} 条平台账号。",
+        "summary": f"找到 {total} 条平台账号。" + (f"关键词「{keyword}」。" if keyword else "") + (f"平台「{platform}」。" if platform else "") + note,
         "content": f"找到 {total} 条平台账号。"
         + (f"关键词「{keyword}」。" if keyword else "")
-        + (f"平台「{platform}」。" if platform else ""),
+        + (f"平台「{platform}」。" if platform else "")
+        + note,
         "data": {
             "collection": "platformAccounts",
             "items": items,
             "total": total,
             "page": page,
             "page_size": page_size,
+            "include_password": include_password,
         },
     }
 
@@ -525,14 +570,18 @@ def register() -> None:
     register_tool(
         ToolDefinition(
             name="erp.platform_account.search",
-            description="模糊查询平台账号（客户名/账号/平台/商户号/店铺）",
+            description="查询平台账号列表，返回客户/平台/账号/密码（有敏感权限时）；keyword 填客户名如「山东云谷」",
             input_schema={
                 "type": "object",
                 "properties": {
-                    "keyword": {"type": "string", "description": "客户名、账号、商户号、店铺等模糊词"},
+                    "keyword": {"type": "string", "description": "客户名、账号、商户号、店铺等模糊词，不要塞整句口语"},
                     "search": {"type": "string"},
                     "customer": {"type": "string"},
                     "platform": {"type": "string"},
+                    "include_password": {
+                        "type": "boolean",
+                        "description": "用户要账号密码时设 true；无敏感权限则仍不返回明文",
+                    },
                     "page": {"type": "integer"},
                     "page_size": {"type": "integer"},
                 },

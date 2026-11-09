@@ -44,6 +44,7 @@ def _serialize_tag(tag: NoticeResultTag, parsed: NoticeParsed | None, product_co
         "orgType": profile.org_type if profile else "",
         "nature": profile.nature if profile else "",
         "dealKind": (tag.deal_kind or "") or "",
+        "contentTag": (tag.content_tag or "") or "",
         "province": profile.province if profile else "",
         "city": profile.city if profile else "",
         "district": profile.district if profile else "",
@@ -80,6 +81,7 @@ def notice_tag_list(request):
         org_type = (request.GET.get("org_type") or "").strip()
         nature = (request.GET.get("nature") or "").strip()
         deal_kind = (request.GET.get("deal_kind") or "").strip()
+        content_tag = (request.GET.get("content_tag") or request.GET.get("contentTag") or "").strip()
         province = (request.GET.get("province") or "").strip()
         qs = NoticeResultTag.objects.select_related("buyer_profile").order_by("-updated_at")
         if org_type:
@@ -91,6 +93,8 @@ def notice_tag_list(request):
                 qs = qs.filter(Q(deal_kind="") | Q(deal_kind=deal_kind))
             else:
                 qs = qs.filter(deal_kind=deal_kind)
+        if content_tag:
+            qs = qs.filter(content_tag=content_tag)
         if province:
             region_ids = NoticeParsed.objects.filter(region_name__icontains=province).values("notice_raw_id")
             qs = qs.filter(
@@ -103,7 +107,11 @@ def notice_tag_list(request):
             title_ids = NoticeParsed.objects.filter(
                 Q(notice_title__icontains=search) | Q(buyer_name__icontains=search)
             ).values("notice_raw_id")
-            qs = qs.filter(Q(buyer_profile__buyer_name__icontains=search) | Q(notice_raw_id__in=title_ids))
+            qs = qs.filter(
+                Q(buyer_profile__buyer_name__icontains=search)
+                | Q(content_tag__icontains=search)
+                | Q(notice_raw_id__in=title_ids)
+            )
         total = qs.count()
         rows = list(qs[(page - 1) * page_size : page * page_size])
         raw_ids = [row.notice_raw_id for row in rows]
@@ -112,6 +120,13 @@ def notice_tag_list(request):
             item["notice_raw_id"]: item["total"]
             for item in NoticeProductTag.objects.filter(notice_raw_id__in=raw_ids).values("notice_raw_id").annotate(total=Count("id"))
         }
+        popular_content_tags = list(
+            NoticeResultTag.objects.exclude(content_tag="")
+            .values("content_tag")
+            .annotate(total=Count("id"))
+            .order_by("-total", "content_tag")
+            .values_list("content_tag", flat=True)[:24]
+        )
         return JsonResponse({
             "items": [_serialize_tag(row, parsed_map.get(row.notice_raw_id), counts.get(row.notice_raw_id, 0)) for row in rows],
             "total": total,
@@ -120,6 +135,7 @@ def notice_tag_list(request):
             "orgTypes": list(list_dict_names(KIND_ORG_TYPE, enabled_only=True)),
             "natures": list(list_dict_names(KIND_NATURE, enabled_only=True)),
             "dealKinds": list(DEAL_KINDS),
+            "contentTags": popular_content_tags,
         })
     except DatabaseError:
         return JsonResponse({
@@ -130,6 +146,7 @@ def notice_tag_list(request):
             "orgTypes": list(list_dict_names(KIND_ORG_TYPE, enabled_only=True)),
             "natures": list(list_dict_names(KIND_NATURE, enabled_only=True)),
             "dealKinds": list(DEAL_KINDS),
+            "contentTags": [],
             "detail": "标签表尚未创建",
         }, status=503)
 

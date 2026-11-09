@@ -611,6 +611,88 @@ class CollectionListQueryTests(TestCase):
         self.assertEqual(goods.status_code, 200)
         self.assertEqual(goods.json()["total"], 0)
 
+    def test_service_project_sort_by_service_end_date(self):
+        save_app_data(
+            {
+                "projects": [
+                    {
+                        "id": "proj-end-early",
+                        "projectNo": "FW-END-1",
+                        "name": "早到期服务",
+                        "type": "服务项目",
+                        "customerOrgId": "org-a",
+                        "ownCompanyOrgId": "org-own",
+                        "owner": "管理员",
+                        "status": "服务中",
+                        "serviceEndDate": "2025-01-10",
+                        "contractStatus": "待签",
+                        "paymentStatus": "待付款",
+                        "purchaseStatus": "无需采购",
+                        "invoiceStatus": "待开",
+                        "totalAmount": 100,
+                        "totalCost": 0,
+                        "updatedAt": "2026-08-09T10:00:00",
+                        "createdAt": "2026-08-09T10:00:00",
+                    },
+                    {
+                        "id": "proj-end-late",
+                        "projectNo": "FW-END-2",
+                        "name": "晚到期服务",
+                        "type": "服务项目",
+                        "customerOrgId": "org-a",
+                        "ownCompanyOrgId": "org-own",
+                        "owner": "管理员",
+                        "status": "服务中",
+                        "serviceEndDate": "2027-12-31",
+                        "contractStatus": "待签",
+                        "paymentStatus": "待付款",
+                        "purchaseStatus": "无需采购",
+                        "invoiceStatus": "待开",
+                        "totalAmount": 100,
+                        "totalCost": 0,
+                        "updatedAt": "2026-08-10T10:00:00",
+                        "createdAt": "2026-08-10T10:00:00",
+                    },
+                    {
+                        "id": "proj-end-empty",
+                        "projectNo": "FW-END-3",
+                        "name": "无到期服务",
+                        "type": "服务项目",
+                        "customerOrgId": "org-a",
+                        "ownCompanyOrgId": "org-own",
+                        "owner": "管理员",
+                        "status": "服务中",
+                        "serviceEndDate": "",
+                        "contractStatus": "待签",
+                        "paymentStatus": "待付款",
+                        "purchaseStatus": "无需采购",
+                        "invoiceStatus": "待开",
+                        "totalAmount": 100,
+                        "totalCost": 0,
+                        "updatedAt": "2026-08-11T10:00:00",
+                        "createdAt": "2026-08-11T10:00:00",
+                    },
+                ],
+            },
+            partial=True,
+        )
+
+        asc = self.client.get(
+            "/api/collections/projects/",
+            {"paged": "1", "page": 1, "page_size": 50, "type": "服务项目", "sort": "serviceEndDate"},
+        )
+        self.assertEqual(asc.status_code, 200)
+        asc_ids = [item["id"] for item in asc.json()["items"] if item["id"].startswith("proj-end-")]
+        self.assertEqual(asc_ids, ["proj-end-early", "proj-end-late", "proj-end-empty"])
+
+        desc = self.client.get(
+            "/api/collections/projects/",
+            {"paged": "1", "page": 1, "page_size": 50, "type": "服务项目", "sort": "-serviceEndDate"},
+        )
+        self.assertEqual(desc.status_code, 200)
+        desc_ids = [item["id"] for item in desc.json()["items"] if item["id"].startswith("proj-end-")]
+        self.assertEqual(desc_ids, ["proj-end-late", "proj-end-early", "proj-end-empty"])
+
     def test_products_empty_search_and_kind_filter(self):
         for params in (
             {"paged": "1", "page": 1, "page_size": 10, "kind": "实体商品"},

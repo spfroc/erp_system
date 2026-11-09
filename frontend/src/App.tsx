@@ -3434,6 +3434,7 @@ export default function App() {
   const [loadError, setLoadError] = useState("");
   const [view, setViewState] = useState<View>(() => readStoredView());
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [focusOrganizationId, setFocusOrganizationId] = useState("");
   const [orderFocus, setOrderFocus] = useState<OrderFocus>({});
   const [currentUserId, setCurrentUserId] = useState(() => window.localStorage.getItem(SESSION_USER_KEY) ?? "");
   const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({});
@@ -3913,6 +3914,11 @@ export default function App() {
               can={can}
               currentUser={currentUser}
               onNavigate={(viewId) => setView(viewId as View)}
+              onOpenProject={openProject}
+              onOpenOrganization={(orgId) => {
+                setFocusOrganizationId(orgId);
+                setView("entities");
+              }}
               onNotice={(message, type = "error") => setNotice({ type, message })}
             />
           )}
@@ -3922,7 +3928,18 @@ export default function App() {
           {view === "salesOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="销售订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
           {view === "purchaseOrders" && <Orders data={data} commit={commit} can={can} onOpenProject={openProject} tab="采购订单" focus={orderFocus} onClearFocus={() => setOrderFocus({})} />}
           {view === "contracts" && <Contracts data={data} commit={commit} can={can} />}
-          {view === "entities" && <Entities data={data} commit={commit} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
+          {view === "entities" && (
+            <Entities
+              data={data}
+              commit={commit}
+              applyData={(next) => setData(next)}
+              onNotice={setNotice}
+              can={can}
+              operatorName={currentUser.name}
+              initialOrgId={focusOrganizationId}
+              onConsumedInitialOrgId={() => setFocusOrganizationId("")}
+            />
+          )}
           {view === "products" && <Products data={data} commit={commit} can={can} />}
           {view === "platformAccounts" && <PlatformAccounts data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
           {view === "websiteLeads" && <WebsiteLeads data={data} applyData={(next) => setData(next)} onNotice={setNotice} currentUser={currentUser} />}
@@ -4692,6 +4709,7 @@ function Projects({
   const [projectContractStatusFilter, setProjectContractStatusFilter] = useState("");
   const [projectInvoiceStatusFilter, setProjectInvoiceStatusFilter] = useState("");
   const [projectSalesUserFilter, setProjectSalesUserFilter] = useState("");
+  const [serviceEndDateSort, setServiceEndDateSort] = useState<"" | "serviceEndDate" | "-serviceEndDate">("");
   const serviceLicenseInputRef = useRef<HTMLInputElement | null>(null);
   const salesOrderSectionRef = useRef<HTMLDivElement | null>(null);
   const purchaseOrderSectionRef = useRef<HTMLDivElement | null>(null);
@@ -4875,6 +4893,7 @@ function Projects({
           contractStatus: projectContractStatusFilter,
           invoiceStatus: projectInvoiceStatusFilter,
           serviceSalesUserId: projectSalesUserFilter,
+          sort: serviceEndDateSort || undefined,
         }
       : { type: projectTab },
     pageSize: 10,
@@ -5194,11 +5213,22 @@ function Projects({
     return project.serviceEndDate || "未设置";
   }
 
-  function serviceCountdownText(project: Project) {
-    if (!project.serviceEndDate) return "-";
+  function serviceCountdownInfo(project: Project): { text: string; expired: boolean } {
+    if (!project.serviceEndDate) return { text: "-", expired: false };
     const end = new Date(`${project.serviceEndDate}T23:59:59`).getTime();
     const days = Math.ceil((end - Date.now()) / 86400000);
-    return String(days);
+    if (days < 0) {
+      return { text: `已过期 ${Math.abs(days)} 天`, expired: true };
+    }
+    return { text: `剩余 ${days} 天`, expired: false };
+  }
+
+  function toggleServiceEndDateSort() {
+    setServiceEndDateSort((prev) => {
+      if (prev === "") return "serviceEndDate";
+      if (prev === "serviceEndDate") return "-serviceEndDate";
+      return "";
+    });
   }
 
   function serviceListName(project: Project) {
@@ -7312,12 +7342,32 @@ function Projects({
         )}
         {projectTab === "服务项目" ? (
           <div className="table">
-            <div className="table-row service-project-table head"><span>客户/服务</span><span>签约主体</span><span>到期时间</span><span>项目状态</span><span>类型</span><span>费用</span><span>合同</span><span>发票</span><span>业务</span><span>创建/更新</span><span>操作</span></div>
+            <div className="table-row service-project-table head">
+              <span>客户/服务</span>
+              <span>签约主体</span>
+              <button
+                type="button"
+                className={`table-cell-button service-end-sort${serviceEndDateSort ? " is-active" : ""}`}
+                onClick={toggleServiceEndDateSort}
+                title="点击按到期时间排序：升序 → 降序 → 默认"
+              >
+                到期时间{serviceEndDateSort === "serviceEndDate" ? " ↑" : serviceEndDateSort === "-serviceEndDate" ? " ↓" : ""}
+              </button>
+              <span>项目状态</span>
+              <span>类型</span>
+              <span>费用</span>
+              <span>合同</span>
+              <span>发票</span>
+              <span>业务</span>
+              <span>创建/更新</span>
+              <span>操作</span>
+            </div>
             {filteredPage.items.map((project) => {
               const rowCustomer = data.organizations.find((org) => org.id === project.customerOrgId);
               const customerName = rowCustomer?.name || "";
               const ownCompanyName = data.organizations.find((org) => org.id === project.ownCompanyOrgId)?.name || "";
               const serviceName = serviceListName(project);
+              const countdown = serviceCountdownInfo(project);
               return (
                 <div className="table-row service-project-table" key={project.id}>
                   <div className="service-project-main">
@@ -7342,7 +7392,10 @@ function Projects({
                       </CopyableLine>
                     ) : "未选择"}
                   </div>
-                  <span className="service-project-stack">{serviceDateText(project)}<em>{serviceCountdownText(project)}</em></span>
+                  <span className="service-project-stack">
+                    {serviceDateText(project)}
+                    <em className={countdown.expired ? "is-expired" : undefined}>{countdown.text}</em>
+                  </span>
                   <span>{project.status}</span>
                   <span>{project.serviceType || "周期"}</span>
                   <div className="service-project-stack">
@@ -11380,6 +11433,8 @@ function Entities({
   onNotice,
   can,
   operatorName,
+  initialOrgId,
+  onConsumedInitialOrgId,
 }: {
   data: AppData;
   commit: (data: AppData, log?: Omit<OperationLog, "id" | "createdAt">) => Promise<void>;
@@ -11387,6 +11442,8 @@ function Entities({
   onNotice: (notice: { type: "success" | "error"; message: string }) => void;
   can: CanAccess;
   operatorName: string;
+  initialOrgId?: string;
+  onConsumedInitialOrgId?: () => void;
 }) {
   const [name, setName] = useState("");
   const [creditCode, setCreditCode] = useState("");
@@ -11410,6 +11467,15 @@ function Entities({
   const [showTemporaryContract, setShowTemporaryContract] = useState(false);
   const entityTypeOptions = optionValues(data, "entity_type", entityTypes) as EntityType[];
   const orgRoleOptions = optionValues(data, "organization_role", orgRoles) as OrganizationRole[];
+
+  useEffect(() => {
+    const orgId = (initialOrgId || "").trim();
+    if (!orgId) return;
+    setSelectedOrgId(orgId);
+    const orgName = data.organizations.find((org) => org.id === orgId)?.name || "";
+    if (orgName) setEntitySearch(orgName);
+    onConsumedInitialOrgId?.();
+  }, [initialOrgId, onConsumedInitialOrgId, data.organizations]);
 
   const filteredPage = useServerPagedList<Organization>({
     collection: "organizations",

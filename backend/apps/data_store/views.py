@@ -7,7 +7,7 @@ from urllib.parse import quote
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable, make_password
 from django.core.exceptions import SuspiciousFileOperation
 from django.db import transaction
-from django.db.models import CharField, Q, Value
+from django.db.models import Case, CharField, IntegerField, Q, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, Left, Replace
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -1982,6 +1982,17 @@ def _apply_collection_list_query(collection: str, queryset, request):
     sort = (get("sort") or "").strip()
     if collection == "transactions" and sort == "occurred":
         queryset = queryset.order_by("-data__occurredAt", "-date", "-id")
+    elif collection == "projects" and sort in {"serviceEndDate", "-serviceEndDate"}:
+        # 到期日按 YYYY-MM-DD 字符串排序；未设置的沉底，避免空值打乱升降序。
+        queryset = queryset.annotate(
+            _service_end_missing=Case(
+                When(Q(data__serviceEndDate__isnull=True) | Q(data__serviceEndDate=""), then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        )
+        end_order = "data__serviceEndDate" if sort == "serviceEndDate" else "-data__serviceEndDate"
+        queryset = queryset.order_by("_service_end_missing", end_order, "-id")
     elif collection == "optionGroups":
         queryset = queryset.order_by("key")
     elif collection in {"navCategories", "navGroups", "navMenuItems"}:

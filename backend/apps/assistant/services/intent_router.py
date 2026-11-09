@@ -19,40 +19,24 @@ SYSTEM_PROMPT = """ERP意图解析器。只输出JSON选一个工具。禁止SQL
 - notice.stats：公告按类型统计数量（近N天公告类型数量）
 - deal.stats：成交金额
 列表才用：erp.sales_order.search；erp.purchase_order.search；erp.service_order.search；deal.search；notice.search。
-平台账号：erp.platform_account.search；erp.platform_account.create（可用 text 识别添加）；erp.platform_account.update。
+notice.search：若用户给出 SDGP/SCJJ 等项目编号，必须传 params.project_code=该编号（精确匹配），禁止空 search 扫全库。
+平台账号：erp.platform_account.search（keyword=客户名；要密码时 include_password=true）；
+erp.platform_account.create（可用 text 识别添加）；erp.platform_account.update。
 其它：deal.suppliers；erp.customer.expiry；erp.project.status；navigation.find。
+erp.customer.expiry 参数：within_months/within_days；include_overdue（仅用户说「过期」时 true）；
+service_type=周期|按次；exclude_renewed=true 表示排除已续费客户；不要把整句说明塞进 customer/keyword。
 params.relative_period：today|yesterday|this_month|last_month|last_7_days|last_30_days|last_N_days|all；
 未指定时间的「总金额/累计」用 all；「本月销售情况」「本月开票」用 this_month。
 金额/数量统计默认只返回数字，禁止默认带图表；仅当用户明确说「图表/柱状图/折线图/饼图」时才设 params.chart_type=bar|line|pie，否则不要传 chart_type。
 JSON:{"tool_name":string|null,"params":{},"confidence":0-1,"clarification":string|null,"reason":string}
 """
 
-# 仅这些规则可跳过模型直接执行；统计/图表等灵活问法一律走模型选工具
+# 有模型时默认全部走 LLM；仅危险拦截仍可跳过模型，避免误执行写操作
 _RULE_FASTPATH_REASONS = frozenset(
     {
-        "navigation",
-        "help",
         "refuse_dangerous_write",
-        "invoice_delete",
-        "devops",
-        "devops_run",
-        "service_order",
-        "sales_order",
-        "customer_sales_orders",
-        "purchase_order",
-        "customer_expiry",
-        "project_status",
-        "deal_stats",
-        "deal_suppliers",
-        "deal",
-        "deal_from_notice",
-        "notice",
-        "goods",
-        "buyer",
-        "buyer_profile",
-        "platform_account_search",
-        "platform_account_create",
-        "platform_account_update",
+        # 项目编号公告查询必须精确，不交给模型以免漏参扫全库
+        "notice_project_code",
     }
 )
 
@@ -64,8 +48,45 @@ def _should_use_rule_fastpath(rule: dict[str, Any]) -> bool:
     return reason in _RULE_FASTPATH_REASONS
 
 
+def _rule_as_fallback(
+    rule: dict[str, Any],
+    *,
+    detail: str,
+    reason: str,
+    allowed_tool_names: set[str] | None,
+) -> dict[str, Any]:
+    """模型不可用时：有可用规则工具则降级执行，否则澄清。"""
+    tool_name = rule.get("tool_name")
+    can_run = bool(tool_name) and not rule.get("needs_clarification")
+    if can_run and allowed_tool_names is not None and tool_name not in allowed_tool_names:
+        can_run = False
+    if can_run:
+        return {
+            **rule,
+            "mode": "degraded",
+            "reason": reason,
+            "clarification": None,
+            "needs_clarification": False,
+        }
+    return {
+        **rule,
+        "mode": "degraded",
+        "reason": reason,
+        "clarification": _degraded_clarification(rule, detail=detail),
+        "needs_clarification": True,
+        "tool_name": None,
+    }
+
+
 _UNRECOGNIZED_CLARIFICATION_PREFIX = "我还不能确定要执行的操作"
-_DEFER_REASONS = frozenset({"unrecognized", "defer_analytics_to_llm", "defer_erp_amount_stats_to_llm"})
+_DEFER_REASONS = frozenset(
+    {
+        "unrecognized",
+        "defer_analytics_to_llm",
+        "defer_erp_amount_stats_to_llm",
+        "defer_customer_expiry_to_llm",
+    }
+)
 
 
 def _is_placeholder_clarification(text: Any) -> bool:
@@ -88,7 +109,7 @@ def _degraded_clarification(rule: dict[str, Any], *, detail: str) -> str:
         return f"模型暂时不可用（{detail}）。{rule_text}"
     return (
         f"当前需要模型协助解析，但模型不可用（{detail}）。"
-        "请使用快捷提示，或更明确地描述要查询的公告/商品/订单。"
+        "请更明确地描述要查询的公告/商品/订单/平台账号。"
     )
 
 
@@ -99,36 +120,34 @@ def resolve_intent(
     allowed_tool_names: set[str] | None = None,
     system_prompt_addon: str | None = None,
 ) -> dict[str, Any]:
-    """返回 route 字典，额外含 mode: rule_only | llm_assisted | degraded。"""
+    """返回 route 字典，额外含 mode: rule_only | llm_assisted | degraded。
+
+    有模型时优先 LLM；规则仅作危险拦截快路径，以及模型不可用时的降级执行。
+    """
     context = context or {}
     rule = route_intent(message, context)
     if _should_use_rule_fastpath(rule):
         if allowed_tool_names is None or rule["tool_name"] in allowed_tool_names:
             return {**rule, "mode": "rule_only"}
 
-    # unrecognized / defer_* 等必须尝试模型；仅在模型不可用时 degraded
     cfg = llm_config()
     if not cfg["enabled"] or not cfg["base_url"]:
-        return {
-            **rule,
-            "mode": "degraded",
-            "reason": rule.get("reason") or "llm_disabled",
-            "clarification": _degraded_clarification(rule, detail="模型未启用"),
-            "needs_clarification": True,
-            "tool_name": None,
-        }
+        return _rule_as_fallback(
+            rule,
+            detail="模型未启用",
+            reason=str(rule.get("reason") or "llm_disabled"),
+            allowed_tool_names=allowed_tool_names,
+        )
 
     health = probe_llm()
     if not health.get("online"):
         detail = str(health.get("detail") or "offline")[:80]
-        return {
-            **rule,
-            "mode": "degraded",
-            "reason": "llm_offline",
-            "clarification": _degraded_clarification(rule, detail=detail),
-            "needs_clarification": True,
-            "tool_name": None,
-        }
+        return _rule_as_fallback(
+            rule,
+            detail=detail,
+            reason="llm_offline",
+            allowed_tool_names=allowed_tool_names,
+        )
 
     tools = [tool.public_dict() for tool in list_tools()]
     if allowed_tool_names is not None:
@@ -170,7 +189,7 @@ def resolve_intent(
                 "confidence": confidence,
                 "needs_clarification": True,
                 "reason": "llm_unknown_tool",
-                "clarification": "模型选择了未注册工具，已拒绝执行。请换一种说法或使用快捷提示。",
+                "clarification": "模型选择了未注册工具，已拒绝执行。请换一种说法再试。",
                 "mode": "llm_assisted",
                 **llm_meta,
             }
@@ -220,14 +239,9 @@ def resolve_intent(
                 "clarification": f"模型不可用（{exc.message}），且未开启降级。",
                 "mode": "degraded",
             }
-        return {
-            **rule,
-            "mode": "degraded",
-            "reason": exc.code,
-            "clarification": (
-                _degraded_clarification(rule, detail=exc.message)
-                + " 也可改用：查询某单位本月成交金额、本月供应商、成交公告列表。"
-            ).strip(),
-            "needs_clarification": True,
-            "tool_name": None,
-        }
+        return _rule_as_fallback(
+            rule,
+            detail=exc.message,
+            reason=str(exc.code or "llm_unavailable"),
+            allowed_tool_names=allowed_tool_names,
+        )

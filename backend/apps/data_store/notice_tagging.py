@@ -26,6 +26,51 @@ DEAL_KIND_UNKNOWN = "未识别"
 DEAL_KINDS = (DEAL_KIND_GOODS, DEAL_KIND_SERVICE, DEAL_KIND_ENGINEERING, DEAL_KIND_UNKNOWN)
 # 兼容旧值
 _LEGACY_DEAL_KINDS = {"混合": DEAL_KIND_UNKNOWN}
+
+# 采购内容标签：按公告名称关键词识别（更长/更具体的 pattern 优先）
+# (标签, 命中词元组)
+_CONTENT_TAG_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("运维服务", ("运行维护服务", "运行维护", "运维服务", "系统运维", "平台运维", "网络运维", "维保服务")),
+    ("LED屏幕", ("LED屏幕", "LED显示屏", "LED屏", "液晶拼接屏", "电子显示屏")),
+    ("视频监控", ("视频监控平台", "视频监控", "监控平台", "监控系统", "摄像头采购")),
+    ("办公用品", ("办公耗材", "办公用纸", "办公用品", "文具用品", "文印耗材")),
+    ("宣传项目", ("政策宣传", "宣传项目", "宣传服务", "宣传推广", "广告宣传")),
+    ("印刷", ("印刷服务", "印刷项目", "印刷", "图文印刷", "装订印刷")),
+    ("车辆加油", ("车辆加油", "公务加油", "加油服务", "加油卡")),
+    ("车辆保险", ("车辆保险", "公务车保险", "机动车保险", "车险")),
+    ("车辆维保", ("车辆维修", "车辆保养", "汽车维修", "公车维修")),
+    ("空调", ("中央空调", "空调采购", "空调设备", "空调")),
+    ("计算机", ("台式计算机", "笔记本电脑", "图形工作站", "计算机", "电脑采购")),
+    ("打印机", ("打印机", "复印机", "一体机", "多功能一体机")),
+    ("家具", ("办公家具", "课桌椅", "家具采购", "家具")),
+    ("保洁服务", ("保洁服务", "物业保洁", "清洁服务")),
+    ("安保服务", ("安保服务", "保安服务", "门卫服务")),
+    ("物业服务", ("物业服务", "物业管理")),
+    ("法律服务", ("法律服务", "律师服务", "法律顾问")),
+    ("审计服务", ("审计服务", "审计项目")),
+    ("培训服务", ("培训服务", "教育培训", "业务培训")),
+    ("软件开发", ("软件开发", "系统开发", "信息化建设", "软件采购")),
+    ("网络设备", ("交换机", "路由器", "防火墙", "网络设备")),
+    ("食堂餐饮", ("食堂承包", "配餐服务", "餐饮服务", "食堂")),
+    ("绿化养护", ("绿化养护", "园林绿化", "苗木采购")),
+    ("工程监理", ("工程监理", "监理服务")),
+    ("招标代理", ("招标代理", "采购代理")),
+)
+
+_CONTENT_TITLE_NOISE = (
+    "成交公告",
+    "结果公告",
+    "采购公告",
+    "询比采购项目",
+    "询比采购",
+    "定点竞价",
+    "竞价公告",
+    "采购项目",
+    "服务项目",
+    "工程项目",
+    "项目",
+    "公告",
+)
 # 兼容旧 import；运行时优先读字典表
 ORG_TYPES = DEFAULT_ORG_TYPES
 NATURES = DEFAULT_NATURES
@@ -529,6 +574,86 @@ def classify_deal_kind(
     return {"dealKind": DEAL_KIND_UNKNOWN, "confidence": Decimal("0.20")}
 
 
+def _content_tag_candidates(title: str) -> list[tuple[str, str, int]]:
+    """返回 (tag, matched_pattern, pattern_len)，按 pattern 长度降序。"""
+    text = (title or "").strip()
+    if not text:
+        return []
+    hits: list[tuple[str, str, int]] = []
+    for tag, patterns in _CONTENT_TAG_RULES:
+        for pattern in patterns:
+            if pattern and pattern in text:
+                hits.append((tag, pattern, len(pattern)))
+                break
+    hits.sort(key=lambda item: item[2], reverse=True)
+    return hits
+
+
+_CONTENT_HEURISTIC_BLOCKLIST = (
+    "政府采购意向",
+    "采购意向",
+    "无印良品",
+    "货物类",
+    "服务类",
+    "工程类",
+    "本级",
+    "单位",
+    "关于",
+)
+
+
+def _heuristic_content_tag(title: str) -> str:
+    """规则未命中时：去掉公告噪声，截取较短的核心采购内容；宁缺毋滥。"""
+    text = (title or "").strip()
+    if not text:
+        return ""
+    # 去掉常见机构前缀（到「局/中心/学校/医院/公司」为止）
+    text = re.sub(
+        r"^[\u4e00-\u9fffA-Za-z0-9（）()]{2,40}?(?:财政局|教育局|公安局|交通管理支队|审计局|人防|活动中心|职业技术学院|大学|学院|学校|医院|中心|公司|局|部|处|办)",
+        "",
+        text,
+        count=1,
+    )
+    for noise in sorted(_CONTENT_TITLE_NOISE, key=len, reverse=True):
+        text = text.replace(noise, "")
+    text = re.sub(r"(20\d{2}\s*年(?:度)?(?:第?[一二三四四五六七八九十\d]+季度)?)", "", text)
+    text = re.sub(r"[0-9０-９]+", "", text)
+    text = re.sub(r"[、，,。；;：:\s\-_/\\|（）()【】\[\]+*·•]+", "", text)
+    text = text.strip("的之及与和")
+    # 启发式只接受很短的纯中文词，长句/工程名宁可不打
+    if len(text) < 2 or len(text) > 8:
+        return ""
+    if not re.fullmatch(r"[\u4e00-\u9fff]{2,8}", text):
+        return ""
+    if text.endswith(("市", "区", "县", "省", "局", "院", "校", "站")):
+        return ""
+    if any(token in text for token in _CONTENT_HEURISTIC_BLOCKLIST):
+        return ""
+    if text in ("采购", "服务", "工程", "货物", "项目", "公告", "意向", "合同公示"):
+        return ""
+    if any(token in text for token in ("合同", "公示", "建设", "分局", "分院", "大队", "支队")):
+        return ""
+    return text
+
+
+def classify_content_tag(*, title: str = "", rules: list[dict] | None = None) -> dict[str, Any]:
+    """按公告名称识别采购内容标签，便于筛选「买什么/做什么」。"""
+    title = (title or "").strip()
+    rules = rules or []
+    manual = (_rule_value(rules, "content_tag", title) or "").strip()[:64]
+    if manual:
+        return {"contentTag": manual, "confidence": Decimal("0.98")}
+
+    hits = _content_tag_candidates(title)
+    if hits:
+        return {"contentTag": hits[0][0], "confidence": Decimal("0.90")}
+
+    guessed = _heuristic_content_tag(title)
+    if guessed:
+        return {"contentTag": guessed, "confidence": Decimal("0.45")}
+    return {"contentTag": "", "confidence": Decimal("0.10")}
+
+
 def _product_rows_for_notice(notice_raw_id: int) -> list[dict]:
     tagged = {
         item.goods_id: item
@@ -682,16 +807,19 @@ def _apply_deal_kind(tag: NoticeResultTag, *, title: str, rules: list[dict]) -> 
         product_rows=_product_rows_for_notice(tag.notice_raw_id),
         rules=rules,
     )
+    content = classify_content_tag(title=title, rules=rules)
     tag.deal_kind = deal["dealKind"]
+    tag.content_tag = content["contentTag"]
     if tag.source != "manual":
-        tag.confidence = max(tag.confidence or Decimal("0"), deal["confidence"])
-    tag.save(update_fields=["deal_kind", "confidence", "updated_at"])
+        tag.confidence = max(tag.confidence or Decimal("0"), deal["confidence"], content["confidence"])
+    tag.save(update_fields=["deal_kind", "content_tag", "confidence", "updated_at"])
     return deal["dealKind"]
 
 
 def tag_result_notices(*, limit: int = 200, rebuild: bool = False) -> dict[str, int]:
     rules = _load_rules()
     # 优先补写/纠正成交类型：空值、旧「混合」、或非三种正式类型
+    # 采购内容空值不进常驻队列（规则未命中即为空，避免反复重跑）；新公告创建与 rebuild 时会写入
     pending_ids = list(
         NoticeResultTag.objects.filter(
             Q(deal_kind="")
@@ -742,7 +870,13 @@ def tag_result_notices(*, limit: int = 200, rebuild: bool = False) -> dict[str, 
         if existing and existing.locked:
             skipped += 1
             continue
-        if existing and existing.deal_kind and (existing.buyer_profile_id or not (parsed.buyer_name or "").strip()) and not rebuild:
+        if (
+            existing
+            and existing.deal_kind
+            and (existing.content_tag or "").strip()
+            and (existing.buyer_profile_id or not (parsed.buyer_name or "").strip())
+            and not rebuild
+        ):
             skipped += 1
             continue
         buyer_name = (parsed.buyer_name or "").strip()
@@ -751,11 +885,12 @@ def tag_result_notices(*, limit: int = 200, rebuild: bool = False) -> dict[str, 
         with transaction.atomic():
             _tag_products(raw.id, rules)
             deal = classify_deal_kind(title=title, product_rows=_product_rows_for_notice(raw.id), rules=rules)
+            content = classify_content_tag(title=title, rules=rules)
             profile = existing.buyer_profile if existing and existing.buyer_profile_id else None
-            confidence = deal["confidence"]
+            confidence = max(deal["confidence"], content["confidence"])
             if buyer_name:
                 classified = classify_buyer(buyer_name, region_text, rules)
-                confidence = max(classified["confidence"], deal["confidence"])
+                confidence = max(classified["confidence"], confidence)
                 profile, _created = NoticeBuyerProfile.objects.get_or_create(
                     name_key=_name_key(buyer_name),
                     defaults={"buyer_name": buyer_name, "source": "rule"},
@@ -773,12 +908,13 @@ def tag_result_notices(*, limit: int = 200, rebuild: bool = False) -> dict[str, 
             elif region_text and not profile:
                 # 无采购人时仍落地区线索到标签置信度，不强制建空档案
                 classified = classify_buyer("", region_text, rules)
-                confidence = max(classified["confidence"], deal["confidence"])
+                confidence = max(classified["confidence"], confidence)
             NoticeResultTag.objects.update_or_create(
                 notice_raw_id=raw.id,
                 defaults={
                     "buyer_profile": profile,
                     "deal_kind": deal["dealKind"],
+                    "content_tag": content["contentTag"],
                     "source": "rule",
                     "confidence": confidence,
                     "locked": False,
@@ -795,7 +931,7 @@ def _retag_notice_record(
     rules: list[dict],
     force_profile: bool = False,
 ) -> NoticeResultTag:
-    """对单条公告重新跑规则识别（采购人/地区/成交类型/商品），写回标签表。"""
+    """对单条公告重新跑规则识别（采购人/地区/成交类型/采购内容/商品），写回标签表。"""
     existing = NoticeResultTag.objects.filter(notice_raw_id=raw.id).select_related("buyer_profile").first()
     buyer_name = ((parsed.buyer_name if parsed else "") or "").strip()
     title = ((parsed.notice_title if parsed else "") or raw.title or "").strip()
@@ -803,11 +939,12 @@ def _retag_notice_record(
     with transaction.atomic():
         _tag_products(raw.id, rules, force=force_profile)
         deal = classify_deal_kind(title=title, product_rows=_product_rows_for_notice(raw.id), rules=rules)
+        content = classify_content_tag(title=title, rules=rules)
         profile = existing.buyer_profile if existing and existing.buyer_profile_id else None
-        confidence = deal["confidence"]
+        confidence = max(deal["confidence"], content["confidence"])
         if buyer_name:
             classified = classify_buyer(buyer_name, region_text, rules)
-            confidence = max(classified["confidence"], deal["confidence"])
+            confidence = max(classified["confidence"], confidence)
             profile, _created = NoticeBuyerProfile.objects.get_or_create(
                 name_key=_name_key(buyer_name),
                 defaults={"buyer_name": buyer_name, "source": "rule"},
@@ -826,12 +963,13 @@ def _retag_notice_record(
                 profile.save()
         elif region_text and not profile:
             classified = classify_buyer("", region_text, rules)
-            confidence = max(classified["confidence"], deal["confidence"])
+            confidence = max(classified["confidence"], confidence)
         NoticeResultTag.objects.update_or_create(
             notice_raw_id=raw.id,
             defaults={
                 "buyer_profile": profile,
                 "deal_kind": deal["dealKind"],
+                "content_tag": content["contentTag"],
                 "source": "rule",
                 "confidence": confidence,
                 "locked": False,
@@ -855,7 +993,12 @@ def retag_notice(notice_raw_id: int, *, force: bool = False) -> dict:
     parsed = NoticeParsed.objects.filter(notice_raw_id=notice_raw_id).first()
     rules = _load_rules()
     tag = _retag_notice_record(raw=raw, parsed=parsed, rules=rules, force_profile=force)
-    return {"ok": True, "noticeRawId": tag.notice_raw_id, "dealKind": tag.deal_kind or ""}
+    return {
+        "ok": True,
+        "noticeRawId": tag.notice_raw_id,
+        "dealKind": tag.deal_kind or "",
+        "contentTag": tag.content_tag or "",
+    }
 
 
 def _tag_products(notice_raw_id: int, rules: list[dict], *, force: bool = False) -> None:
@@ -899,11 +1042,13 @@ def correct_notice_tag(notice_raw_id: int, payload: dict) -> NoticeResultTag | N
     deal_kind = _normalize_deal_kind(str(payload.get("dealKind") or tag.deal_kind or ""))
     if deal_kind not in (DEAL_KIND_GOODS, DEAL_KIND_SERVICE, DEAL_KIND_ENGINEERING, DEAL_KIND_UNKNOWN):
         deal_kind = DEAL_KIND_UNKNOWN
+    content_tag = str(payload.get("contentTag") or payload.get("content_tag") or tag.content_tag or "").strip()[:64]
     tag.deal_kind = deal_kind
+    tag.content_tag = content_tag
     tag.source = "manual"
     tag.locked = True
     tag.confidence = Decimal("1.00")
-    tag.save(update_fields=["deal_kind", "source", "locked", "confidence", "updated_at"])
+    tag.save(update_fields=["deal_kind", "content_tag", "source", "locked", "confidence", "updated_at"])
     buyer = profile.buyer_name
     _upsert_rule("buyer_org_type", buyer, profile.org_type)
     _upsert_rule("buyer_nature", buyer, profile.nature)
@@ -913,6 +1058,8 @@ def correct_notice_tag(notice_raw_id: int, payload: dict) -> NoticeResultTag | N
     title = (parsed.notice_title or "").strip()
     if title and deal_kind in DEAL_KINDS:
         _upsert_rule("deal_kind", title, deal_kind)
+    if title and content_tag:
+        _upsert_rule("content_tag", title, content_tag)
     for row in payload.get("products") or []:
         goods_id = row.get("goodsId")
         if goods_id in (None, ""):
@@ -953,12 +1100,16 @@ def batch_correct_notice_tags(notice_ids: list[int], payload: dict) -> dict[str,
     patch_org = "orgType" in payload and str(payload.get("orgType") or "").strip() != ""
     patch_nature = "nature" in payload and str(payload.get("nature") or "").strip() != ""
     patch_deal = "dealKind" in payload and str(payload.get("dealKind") or "").strip() != ""
-    if not (patch_org or patch_nature or patch_deal):
+    patch_content = ("contentTag" in payload or "content_tag" in payload) and str(
+        payload.get("contentTag") or payload.get("content_tag") or ""
+    ).strip() != ""
+    if not (patch_org or patch_nature or patch_deal or patch_content):
         return {"updated": 0, "skipped": len(ids)}
 
     org_type = str(payload.get("orgType") or "").strip()[:32] if patch_org else ""
     nature = str(payload.get("nature") or "").strip()[:32] if patch_nature else ""
     deal_kind = _normalize_deal_kind(str(payload.get("dealKind") or "")) if patch_deal else ""
+    content_tag = str(payload.get("contentTag") or payload.get("content_tag") or "").strip()[:64] if patch_content else ""
 
     tags = {
         tag.notice_raw_id: tag
@@ -986,19 +1137,22 @@ def batch_correct_notice_tags(notice_ids: list[int], payload: dict) -> dict[str,
         profile.save()
         if patch_deal:
             tag.deal_kind = deal_kind
+        if patch_content:
+            tag.content_tag = content_tag
         tag.source = "manual"
         tag.locked = True
         tag.confidence = Decimal("1.00")
-        tag.save(update_fields=["deal_kind", "source", "locked", "confidence", "updated_at"])
+        tag.save(update_fields=["deal_kind", "content_tag", "source", "locked", "confidence", "updated_at"])
         buyer = profile.buyer_name
         if patch_org:
             _upsert_rule("buyer_org_type", buyer, profile.org_type)
         if patch_nature:
             _upsert_rule("buyer_nature", buyer, profile.nature)
-        if patch_deal:
-            title = ((parsed_map.get(notice_id).notice_title if parsed_map.get(notice_id) else "") or "").strip()
-            if title and tag.deal_kind in DEAL_KINDS:
-                _upsert_rule("deal_kind", title, tag.deal_kind)
+        title = ((parsed_map.get(notice_id).notice_title if parsed_map.get(notice_id) else "") or "").strip()
+        if patch_deal and title and tag.deal_kind in DEAL_KINDS:
+            _upsert_rule("deal_kind", title, tag.deal_kind)
+        if patch_content and title and tag.content_tag:
+            _upsert_rule("content_tag", title, tag.content_tag)
         updated += 1
     return {"updated": updated, "skipped": skipped}
 
@@ -1159,8 +1313,12 @@ def build_result_stats(
         kind: {"dealKind": kind, "count": 0, "amount": Decimal("0")} for kind in DEAL_KINDS
     }
     by_notice_kind: dict[str, dict] = {}
+    # 过大成交额多为账号/税号误解析，统计时按 0 处理，避免拖垮汇总
+    max_sane_deal = Decimal("1000000000")  # 10亿
     for row, profile, row_buyer, region_label, province_label, city_label, row_deal_kind, notice_kind_label in kept:
         deal = row.get("deal_amount") or Decimal("0")
+        if deal < 0 or deal > max_sane_deal:
+            deal = Decimal("0")
         amount += deal
         if row_buyer:
             buyers.add(row_buyer)

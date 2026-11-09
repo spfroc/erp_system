@@ -11,12 +11,36 @@ class IntentRouterTests(SimpleTestCase):
     def setUp(self):
         reset_registration_for_tests()
 
-    def test_rule_priority_skips_llm(self):
-        with patch("apps.assistant.services.intent_router.chat_completion_json") as chat:
-            routed = resolve_intent("查找最近一个月济南市办公设备采购公告")
+    @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
+    @patch("apps.assistant.services.intent_router.llm_config")
+    @patch("apps.assistant.services.intent_router.chat_completion_json")
+    def test_business_query_uses_llm_not_rule_fastpath(self, chat, cfg, probe):
+        cfg.return_value = {
+            "enabled": True,
+            "fallback_enabled": True,
+            "base_url": "http://127.0.0.1:8080/v1",
+            "model": "tiny",
+            "timeout": 5,
+            "max_output_tokens": 128,
+            "api_key": "local",
+            "intent_timeout": 20,
+        }
+        chat.return_value = {
+            "ok": True,
+            "data": {
+                "tool_name": "notice.search",
+                "params": {"relative_period": "last_30_days", "region": "济南"},
+                "confidence": 0.9,
+                "clarification": None,
+                "reason": "llm",
+            },
+            "duration_ms": 12,
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "source": "exact"},
+        }
+        routed = resolve_intent("查找最近一个月济南市办公设备采购公告")
         self.assertEqual(routed["tool_name"], "notice.search")
-        self.assertEqual(routed["mode"], "rule_only")
-        chat.assert_not_called()
+        self.assertEqual(routed["mode"], "llm_assisted")
+        chat.assert_called_once()
 
     @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": True})
     @patch("apps.assistant.services.intent_router.llm_config")
@@ -202,3 +226,20 @@ class IntentRouterTests(SimpleTestCase):
         routed = resolve_intent("模糊业务")
         self.assertEqual(routed["mode"], "degraded")
         self.assertTrue(routed["needs_clarification"])
+
+    @patch("apps.assistant.services.intent_router.probe_llm", return_value={"online": False})
+    @patch("apps.assistant.services.intent_router.llm_config")
+    def test_offline_falls_back_to_rule_tool(self, cfg, probe):
+        cfg.return_value = {
+            "enabled": True,
+            "fallback_enabled": True,
+            "base_url": "http://127.0.0.1:8080/v1",
+            "model": "tiny",
+            "timeout": 5,
+            "max_output_tokens": 128,
+            "api_key": "local",
+        }
+        routed = resolve_intent("查找最近一个月济南市办公设备采购公告")
+        self.assertEqual(routed["mode"], "degraded")
+        self.assertEqual(routed["tool_name"], "notice.search")
+        self.assertFalse(routed["needs_clarification"])

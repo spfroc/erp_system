@@ -122,16 +122,46 @@ _SEARCH_NOISE_TOKENS = {
 }
 
 
+def _project_code_filter_q(project_code: str) -> Q:
+    """项目编号精确匹配（含「编号，1」包号变体）。禁止用含 _ 的 LIKE，避免 MySQL 通配符误伤。"""
+    code = _normalize_project_code(project_code)
+    if not code:
+        return Q(pk__in=[])
+    values = _project_code_lookup_values([code])
+    # 若带 _A 等包后缀，同时允许无后缀主编号等值命中
+    base = re.sub(r"[_\-][A-Za-z0-9]{1,4}$", "", code)
+    if base and base.upper() != code.upper():
+        values = sorted(set(values) | set(_project_code_lookup_values([base])))
+    return Q(notice_key__in=values) | Q(
+        Exists(
+            NoticeParsed.objects.filter(
+                notice_raw_id=OuterRef("pk"),
+                project_code__in=values,
+            )
+        )
+    )
+
+
 def _keyword_search_q(keyword: str) -> Q:
     """关键词搜索：单位名优先走 buyer；多词空格拆成 AND，避免整句 LIKE 扫全表。"""
     text = (keyword or "").strip()
     if not text:
         return Q()
 
+    # 粘连中文的项目编号（如「SDGP…_A项目相关」）优先精确匹配编号
+    embedded_codes = extract_gov_project_codes(text)
+    if embedded_codes:
+        combined = Q()
+        for code in embedded_codes[:3]:
+            combined |= _project_code_filter_q(code)
+        return combined
+
     def one_token(token: str) -> Q:
         token = token.strip()
         if not token or token in _SEARCH_NOISE_TOKENS:
             return Q()
+        if extract_gov_project_codes(token):
+            return _project_code_filter_q(token)
         if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
             return Q(
                 Exists(
@@ -921,6 +951,24 @@ def _related_kind_sort_key(kind: str | None) -> tuple[int, str]:
 
 
 _PROJECT_CODE_SUFFIX_RE = re.compile(r"[，,]\d+$")
+# 政府采购常见项目编号（含包号后缀 _A / -1 等）；用于精确检索，避免整句模糊扫全表
+_GOV_PROJECT_CODE_RE = re.compile(
+    r"(?i)((?:SDGP|SDKJXY|SCJJ|ECJJ|SDKJ)[0-9A-Za-z_\-]{6,})"
+)
+
+
+def extract_gov_project_codes(text: str | None) -> list[str]:
+    """从自然语言或关键词中抽出政府采购项目编号（保序去重）。"""
+    found: list[str] = []
+    seen: set[str] = set()
+    for match in _GOV_PROJECT_CODE_RE.finditer(text or ""):
+        code = (match.group(1) or "").strip()
+        key = code.upper()
+        if not code or key in seen:
+            continue
+        seen.add(key)
+        found.append(code)
+    return found
 
 
 def _normalize_project_code(code: str | None) -> str:
@@ -1129,6 +1177,7 @@ def _attach_result_tags(items: list[dict]) -> list[dict]:
         tag = tags.get(int(item["id"]))
         profile = tag.buyer_profile if tag and tag.buyer_profile_id else None
         item["tagDealKind"] = ((tag.deal_kind if tag else "") or "").strip()
+        item["tagContent"] = ((tag.content_tag if tag else "") or "").strip()
         if not profile:
             item["tagOrgType"] = ""
             item["tagNature"] = ""
@@ -1198,7 +1247,7 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
             "projectNoticeKinds": sibling_kinds,
         }
     )
-    return base
+    return _attach_result_tags([base])[0]
 
 
 def _region_filter_q(region_name: str) -> Q:
@@ -1319,13 +1368,7 @@ def _notice_field_filter_q(
     applied = False
     if project_code:
         applied = True
-        q &= Q(notice_key__icontains=project_code) | Q(
-            Exists(
-                NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
-                    Q(project_code__icontains=project_code) | Q(notice_key__icontains=project_code)
-                )
-            )
-        )
+        q &= _project_code_filter_q(project_code)
     if project_name:
         applied = True
         q &= Q(title__icontains=project_name) | Q(
@@ -1456,6 +1499,7 @@ def query_crawled_notices(
     publish_date_from: str = "",
     publish_date_to: str = "",
     buyer_name: str = "",
+    project_code: str = "",
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1482,9 +1526,14 @@ def query_crawled_notices(
     if day_q is not None:
         qs = qs.filter(day_q)
     buyer = (buyer_name or "").strip()
-    if buyer:
+    code = (project_code or "").strip()
+    if not code:
+        embedded = extract_gov_project_codes(search)
+        if embedded:
+            code = embedded[0]
+    if buyer or code:
         field_q = _notice_field_filter_q(
-            project_code="",
+            project_code=code,
             project_name="",
             buyer_name=buyer,
             supplier_name="",
@@ -1493,12 +1542,15 @@ def query_crawled_notices(
         if field_q is not None:
             qs = qs.filter(field_q)
     keyword = (search or "").strip()
-    if keyword:
+    # 已按项目编号精确过滤时，不再把整句中文残片拿去模糊 AND，避免 0 命中或误扫全表
+    if keyword and not code:
         qs = qs.filter(_keyword_search_q(keyword))
-    has_filter = bool(site_id or kinds or day_q is not None or buyer or keyword or (site_ids is not None))
+    elif keyword and code and not extract_gov_project_codes(keyword):
+        qs = qs.filter(_keyword_search_q(keyword))
+    has_filter = bool(site_id or kinds or day_q is not None or buyer or keyword or code or (site_ids is not None))
     if not has_filter:
         total = _cached_raw_total()
-    elif day_q is not None and not (site_id or kinds or buyer or keyword or (site_ids is not None)):
+    elif day_q is not None and not (site_id or kinds or buyer or keyword or code or (site_ids is not None)):
         total = _cached_filtered_total(
             f"console_pub:{publish_date_from}:{publish_date_to}:sites:{','.join(site_ids or [])}",
             qs.count,
@@ -1515,6 +1567,7 @@ def query_crawled_notices(
         "total": total,
         "page": page,
         "page_size": page_size,
+        "project_code": code or "",
     }
 
 

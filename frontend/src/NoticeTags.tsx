@@ -12,6 +12,7 @@ type TagItem = {
   orgType: string;
   nature: string;
   dealKind: string;
+  contentTag: string;
   province: string;
   city: string;
   district: string;
@@ -75,12 +76,14 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
   const [orgType, setOrgType] = useState("全部");
   const [nature, setNature] = useState("全部");
   const [dealKind, setDealKind] = useState("全部");
+  const [contentTag, setContentTag] = useState("全部");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<TagItem[]>([]);
   const [orgTypes, setOrgTypes] = useState<string[]>(FALLBACK_ORG_TYPES);
   const [natures, setNatures] = useState<string[]>(FALLBACK_NATURES);
   const [dealKinds, setDealKinds] = useState<string[]>(FALLBACK_DEAL_KINDS);
+  const [contentTags, setContentTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [detail, setDetail] = useState<TagDetail | null>(null);
@@ -102,6 +105,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
   const orgFilters = ["全部", ...orgTypes];
   const natureFilters = ["全部", ...natures];
   const dealKindFilters = ["全部", ...dealKinds];
+  const contentTagFilters = ["全部", ...contentTags];
 
   const pageIds = useMemo(() => items.map((item) => item.id), [items]);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
@@ -120,7 +124,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
   useEffect(() => {
     setPage(1);
     setSelectedIds([]);
-  }, [query, regionQuery, orgType, nature, dealKind]);
+  }, [query, regionQuery, orgType, nature, dealKind, contentTag]);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -133,6 +137,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
     if (orgType !== "全部") params.set("org_type", orgType);
     if (nature !== "全部") params.set("nature", nature);
     if (dealKind !== "全部") params.set("deal_kind", dealKind);
+    if (contentTag !== "全部") params.set("content_tag", contentTag);
     let cancelled = false;
     setLoading(true);
     fetch(backendApiUrl(`/api/notices/tags/?${params.toString()}`), { credentials: "include" })
@@ -144,6 +149,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
           orgTypes?: string[];
           natures?: string[];
           dealKinds?: string[];
+          contentTags?: string[];
         }>(response),
       )
       .then((data) => {
@@ -153,6 +159,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
         if (data.orgTypes?.length) setOrgTypes(data.orgTypes);
         if (data.natures?.length) setNatures(data.natures);
         if (data.dealKinds?.length) setDealKinds(data.dealKinds);
+        if (data.contentTags?.length) setContentTags(data.contentTags);
         if (data.detail) onNotice({ type: "error", message: data.detail });
       })
       .catch((error: Error) => {
@@ -164,7 +171,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, query, regionQuery, orgType, nature, dealKind, onNotice, refreshKey]);
+  }, [page, pageSize, query, regionQuery, orgType, nature, dealKind, contentTag, onNotice, refreshKey]);
 
   function toggleSelect(id: number) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -302,6 +309,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
           orgType: detail.orgType,
           nature: detail.nature,
           dealKind: detail.dealKind,
+          contentTag: detail.contentTag,
           province: detail.province,
           city: detail.city,
           district: detail.district,
@@ -357,6 +365,15 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
             </button>
           ))}
         </div>
+        {contentTagFilters.length > 1 && (
+          <div className="segmented" role="tablist" aria-label="采购内容">
+            {contentTagFilters.map((item) => (
+              <button key={item} type="button" className={contentTag === item ? "active" : ""} onClick={() => setContentTag(item)}>
+                {item}
+              </button>
+            ))}
+          </div>
+        )}
         {canManage && selectedIds.length > 0 && (
           <div className="notice-tag-batch-bar">
             <span>已选 {selectedIds.length} 条</span>
@@ -417,6 +434,7 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
               ) : null}
             </span>
             <span>采购人</span>
+            <span>采购内容</span>
             <span>类型</span>
             <span>性质</span>
             <span>成交</span>
@@ -454,6 +472,9 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
                   <em>无标题</em>
                 )}
               </div>
+              <span>
+                {item.contentTag ? <span className="notice-list-tag tone-content">{item.contentTag}</span> : "—"}
+              </span>
               <span>{item.orgType || "—"}</span>
               <span>{item.nature || "—"}</span>
               <span>{item.dealKind || "未识别"}</span>
@@ -542,6 +563,15 @@ export function NoticeTags({ onNotice, canManage }: { onNotice: (notice: { type:
                     <option key={item}>{item}</option>
                   ))}
                 </select>
+              </label>
+              <label>
+                采购内容
+                <input
+                  value={detail.contentTag || ""}
+                  disabled={!canManage}
+                  placeholder="如：印刷、运维服务、办公用品"
+                  onChange={(event) => setDetail({ ...detail, contentTag: event.target.value })}
+                />
               </label>
               <label>
                 省

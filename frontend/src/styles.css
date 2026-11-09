@@ -2519,7 +2519,7 @@ nav button:hover {
 }
 
 .table-row.notice-tag-table {
-  grid-template-columns: 36px minmax(180px, 1.4fr) 0.45fr 0.5fr 0.45fr 0.85fr 0.35fr 0.45fr 0.4fr;
+  grid-template-columns: 36px minmax(180px, 1.4fr) 0.55fr 0.45fr 0.5fr 0.45fr 0.85fr 0.35fr 0.45fr 0.4fr;
   align-items: start;
 }
 
@@ -3406,6 +3406,13 @@ nav button:hover {
   color: #64748b;
 }
 
+.notice-list-tag.tone-content {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #b45309;
+  font-weight: 600;
+}
+
 .table-row.site-table {
   grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1fr) minmax(160px, 1.1fr) 0.7fr 0.55fr minmax(140px, 0.9fr);
   align-items: start;
@@ -4267,6 +4274,23 @@ nav button:hover {
 
 .service-project-table > .service-project-stack em {
   margin: 0;
+}
+
+.service-project-table > .service-project-stack em.is-expired {
+  color: #c62828;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.service-project-table.head > .service-end-sort {
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.service-project-table.head > .service-end-sort.is-active {
+  color: #17603d;
+  font-weight: 600;
 }
 
 .service-project-table > .table-cell-button {
@@ -8001,6 +8025,79 @@ nav button:hover {
   resize: vertical;
 }
 
+.assistant-settings-modal {
+  width: min(720px, 96vw);
+}
+
+.assistant-settings-prompts {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-settings-prompts-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assistant-settings-prompts-head em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.assistant-settings-prompt-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-settings-prompt-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1.6fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.assistant-settings-prompt-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.assistant-settings-prompt-row textarea {
+  min-height: 64px;
+}
+
+.assistant-settings-prompt-side {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  padding-top: 22px;
+}
+
+.assistant-settings-prompt-side .assistant-settings-check {
+  white-space: nowrap;
+}
+
+.assistant-composer .assistant-prompts.segmented {
+  flex-wrap: wrap;
+  overflow: visible;
+  max-height: none;
+  margin-bottom: 10px;
+}
+
+.assistant-composer .assistant-prompts.segmented button {
+  border-radius: 999px;
+}
+
 .assistant-bubble > p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -8026,16 +8123,6 @@ nav button:hover {
   gap: 12px;
   box-shadow: 0 -2px 18px rgba(15, 23, 42, 0.03);
   flex-shrink: 0;
-}
-
-.assistant-composer .assistant-prompts.segmented {
-  flex-wrap: wrap;
-  overflow: visible;
-  max-height: none;
-}
-
-.assistant-composer .assistant-prompts.segmented button {
-  border-radius: 999px;
 }
 
 .assistant-input-row {
@@ -8089,8 +8176,36 @@ nav button:hover {
 }
 
 .table-row.assistant-result-table {
-  grid-template-columns: minmax(0, 2.2fr) minmax(80px, 0.8fr) minmax(110px, 0.9fr) auto;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) auto;
   align-items: start;
+}
+
+.table-row.assistant-result-table.is-notice {
+  grid-template-columns: minmax(0, 2.4fr) minmax(72px, 0.7fr) minmax(120px, 0.9fr) auto;
+}
+
+.assistant-notice-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assistant-notice-main .notice-list-tags,
+.assistant-block-notice-detail .notice-list-tags {
+  margin-top: 2px;
+}
+
+.assistant-notice-tags-empty {
+  color: #98a2b3;
+  font-size: 12px;
+}
+
+.table-row.assistant-result-table.is-expiry {
+  grid-template-columns: minmax(0, 2fr) minmax(72px, 0.7fr) minmax(100px, 0.9fr) minmax(0, 1.4fr) auto;
+}
+
+.table-row.assistant-result-table.is-platform-account {
+  grid-template-columns: minmax(0, 1.6fr) minmax(72px, 0.8fr) minmax(0, 1.1fr) minmax(0, 1.1fr) auto;
 }
 
 .assistant-json {

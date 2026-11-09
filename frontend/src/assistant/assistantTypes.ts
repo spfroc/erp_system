@@ -69,9 +69,10 @@ export interface AssistantChatResponse {
 
 export interface AssistantQuickPrompt {
   id: string;
-  label: string;
-  text: string;
-  permission?: string;
+  name: string;
+  content: string;
+  /** 点击后直接发送；false 时仅填入输入框 */
+  direct_send?: boolean;
 }
 
 export interface AssistantUserSettings {
@@ -79,6 +80,7 @@ export interface AssistantUserSettings {
   show_token_usage: boolean;
   display_name: string;
   display_avatar_url: string;
+  quick_prompts: AssistantQuickPrompt[];
   user_name?: string;
   user_avatar_url?: string;
   updated_at?: string;
@@ -86,5 +88,8 @@ export interface AssistantUserSettings {
     system_prompt_addon_max?: number;
     display_name_max?: number;
     display_avatar_url_max?: number;
+    quick_prompts_max?: number;
+    quick_prompt_name_max?: number;
+    quick_prompt_content_max?: number;
   };
 }

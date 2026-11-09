@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import requests
+
 from clients.http_session import build_session, request_with_retries
 from config import settings
 
@@ -12,6 +14,7 @@ except ImportError:  # pragma: no cover
     tqdm = None
 
 SITE_ID = "sd-ggzyjyzx"
+_CONN_HINTS = ("ConnectTimeout", "ConnectionError", "NewConnectionError", "ProxyError", "RemoteDisconnected")
 
 # (projectType, noticeType, label)
 CATEGORIES: List[Tuple[int, int, str]] = [
@@ -34,23 +37,37 @@ CATEGORIES: List[Tuple[int, int, str]] = [
 ]
 
 
+def is_connection_failure(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}"
+    return isinstance(exc, (requests.ConnectionError, requests.Timeout)) or any(h in text for h in _CONN_HINTS)
+
+
 class SdMallClient:
     def __init__(self) -> None:
         self.base = "https://ggzyjyzx.shandong.gov.cn:8182"
-        self.session = build_session(
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "siteCode": settings.sd_site_code,
-                "regionGuid": settings.sd_region_guid,
-                "User-Agent": "Mozilla/5.0 notice-crawler",
-            }
-        )
+        self._headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "siteCode": settings.sd_site_code,
+            "regionGuid": settings.sd_region_guid,
+            "User-Agent": "Mozilla/5.0 notice-crawler",
+        }
+        self.session = build_session(headers=self._headers)
+
+    def reset_session(self) -> None:
+        """SOCKS 超时后连接池易脏，重建 session 再试。"""
+        try:
+            self.session.close()
+        except Exception:  # noqa: BLE001
+            pass
+        self.session = build_session(headers=self._headers)
 
     def _sleep(self) -> None:
         time.sleep(settings.request_interval)
 
     def _on_retry(self, attempt: int, attempts: int, reason: str, wait: float) -> None:
+        if any(h in reason for h in _CONN_HINTS):
+            self.reset_session()
         message = f"{SITE_ID} 请求重试 {attempt}/{attempts - 1}（{reason}），等待 {wait:.0f}s"
         if tqdm is not None:
             tqdm.write(message)
@@ -59,13 +76,14 @@ class SdMallClient:
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
         self._sleep()
+        # connect/read 分开：代理抖动时尽快失败并重建，读响应可稍长
         resp = request_with_retries(
             self.session,
             method,
             f"{self.base}{path}",
             retries=6,
             backoff=2.0,
-            timeout=45,
+            timeout=(20, 60),
             on_retry=self._on_retry,
             **kwargs,
         )
@@ -74,6 +92,10 @@ class SdMallClient:
         if not data.get("success"):
             raise RuntimeError(data.get("message") or str(data))
         return data.get("data") or {}
+
+    def probe(self) -> None:
+        """轻量探活：确认 SOCKS→商城网关可用。"""
+        self.list_notices(project_type=5, notice_type=1, page_num=1, page_size=1)
 
     def list_notices(
         self,

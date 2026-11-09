@@ -84,14 +84,25 @@ goods 必须是数组：有几条产品就输出几条，不要合并。
 """ + json.dumps(PARSE_SCHEMA_HINT, ensure_ascii=False, indent=2)
 
 
+# 与 heuristic.MAX_SANE_AMOUNT 对齐：过大金额多为账号/税号误抽
+_MAX_SANE_AMOUNT = Decimal("1000000000")  # 10亿
+
+
 def _to_decimal(v: Any) -> Optional[Decimal]:
     if v is None or v == "":
         return None
     try:
         s = str(v).replace(",", "").replace("¥", "").replace("元", "").strip()
-        return Decimal(s)
+        amount = Decimal(s)
     except (InvalidOperation, ValueError):
         return None
+    if amount < 0 or amount > _MAX_SANE_AMOUNT:
+        return None
+    if amount >= Decimal("1000000") and amount == amount.to_integral_value():
+        digits = len(str(int(amount)))
+        if digits >= 8:
+            return None
+    return amount
 
 
 def _to_dt(v: Any):

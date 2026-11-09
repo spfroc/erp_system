@@ -10,13 +10,45 @@ from apps.assistant.models import AssistantUserSettings
 SYSTEM_PROMPT_ADDON_MAX_LEN = 500
 DISPLAY_NAME_MAX_LEN = 64
 AVATAR_URL_MAX_LEN = 512
+QUICK_PROMPTS_MAX = 10
+QUICK_PROMPT_NAME_MAX_LEN = 32
+QUICK_PROMPT_CONTENT_MAX_LEN = 500
+QUICK_PROMPT_ID_MAX_LEN = 64
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "system_prompt_addon": "",
     "show_token_usage": True,
     "display_name": "",
     "display_avatar_url": "",
+    "quick_prompts": [],
 }
+
+
+def normalize_quick_prompts(raw: Any) -> list[dict[str, Any]]:
+    """校验并裁剪快捷提示词，最多 10 条；名称/内容皆必填。"""
+    if not isinstance(raw, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for entry in raw:
+        if len(items) >= QUICK_PROMPTS_MAX:
+            break
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or entry.get("label") or "").strip()[:QUICK_PROMPT_NAME_MAX_LEN]
+        content = str(entry.get("content") or entry.get("text") or "").strip()[:QUICK_PROMPT_CONTENT_MAX_LEN]
+        if not name or not content:
+            continue
+        prompt_id = str(entry.get("id") or "").strip()[:QUICK_PROMPT_ID_MAX_LEN] or f"qp-{len(items) + 1}"
+        direct_send = bool(entry.get("direct_send", entry.get("directSend", entry.get("auto_send", False))))
+        items.append(
+            {
+                "id": prompt_id,
+                "name": name,
+                "content": content,
+                "direct_send": direct_send,
+            }
+        )
+    return items
 
 
 def _row_to_dict(row: AssistantUserSettings | None) -> dict[str, Any]:
@@ -27,6 +59,7 @@ def _row_to_dict(row: AssistantUserSettings | None) -> dict[str, Any]:
         "show_token_usage": bool(row.show_token_usage),
         "display_name": row.display_name or "",
         "display_avatar_url": row.display_avatar_url or "",
+        "quick_prompts": normalize_quick_prompts(getattr(row, "quick_prompts", None) or []),
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",
     }
 
@@ -63,6 +96,9 @@ def public_settings_for_user(user_data: dict) -> dict[str, Any]:
             "system_prompt_addon_max": SYSTEM_PROMPT_ADDON_MAX_LEN,
             "display_name_max": DISPLAY_NAME_MAX_LEN,
             "display_avatar_url_max": AVATAR_URL_MAX_LEN,
+            "quick_prompts_max": QUICK_PROMPTS_MAX,
+            "quick_prompt_name_max": QUICK_PROMPT_NAME_MAX_LEN,
+            "quick_prompt_content_max": QUICK_PROMPT_CONTENT_MAX_LEN,
         },
     }
 
@@ -93,6 +129,10 @@ def update_user_settings(user_id: str, payload: dict[str, Any]) -> dict[str, Any
         avatar = str(payload.get("display_avatar_url") or "").strip()[:AVATAR_URL_MAX_LEN]
         row.display_avatar_url = avatar
         fields.append("display_avatar_url")
+
+    if "quick_prompts" in payload:
+        row.quick_prompts = normalize_quick_prompts(payload.get("quick_prompts"))
+        fields.append("quick_prompts")
 
     if fields:
         row.save(update_fields=[*fields, "updated_at"])

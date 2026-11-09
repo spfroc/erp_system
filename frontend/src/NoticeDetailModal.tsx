@@ -31,6 +31,7 @@ export type NoticeListItem = {
   tagOrgType?: string | null;
   tagNature?: string | null;
   tagDealKind?: string | null;
+  tagContent?: string | null;
   tagProvince?: string | null;
   tagCity?: string | null;
   tagDistrict?: string | null;

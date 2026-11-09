@@ -61,6 +61,8 @@ class AssistantUserSettings(models.Model):
     display_name = models.CharField(max_length=64, blank=True, default="")
     # 头像 URL；空则前端可用用户 profile 中的 avatar 字段（若有）
     display_avatar_url = models.CharField(max_length=512, blank=True, default="")
+    # 个人快捷提示词：[{id, name, content}, ...]，最多 10 条
+    quick_prompts = models.JSONField(default=list, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

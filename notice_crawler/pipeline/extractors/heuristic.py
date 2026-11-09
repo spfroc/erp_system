@@ -16,16 +16,43 @@ def _first(patterns: List[str], text: str, flags: int = 0) -> Optional[str]:
     return None
 
 
+# 政府采购成交额极少超过 10 亿；更大值多半是账号/税号/行号被误抽
+MAX_SANE_AMOUNT = 1_000_000_000.0  # 10亿
+
+
+def _sane_amount(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    if amount < 0 or amount > MAX_SANE_AMOUNT:
+        return None
+    # 无小数且位数过长：常见银行账号/税号片段（如 91370117、631389397）
+    if amount >= 1_000_000 and abs(amount - round(amount)) < 1e-9:
+        digits = len(str(int(round(amount))))
+        if digits >= 8:
+            return None
+    return amount
+
+
 def _money(patterns: List[str], text: str) -> Optional[float]:
     for p in patterns:
         m = re.search(p, text)
         if not m:
             continue
+        # 避免「账号：631389397」「税号：91370117…」被当成金额
+        head = text[max(0, m.start() - 12) : m.start()]
+        if re.search(r"(?:账号|账户|帐号|税号|行号|开户)\s*[:：]?\s*$", head):
+            continue
         raw = m.group(1).replace(",", "").replace("，", "").replace(" ", "")
         try:
-            return float(raw)
+            amount = _sane_amount(float(raw))
         except ValueError:
             continue
+        if amount is not None:
+            return amount
     return None
 
 
@@ -61,25 +88,20 @@ def _extract_gpfa_deal(text: str) -> Dict[str, Any]:
         out["deal_supplier"] = re.sub(r"\s+", " ", m.group(1).strip())[:256]
         addr = re.sub(r"\s+", " ", m.group(2).strip().replace("_", ""))
         out["deal_supplier_address"] = addr[:512]
-        try:
-            out["deal_amount"] = float(m.group(3))
-        except ValueError:
-            pass
+        out["deal_amount"] = _sane_amount(_num(m.group(3)))
         return out
-    # 宽松：成交供应商段落后找公司名+金额
+    # 宽松：仅在明确「成交供应商」段落内取「金额 + 元」，避免扫到账号/税号
     m2 = re.search(
-        r"成交供应商[\s\S]{0,120}?"
+        r"(?:^|\n)\s*(?:二、)?成交供应商[^\n]{0,40}\n"
+        r"[\s\S]{0,400}?"
         r"([^\n\r]{2,40}?(?:公司|事务所|中心|医院|学校|厂|商行|研究院))"
-        r"[\s\S]{0,160}?"
-        r"([0-9]{2,}(?:\.[0-9]+)?)",
+        r"[\s\S]{0,200}?"
+        r"([0-9]{1,10}(?:\.[0-9]+)?)\s*元",
         text,
     )
     if m2:
         out["deal_supplier"] = m2.group(1).strip()[:256]
-        try:
-            out["deal_amount"] = float(m2.group(2))
-        except ValueError:
-            pass
+        out["deal_amount"] = _sane_amount(_num(m2.group(2)))
     return out
 
 
@@ -357,18 +379,23 @@ class HeuristicExtractor(BaseExtractor):
             full,
             flags=re.M,
         )
-        out["buyer_name"] = _label_value(
-            ["采购人名称", "采购人单位", "采购单位", "采购人"],
-            full,
-        ) or _first(
+        # 勿匹配「采购人员）名单」等噪声；优先带冒号的采购人字段
+        out["buyer_name"] = _first(
             [
-                r"采购人(?:单位)?[:：]\s*(.+)",
-                r"采购单位[:：]\s*(.+)",
-                r"采购人名称[:：]\s*(.+)",
+                r"1\.采购人信息[\s\S]{0,80}?名称\s*[:：]\s*([^\n\r]+)",
+                r"采购人名称\s*[:：]\s*([^\n\r]+)",
+                r"采购人单位\s*[:：]\s*([^\n\r]+)",
+                r"采购单位\s*[:：]\s*([^\n\r]+)",
+                r"采购人(?!员|代表)\s*[:：]\s*([^\n\r]+)",
             ],
             full,
             flags=re.M,
+        ) or _label_value(
+            ["采购人名称", "采购人单位", "采购单位"],
+            full,
         )
+        if out["buyer_name"] and re.search(r"名单|采购人员|评审专家", out["buyer_name"]):
+            out["buyer_name"] = None
         out["buyer_contact_name"] = _first(
             [
                 r"(?:项目)?联系人[:：]\s*([^\n\r，,；;]{2,20})",
@@ -474,7 +501,7 @@ class HeuristicExtractor(BaseExtractor):
         if mall_deal.get("deal_supplier"):
             out["deal_supplier"] = mall_deal["deal_supplier"]
         if mall_deal.get("deal_amount") is not None:
-            out["deal_amount"] = mall_deal["deal_amount"]
+            out["deal_amount"] = _sane_amount(mall_deal["deal_amount"])
         if mall_deal.get("deal_supplier_address"):
             out["deal_supplier_address"] = mall_deal["deal_supplier_address"]
         if mall_deal.get("quote_count") is not None:
@@ -486,7 +513,14 @@ class HeuristicExtractor(BaseExtractor):
         if gpfa_deal.get("deal_supplier"):
             out["deal_supplier"] = gpfa_deal["deal_supplier"]
         if gpfa_deal.get("deal_amount") is not None:
-            out["deal_amount"] = gpfa_deal["deal_amount"]
+            out["deal_amount"] = _sane_amount(gpfa_deal["deal_amount"])
+        # 废标/终止类公告通常无成交额，避免正文里的账号被误抽
+        if re.search(r"(废标|终止|流标|未成交)", full) and not re.search(
+            r"成交金额\s*[:：]", full
+        ):
+            out["deal_amount"] = None
+        out["deal_amount"] = _sane_amount(out.get("deal_amount"))
+        out["budget_amount"] = _sane_amount(out.get("budget_amount"))
         if gpfa_deal.get("deal_supplier_address"):
             out["deal_supplier_address"] = gpfa_deal["deal_supplier_address"]
         out["goods"] = mall_goods or _extract_gpfa_goods(full) or out["goods"]

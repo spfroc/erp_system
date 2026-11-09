@@ -35,6 +35,8 @@ class NoticeResultTag(models.Model):
     notice_raw_id = models.BigIntegerField(unique=True)
     buyer_profile = models.ForeignKey(NoticeBuyerProfile, null=True, blank=True, on_delete=models.SET_NULL, related_name="notices")
     deal_kind = models.CharField(max_length=16, blank=True, default="", db_index=True)
+    # 按公告名称识别的采购内容/用途，如「印刷」「运维服务」「办公用品」
+    content_tag = models.CharField(max_length=64, blank=True, default="", db_index=True)
     source = models.CharField(max_length=16, default="rule")
     confidence = models.DecimalField(max_digits=4, decimal_places=2, default=0)
     locked = models.BooleanField(default=False)

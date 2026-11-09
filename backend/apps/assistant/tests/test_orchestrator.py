@@ -13,17 +13,28 @@ class OrchestratorTests(SimpleTestCase):
     def _user(self):
         return {"id": "u1", "permissions": ["assistant.use", "notice.view", "dashboard.view", "salesOrder.view"]}
 
+    @patch("apps.assistant.services.orchestrator.get_user_settings", return_value={})
+    @patch("apps.assistant.services.orchestrator.resolve_intent")
     @patch("apps.assistant.services.orchestrator.execute_tool")
     @patch("apps.assistant.services.orchestrator.update_context", return_value={})
     @patch("apps.assistant.services.orchestrator.append_message")
     @patch("apps.assistant.services.orchestrator.create_conversation")
-    def test_rule_chat_notice_search(self, create_conv, append_msg, update_ctx, execute_tool):
+    def test_llm_chat_notice_search(self, create_conv, append_msg, update_ctx, execute_tool, resolve, _settings):
         conversation = MagicMock(id=10, context_json={})
         create_conv.return_value = conversation
         append_msg.side_effect = [
             MagicMock(id=1),
             MagicMock(id=2),
         ]
+        resolve.return_value = {
+            "intent": "notice.search",
+            "tool_name": "notice.search",
+            "params": {"relative_period": "last_30_days"},
+            "confidence": 0.9,
+            "needs_clarification": False,
+            "reason": "llm",
+            "mode": "llm_assisted",
+        }
         execute_tool.return_value = {
             "execution_id": 99,
             "block_type": "notice_list",
@@ -38,30 +49,43 @@ class OrchestratorTests(SimpleTestCase):
         )
 
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["mode"], "rule_only")
+        self.assertEqual(result["mode"], "llm_assisted")
         self.assertEqual(result["intent"], "notice.search")
         self.assertEqual(result["blocks"][0]["type"], "notice_list")
         execute_tool.assert_called_once()
         self.assertEqual(execute_tool.call_args.kwargs["tool_name"], "notice.search")
 
+    @patch("apps.assistant.services.orchestrator.get_user_settings", return_value={})
+    @patch("apps.assistant.services.orchestrator.resolve_intent")
     @patch("apps.assistant.services.orchestrator.update_context", return_value={})
     @patch("apps.assistant.services.orchestrator.append_message")
     @patch("apps.assistant.services.orchestrator.create_conversation")
-    def test_clarification_when_unrecognized(self, create_conv, append_msg, update_ctx):
+    def test_clarification_when_unrecognized(self, create_conv, append_msg, update_ctx, resolve, _settings):
         conversation = MagicMock(id=11, context_json={})
         create_conv.return_value = conversation
         append_msg.side_effect = [MagicMock(id=1), MagicMock(id=2)]
+        resolve.return_value = {
+            "intent": "clarification",
+            "tool_name": None,
+            "params": {},
+            "confidence": 0.1,
+            "needs_clarification": True,
+            "reason": "unrecognized",
+            "clarification": "请说明要查询的业务。",
+            "mode": "llm_assisted",
+        }
 
         result = handle_chat(user_data=self._user(), message="今天天气怎么样")
         self.assertEqual(result["intent"], "clarification")
         self.assertEqual(result["blocks"][0]["type"], "clarification")
         update_ctx.assert_called()
 
+    @patch("apps.assistant.services.orchestrator.get_user_settings", return_value={})
     @patch("apps.assistant.services.orchestrator.resolve_intent")
     @patch("apps.assistant.services.orchestrator.update_context", return_value={})
     @patch("apps.assistant.services.orchestrator.append_message")
     @patch("apps.assistant.services.orchestrator.create_conversation")
-    def test_missing_mode_unrecognized_not_rule_only(self, create_conv, append_msg, update_ctx, resolve):
+    def test_missing_mode_unrecognized_not_rule_only(self, create_conv, append_msg, update_ctx, resolve, _settings):
         conversation = MagicMock(id=12, context_json={})
         create_conv.return_value = conversation
         append_msg.side_effect = [MagicMock(id=1), MagicMock(id=2)]

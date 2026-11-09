@@ -157,6 +157,17 @@ def handle_chat(
     tool_name = str(routed["tool_name"])
     params = dict(routed.get("params") or {})
     _sync_chart_type_param(text, params)
+    if tool_name in {"notice.search", "deal.search"}:
+        # 供工具从用户原话兜底抽取项目编号，防止模型漏传后空搜全库
+        params["_user_message"] = text
+        if not str(params.get("project_code") or params.get("projectCode") or "").strip():
+            from apps.data_store.notice_views import extract_gov_project_codes
+
+            codes = extract_gov_project_codes(text)
+            if codes:
+                params["project_code"] = codes[0]
+                if not str(params.get("search") or "").strip():
+                    params["search"] = codes[0]
     try:
         result = execute_tool(
             tool_name=tool_name,

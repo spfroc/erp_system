@@ -52,6 +52,29 @@ def _org_name_map(org_ids: list[str] | set[str]) -> dict[str, str]:
     return {row.id: row.name or row.id for row in rows}
 
 
+def _org_profile_map(org_ids: list[str] | set[str]) -> dict[str, dict[str, str]]:
+    """客户联系信息：电话 + 联系人（优先 contactName，否则法人）。"""
+    ids = [str(item) for item in org_ids if item]
+    if not ids:
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for row in OrganizationRecord.objects.filter(is_deleted=False, id__in=ids).only("id", "name", "data"):
+        payload = _data(row)
+        phone = str(payload.get("phone") or payload.get("mobile") or "").strip()
+        contact = str(
+            payload.get("contactName")
+            or payload.get("contact")
+            or payload.get("legalPerson")
+            or ""
+        ).strip()
+        out[row.id] = {
+            "name": row.name or row.id,
+            "phone": phone,
+            "contact_name": contact,
+        }
+    return out
+
+
 def _find_orgs(keyword: str, *, limit: int = 20) -> list[OrganizationRecord]:
     keyword = (keyword or "").strip()
     if not keyword:
@@ -272,18 +295,24 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
     del user_data
     keyword = _customer_keyword(params)
     # 防止把「一个月内过期 用户」整句当成客户名
-    if keyword and re.fullmatch(r".*(过期|到期|月内|天内|用户|名称).*", keyword) and len(keyword) <= 20:
+    if keyword and re.search(r"(过期|到期|月内|天内|续费|周期|按次|不要|只要|类型|服务项目)", keyword):
         if not _find_orgs(keyword, limit=1):
             keyword = ""
     page, page_size = _page_params(params)
     within_months = int(params.get("within_months") or 0)
     within_days = int(params.get("within_days") or 0)
     include_overdue = bool(params.get("include_overdue"))
+    service_type = str(params.get("service_type") or params.get("serviceType") or "").strip()
+    exclude_renewed = bool(params.get("exclude_renewed") or params.get("excludeRenewed"))
     window_end = _expiry_window_end(within_months=within_months, within_days=within_days)
 
     orgs = _find_orgs(keyword, limit=30) if keyword else []
     org_ids = [org.id for org in orgs]
-    qs = ProjectRecord.objects.filter(is_deleted=False).order_by("-updated_at", "-id")
+    qs = ProjectRecord.objects.filter(is_deleted=False, type="服务项目").order_by("-updated_at", "-id")
+    if service_type == "周期":
+        qs = qs.filter(Q(data__serviceType="周期") | Q(data__serviceType__isnull=True) | Q(data__serviceType=""))
+    elif service_type == "按次":
+        qs = qs.filter(data__serviceType="按次")
     if org_ids:
         qs = qs.filter(customer_org_id__in=org_ids)
     elif keyword:
@@ -293,7 +322,17 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
             | Q(customer_org_id__icontains=keyword)
         )
     # 有时间窗时多取一些再内存过滤；否则只取有到期日的
-    candidates = list(qs[:500] if window_end else qs.exclude(data__serviceEndDate__isnull=True).exclude(data__serviceEndDate="")[:500])
+    candidates = list(qs[:800] if window_end else qs.exclude(data__serviceEndDate__isnull=True).exclude(data__serviceEndDate="")[:800])
+
+    renewed_org_ids: set[str] = set()
+    if exclude_renewed:
+        renewed_org_ids = {
+            str(row.customer_org_id)
+            for row in ProjectRecord.objects.filter(is_deleted=False, type="服务项目", data__serviceCustomerKind="续费客户").exclude(
+                customer_org_id=""
+            )[:2000]
+            if row.customer_org_id
+        }
 
     onboard_by_org: dict[str, str] = {}
     target_ids = org_ids or list({row.customer_org_id for row in candidates if row.customer_org_id})
@@ -303,9 +342,11 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
             if expire and board.customer_org_id not in onboard_by_org:
                 onboard_by_org[board.customer_org_id] = expire
 
-    names = _org_name_map({row.customer_org_id for row in candidates} | set(org_ids))
+    profiles = _org_profile_map({row.customer_org_id for row in candidates} | set(org_ids))
     items = []
     for row in candidates:
+        if exclude_renewed and row.customer_org_id in renewed_org_ids:
+            continue
         payload = _data(row)
         end_date = str(payload.get("serviceEndDate") or "").strip()
         onboard_expire = onboard_by_org.get(row.customer_org_id, "")
@@ -317,6 +358,17 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
                 continue
         elif not end_date and not onboard_expire:
             continue
+        profile = profiles.get(row.customer_org_id) or {}
+        contact_name = str(profile.get("contact_name") or "")
+        contact_phone = str(profile.get("phone") or "")
+        customer_name = str(profile.get("name") or "")
+        actions = [
+            {"type": "open_project", "label": "打开项目", "project_id": row.id},
+        ]
+        if row.customer_org_id:
+            actions.append({"type": "open_customer", "label": "客户资料", "org_id": row.customer_org_id})
+        if contact_phone:
+            actions.append({"type": "copy_phone", "label": "复制电话", "text": contact_phone})
         items.append(
             {
                 "id": row.id,
@@ -325,21 +377,34 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
                 "type": row.type,
                 "status": row.status,
                 "customer_org_id": row.customer_org_id,
-                "customer_name": names.get(row.customer_org_id, ""),
+                "customer_name": customer_name,
+                "contact_name": contact_name,
+                "contact_phone": contact_phone,
+                "service_type": str(payload.get("serviceType") or "周期"),
+                "service_customer_kind": str(payload.get("serviceCustomerKind") or ""),
                 "service_start_date": str(payload.get("serviceStartDate") or ""),
                 "service_end_date": end_date,
                 "onboarding_expire_date": onboard_expire,
                 "invoice_status": str(payload.get("invoiceStatus") or ""),
+                "actions": actions,
             }
         )
 
     total = len(items)
     paged = items[(page - 1) * page_size : page * page_size]
+    label_parts: list[str] = []
     if window_end:
-        label = f"{within_months or ''}个月内" if within_months else f"{within_days}天内"
-        label = f"{label}到期/过期" + ("（含已过期）" if include_overdue else "")
+        span = f"{within_months}个月内" if within_months else f"{within_days}天内"
+        label_parts.append(f"{span}到期" + ("/过期（含已过期）" if include_overdue else ""))
+    elif keyword:
+        label_parts.append(keyword)
     else:
-        label = keyword or "全部"
+        label_parts.append("全部")
+    if service_type:
+        label_parts.append(f"{service_type}类型")
+    if exclude_renewed:
+        label_parts.append("排除已续费客户")
+    label = "、".join(label_parts)
     return {
         "block_type": "erp_record_list",
         "summary": f"找到 {total} 条与「{label}」相关的客户/项目到期信息。",
@@ -352,6 +417,8 @@ def _customer_expiry(*, params: dict[str, Any], user_data: dict) -> dict[str, An
             "page_size": page_size,
             "within_months": within_months or None,
             "within_days": within_days or None,
+            "service_type": service_type or None,
+            "exclude_renewed": exclude_renewed or None,
             "customers": [{"id": org.id, "name": org.name} for org in orgs[:10]],
         },
     }
@@ -1008,15 +1075,17 @@ def register() -> None:
     register_tool(
         ToolDefinition(
             name="erp.customer.expiry",
-            description="查询客户/服务项目到期时间",
+            description="查询服务项目到期：可按月/天窗口、周期/按次、排除已续费客户",
             input_schema={
                 "type": "object",
                 "properties": {
-                    "customer": {"type": "string"},
+                    "customer": {"type": "string", "description": "客户名称关键词；筛选说明不要填这里"},
                     "keyword": {"type": "string"},
                     "within_months": {"type": "integer"},
                     "within_days": {"type": "integer"},
-                    "include_overdue": {"type": "boolean"},
+                    "include_overdue": {"type": "boolean", "description": "仅用户明确要含已过期时为 true"},
+                    "service_type": {"type": "string", "description": "周期|按次"},
+                    "exclude_renewed": {"type": "boolean", "description": "排除已有续费项目的客户"},
                     "page": {"type": "integer"},
                     "page_size": {"type": "integer"},
                 },
