@@ -34,7 +34,40 @@ def _ext_from_name(name: str, url: str) -> str:
     return ""
 
 
-def _fetch_bytes(url: str) -> bytes:
+def _is_mall_file_url(url: str, site_id: Optional[str] = None) -> bool:
+    if site_id == "sd-ggzyjyzx":
+        return True
+    lower = (url or "").lower()
+    return "ggzyjyzx.shandong.gov.cn" in lower or "gpmall-file" in lower
+
+
+def _fetch_bytes_mall(url: str) -> bytes:
+    """商城 authfile PDF：普通 requests + SOCKS 即可。"""
+    import requests
+
+    headers = {
+        "Accept": "*/*",
+        "Referer": "https://ggzyjyzx.shandong.gov.cn:8182/",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+    }
+    kwargs: dict = {"headers": headers, "timeout": 60}
+    proxy = proxy_url()
+    if proxy:
+        kwargs["proxies"] = {"http": proxy, "https": proxy}
+    resp = requests.get(url, **kwargs)
+    if resp.status_code != 200:
+        raise RuntimeError(f"HTTP {resp.status_code}")
+    content = resp.content or b""
+    if len(content) < 16 or content[:1] in (b"<", b"{") or content[:5].lower().startswith(b"<!doc"):
+        raise RuntimeError(f"响应不是附件文件（{len(content)} bytes）")
+    return content
+
+
+def _fetch_bytes_jd(url: str) -> bytes:
     """京东 OSS 对普通 requests 返回 403，需用 curl_cffi 伪装浏览器。"""
     from curl_cffi import requests as cffi_requests
 
@@ -64,6 +97,12 @@ def _fetch_bytes(url: str) -> bytes:
     return content
 
 
+def _fetch_bytes(url: str, *, site_id: Optional[str] = None) -> bytes:
+    if _is_mall_file_url(url, site_id):
+        return _fetch_bytes_mall(url)
+    return _fetch_bytes_jd(url)
+
+
 def _sniff_ext(content: bytes, fallback: str) -> str:
     if content.startswith(b"%PDF"):
         return "pdf"
@@ -74,7 +113,7 @@ def _sniff_ext(content: bytes, fallback: str) -> str:
 
 def download_attachment(att: NoticeAttachment) -> None:
     url = ensure_https(att.file_url)
-    content = _fetch_bytes(url)
+    content = _fetch_bytes(url, site_id=att.site_id)
     sha = hashlib.sha256(content).hexdigest()
     ext = _sniff_ext(content, _ext_from_name(att.file_name or "", url))
     folder = settings.attachment_dir / att.site_id / str(att.notice_raw_id)
@@ -396,7 +435,11 @@ def parse_attachments(*, limit: int = 50, site_id: Optional[str] = None, use_llm
         )
         if site_id:
             stmt = stmt.where(NoticeAttachment.site_id == site_id)
-        stmt = stmt.order_by(NoticeAttachment.id.asc()).limit(limit)
+        # pending 优先，避免历史 parse_fail 占满 limit 导致积压不消化
+        stmt = stmt.order_by(
+            case((NoticeAttachment.parse_status == "pending", 0), else_=1),
+            NoticeAttachment.id.asc(),
+        ).limit(limit)
         rows = session.execute(stmt).scalars().all()
         for att in tqdm(rows, desc="parse-att"):
             try:
@@ -497,6 +540,64 @@ def sync_missing_jd_attachments(*, limit: int = 100, use_llm: bool = False) -> i
                 continue
             files = client.extract_attachments(raw.detail_json)
             if not files:
+                continue
+            done += ingest_attachments(session, raw, files, use_llm=use_llm)
+            session.commit()
+    finally:
+        session.close()
+    return done
+
+
+def sync_missing_mall_attachments(*, limit: int = 100, use_llm: bool = False) -> int:
+    """历史商城公告：有采购清单但未入库的，补拉 ExceptGD + 下载清单。"""
+    from sqlalchemy import text
+
+    from clients.sd_mall import SITE_ID as MALL_SITE
+    from clients.sd_mall import SdMallClient
+
+    session = get_session()
+    client = SdMallClient()
+    done = 0
+    try:
+        id_rows = session.execute(
+            text(
+                """
+                SELECT r.id
+                FROM notice_raw r
+                WHERE r.site_id = :site
+                  AND r.crawl_status = 'detail_ok'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM notice_attachment a WHERE a.notice_raw_id = r.id
+                  )
+                  AND (
+                    IFNULL(r.content_text, '') LIKE '%详见附件%'
+                    OR IFNULL(r.content_html, '') LIKE '%详见附件%'
+                    OR JSON_EXTRACT(r.detail_json, '$.orderGuid') IS NOT NULL
+                    OR r.notice_type IN ('1', '5')
+                  )
+                ORDER BY r.id DESC
+                LIMIT :limit
+                """
+            ),
+            {"site": MALL_SITE, "limit": limit},
+        ).fetchall()
+        for (raw_id,) in id_rows:
+            raw = session.get(NoticeRaw, raw_id)
+            if raw is None:
+                continue
+            detail = raw.detail_json if isinstance(raw.detail_json, dict) else {}
+            try:
+                detail = client.merge_except_gd(raw.notice_key, detail)
+            except Exception as exc:  # noqa: BLE001
+                tqdm.write(f"mall ExceptGD 失败 {raw.notice_key}: {exc}")
+                continue
+            if detail.get("orderGuid") and detail is not raw.detail_json:
+                raw.detail_json = detail
+                if detail.get("projectType") not in (None, ""):
+                    raw.auction_type = str(detail.get("projectType"))
+            files = client.extract_attachments(detail)
+            if not files:
+                session.commit()
                 continue
             done += ingest_attachments(session, raw, files, use_llm=use_llm)
             session.commit()

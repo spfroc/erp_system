@@ -41,18 +41,30 @@ PAGE_SIZE="${CRAWL_PAGE_SIZE:-20}"
 GPFA_PAGE_SIZE="${CRAWL_GPFA_PAGE_SIZE:-50}"
 GPFA_MAX_ITEMS="${CRAWL_GPFA_MAX_ITEMS:-500}"
 LOOKBACK_DAYS="${CRAWL_LOOKBACK_DAYS:-2}"
-ATT_LIMIT="${CRAWL_ATT_LIMIT:-100}"
+# 小批量消化附件积压，避免单轮 GGUF 解析占满 CPU 数小时
+ATT_LIMIT="${CRAWL_ATT_LIMIT:-20}"
+ATT_TIMEOUT="${CRAWL_ATT_TIMEOUT_SECONDS:-2700}"
 ATT_LOCK="${CRAWL_ATT_LOCK:-/app/data/jd-att.lock}"
 CCGP_TIMEOUT="${CRAWL_CCGP_TIMEOUT_SECONDS:-1200}"
 DATA_DIR="${CRAWL_DATA_DIR:-/app/data}"
 mkdir -p "$DATA_DIR"
 
 # 按本地墙钟选择站点抓取间隔：默认 0点(含)–6点(不含) 用夜间间隔，其余用白天间隔
+# 注意：镜像 /bin/sh 是 dash，不支持 bash 的 $((10#$x)) 进制写法。
+# 去前导零后再做数值比较，避免 08/09 八进制问题，也避免整点后调度直接崩掉。
+to_dec() {
+  case $1 in
+    ''|*[!0-9]*) printf '0' ;;
+    *)
+      v=$(printf '%s' "$1" | sed 's/^0*//')
+      printf '%s' "${v:-0}"
+      ;;
+  esac
+}
 crawl_interval_seconds() {
-  hour=$(date +%H)
-  hour=$((10#$hour))
-  start_h=$((10#$NIGHT_START_HOUR))
-  end_h=$((10#$NIGHT_END_HOUR))
+  hour=$(to_dec "$(date +%H)")
+  start_h=$(to_dec "$NIGHT_START_HOUR")
+  end_h=$(to_dec "$NIGHT_END_HOUR")
   if [ "$hour" -ge "$start_h" ] && [ "$hour" -lt "$end_h" ]; then
     echo "$NIGHT_INTERVAL"
   else
@@ -193,8 +205,7 @@ crawl_supplier_once() {
     || echo "crawl-supplier failed"
 }
 
-run_jd_att() {
-  echo "=== $(date -Is) att download+parse (limit=${ATT_LIMIT}) ==="
+run_jd_att_body() {
   python cli.py download-att --site jd-quan-yicai --limit "$ATT_LIMIT" \
     || echo "download-att quan failed"
   python cli.py download-att --site jd-qing-huicai --limit "$ATT_LIMIT" \
@@ -207,6 +218,31 @@ run_jd_att() {
     || echo "parse-att qhc failed"
   python cli.py parse-att --site sd-ggzyjyzx --limit "$ATT_LIMIT" \
     || echo "parse-att mall failed"
+}
+
+run_jd_att() {
+  echo "=== $(date -Is) att download+parse (limit=${ATT_LIMIT} timeout=${ATT_TIMEOUT}s) ==="
+  # timeout 无法直接杀 shell 函数；用子 shell 包一层，超时释放 flock
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$ATT_TIMEOUT" sh -c '
+      set -u
+      ATT_LIMIT="$1"
+      python cli.py download-att --site jd-quan-yicai --limit "$ATT_LIMIT" \
+        || echo "download-att quan failed"
+      python cli.py download-att --site jd-qing-huicai --limit "$ATT_LIMIT" \
+        || echo "download-att qhc failed"
+      python cli.py download-att --site sd-ggzyjyzx --limit "$ATT_LIMIT" \
+        || echo "download-att mall failed"
+      python cli.py parse-att --site jd-quan-yicai --limit "$ATT_LIMIT" \
+        || echo "parse-att quan failed"
+      python cli.py parse-att --site jd-qing-huicai --limit "$ATT_LIMIT" \
+        || echo "parse-att qhc failed"
+      python cli.py parse-att --site sd-ggzyjyzx --limit "$ATT_LIMIT" \
+        || echo "parse-att mall failed"
+    ' sh "$ATT_LIMIT" || echo "jd-att failed/timeout"
+  else
+    run_jd_att_body
+  fi
 }
 
 # ---- 独立调度循环 ----
@@ -260,7 +296,7 @@ supplier_loop() {
 }
 
 att_loop() {
-  echo "=== $(date -Is) jd-att loop start (interval=${ATT_INTERVAL}s) ==="
+  echo "=== $(date -Is) jd-att loop start (interval=${ATT_INTERVAL}s limit=${ATT_LIMIT} timeout=${ATT_TIMEOUT}s) ==="
   while true; do
     cycle_start=$(date +%s)
     with_flock "$ATT_LOCK" "jd-att" run_jd_att

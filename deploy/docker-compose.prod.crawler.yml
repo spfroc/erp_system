@@ -13,7 +13,8 @@ services:
     # 宿主机网络：才能访问内网 SOCKS（192.168.0.19），绕过公网对山东商城的封锁
     network_mode: host
     env_file:
-      - ../.env.prod
+      - path: ../.env.prod
+        format: raw
     environment:
       <<: *default-tz
       LOCAL_MODEL_PATH: /app/models/bge-small-zh-v1.5
@@ -21,6 +22,8 @@ services:
       CRAWL_NIGHT_INTERVAL_SECONDS: "10800"
       CRAWL_NIGHT_START_HOUR: "0"
       CRAWL_NIGHT_END_HOUR: "6"
+      CRAWL_ATT_LIMIT: "20"
+      CRAWL_ATT_TIMEOUT_SECONDS: "2700"
       NOTICE_HTTP_PROXY: socks5h://192.168.0.19:19081
       HTTPS_PROXY: socks5h://192.168.0.19:19081
       HTTP_PROXY: socks5h://192.168.0.19:19081
