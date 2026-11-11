@@ -12,13 +12,13 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import CustomerAccountRecord
+from .notice_inbox_models import PortalNoticeInbox
 from .notice_models import NoticeParsed, NoticeRaw
 from .notice_push_models import NoticePushLog
 from .notice_subscription import (
     notice_matches_subscription,
     normalize_subscription,
     subscription_has_filters,
-    subscription_summary,
 )
 from .notice_tag_models import NoticeResultTag
 from .portal import account_site_scope, normalize_portal_permissions, public_account
@@ -150,19 +150,51 @@ def _clip(value: str, limit: int) -> str:
     return text[: max(limit - 1, 1)] + "…"
 
 
-def _template_data(*, digest_date: date, subscription: dict[str, Any], hits: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
-    """对齐公众号模板「竞标结果通知」：thing1 / time2 / thing3 / character_string5。"""
-    summary = subscription_summary(subscription)
-    first = hits[0] if hits else {}
-    project = (first.get("title") or first.get("projectName") or summary or "公告订阅").strip()
-    initiator = (first.get("buyerName") or "订阅推送").strip() or "订阅推送"
-    code = str(first.get("id") or len(hits) or "0")
+def _template_data(
+    *,
+    digest_date: date,
+    hits: list[dict[str, Any]],
+    now: datetime | None = None,
+) -> dict[str, dict[str, str]]:
+    """汇总通知：有 N 条公告更新了 → 点击进消息列表。"""
+    del digest_date  # 保留参数兼容旧调用
+    count = max(len(hits), 0)
+    current = timezone.localtime(now or timezone.now(), SHANGHAI)
     return {
-        "thing1": {"value": _clip(project, 20)},
-        "time2": {"value": f"{digest_date.isoformat()} 00:00:00"},
-        "thing3": {"value": _clip(initiator, 20)},
-        "character_string5": {"value": _clip(code, 32)},
+        "thing1": {"value": _clip(f"有{count}条公告更新了", 20)},
+        "time2": {"value": current.strftime("%Y-%m-%d %H:%M:%S")},
+        "thing3": {"value": _clip("点击查看消息列表", 20)},
+        "character_string5": {"value": _clip(str(count or "0"), 32)},
     }
+
+
+def _upsert_inbox_messages(
+    *,
+    account_id: str,
+    digest_date: date,
+    hits: list[dict[str, Any]],
+    push_log_id: int | None = None,
+) -> list[int]:
+    notice_ids: list[int] = []
+    for item in hits:
+        notice_id = int(item.get("id") or 0)
+        if notice_id <= 0:
+            continue
+        notice_ids.append(notice_id)
+        PortalNoticeInbox.objects.update_or_create(
+            customer_account_id=account_id,
+            notice_raw_id=notice_id,
+            digest_date=digest_date,
+            defaults={
+                "push_log_id": push_log_id,
+                "title": str(item.get("title") or "")[:500],
+                "project_name": str(item.get("projectName") or "")[:255],
+                "buyer_name": str(item.get("buyerName") or "")[:255],
+                "region_name": str(item.get("regionName") or "")[:128],
+                "site_id": str(item.get("siteId") or "")[:64],
+            },
+        )
+    return notice_ids
 
 
 def build_notice_template_data(
@@ -270,7 +302,7 @@ def send_digest_for_account(
         empty_test = True
         hits = [{"id": 0, "title": "手动测试推送"}]
 
-    notice_ids = [int(item["id"]) for item in hits[:50] if int(item.get("id") or 0) > 0]
+    notice_ids = [int(item["id"]) for item in hits[:200] if int(item.get("id") or 0) > 0]
     filter_snapshot = normalize_subscription(subscription)
     if dry_run:
         return {
@@ -304,6 +336,13 @@ def send_digest_for_account(
                 log.errcode = 0
                 log.errmsg = ""
                 log.save(update_fields=["openid", "filter_snapshot", "notice_ids", "status", "errcode", "errmsg", "updated_at"])
+            if not empty_test:
+                _upsert_inbox_messages(
+                    account_id=record.id,
+                    digest_date=digest_date,
+                    hits=hits,
+                    push_log_id=log.id,
+                )
     except IntegrityError:
         return {"accountId": record.id, "status": "skipped", "reason": "race"}
 
@@ -313,8 +352,8 @@ def send_digest_for_account(
 
     result = wechat_mp.send_template_message(
         openid=wechat["openid"],
-        data=_template_data(digest_date=digest_date, subscription=subscription, hits=hits),
-        url=wechat_mp.portal_notice_url(),
+        data=_template_data(digest_date=digest_date, hits=hits),
+        url=wechat_mp.portal_messages_url(),
         client_msg_id=client_msg_id,
     )
     log = NoticePushLog.objects.filter(

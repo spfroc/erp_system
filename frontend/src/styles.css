@@ -4104,6 +4104,19 @@ nav button:hover {
   align-items: start;
 }
 
+.table-row.wechat-push-table {
+  grid-template-columns: minmax(180px, 1.4fr) 0.7fr 0.45fr 0.55fr 0.9fr 1.1fr;
+  align-items: start;
+}
+
+.wechat-push-main-cell em,
+.table-row.wechat-push-table em {
+  display: block;
+  color: #64748b;
+  font-style: normal;
+  font-size: 0.85em;
+}
+
 .mcp-log-main-cell em,
 .table-row.mcp-log-table em {
   display: block;

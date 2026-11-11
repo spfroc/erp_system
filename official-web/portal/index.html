@@ -511,6 +511,7 @@
 
     const MENUS = [
       ["home", "首页", "portal.stats.view"],
+      ["messages", "消息", "portal.notice.subscribe"],
       ["notices", "公告列表", "portal.notice.view"],
       ["stats", "数据统计", "portal.stats.view"],
       ["subscription", "订阅", "portal.notice.subscribe"],
@@ -530,6 +531,8 @@
       "portal.account.manage": "管理企业账号",
     };
     let enterpriseQuery = { orders: { page: 1, search: "" }, invoices: { page: 1, search: "" }, contracts: { page: 1, search: "" }, accounts: { page: 1, search: "" } };
+    let messageQuery = { page: 1, unread: false };
+    let messageRequest = 0;
 
     function readSavedTab() {
       const hash = (location.hash || "").replace(/^#/, "").trim();
@@ -656,6 +659,7 @@
       disposeCharts();
       const titles = {
         home: "首页",
+        messages: "消息",
         notices: "公告列表",
         stats: "数据统计",
         subscription: "订阅",
@@ -672,6 +676,7 @@
       try {
         if (id === "home") await renderHome(panel);
         else if (id === "stats") await renderStats(panel);
+        else if (id === "messages") await renderMessages(panel);
         else if (id === "notices") await renderNotices(panel);
         else if (id === "subscription") await renderSubscription(panel);
         else if (id === "orders") await renderOrders(panel);
@@ -1703,6 +1708,114 @@
       } catch (error) {
         window.alert(error.message || "加载详情失败");
       }
+    }
+
+    async function openMessageDetail(messageId) {
+      try {
+        const body = await api("/api/portal/messages/" + messageId + "/", { method: "POST", body: "{}" });
+        if (body.notice) {
+          showNoticeDetail(body.notice);
+          return;
+        }
+        window.alert(body.noticeError || "暂无法打开公告详情");
+      } catch (error) {
+        window.alert(error.message || "加载消息失败");
+      }
+    }
+
+    async function renderMessages(panel) {
+      const requestId = ++messageRequest;
+      const params = new URLSearchParams({
+        page: String(messageQuery.page),
+        page_size: "20",
+      });
+      if (messageQuery.unread) params.set("unread", "1");
+      if (!panel.querySelector(".list-card")) {
+        panel.innerHTML = '<p class="panel-loading">正在加载消息…</p>';
+      }
+      const body = await api("/api/portal/messages/?" + params.toString());
+      if (requestId !== messageRequest) return;
+
+      let toolbar = panel.querySelector(".toolbar");
+      let list = panel.querySelector(".list-card");
+      let pager = panel.querySelector(".pager");
+      if (!toolbar || !list || !pager) {
+        panel.innerHTML = "";
+        toolbar = document.createElement("div");
+        toolbar.className = "toolbar";
+        toolbar.innerHTML =
+          '<p class="muted" style="margin:0;flex:1">订阅命中的公告会汇总到这里。微信通知点击后进入本页。</p>' +
+          '<label class="check-row" style="margin:0"><input name="unread" type="checkbox" /> 仅未读</label>' +
+          '<button class="ghost" type="button" data-role="refresh">刷新</button>';
+        list = document.createElement("div");
+        list.className = "list-card";
+        pager = document.createElement("div");
+        pager.className = "pager";
+        panel.appendChild(toolbar);
+        panel.appendChild(list);
+        panel.appendChild(pager);
+        toolbar.querySelector("[name=unread]").onchange = (event) => {
+          messageQuery.unread = Boolean(event.target.checked);
+          messageQuery.page = 1;
+          renderMessages(panel);
+        };
+        toolbar.querySelector("[data-role=refresh]").onclick = () => renderMessages(panel);
+      }
+      toolbar.querySelector("[name=unread]").checked = Boolean(messageQuery.unread);
+      const unreadHint = toolbar.querySelector(".muted");
+      if (unreadHint) {
+        unreadHint.textContent =
+          "共 " + (body.total || 0) + " 条消息，未读 " + (body.unreadTotal || 0) + " 条。微信通知点击后进入本页。";
+      }
+
+      list.innerHTML = "";
+      if (!body.items || !body.items.length) {
+        list.innerHTML = '<p class="empty">暂无订阅消息。</p>';
+      } else {
+        body.items.forEach((item) => {
+          const article = document.createElement("article");
+          article.className = "notice";
+          if (!item.isRead) article.style.borderColor = "#f0c36a";
+          article.innerHTML =
+            '<div class="notice-main"><h3></h3><p></p></div>' +
+            '<div class="notice-actions">' +
+            '<button class="copy-link" type="button" data-role="detail">查看公告</button>' +
+            "</div>" +
+            '<span class="kind"></span>';
+          article.querySelector("h3").textContent = item.title || "未命名公告";
+          article.querySelector("p").textContent = [
+            item.isRead ? "已读" : "未读",
+            item.siteLabel,
+            item.buyerName,
+            item.regionName,
+            item.digestDate,
+            formatDateTimeShanghai(item.createdAt),
+          ]
+            .filter((part) => part && part !== "—")
+            .join(" · ");
+          const badge = article.querySelector(".kind");
+          badge.textContent = item.isRead ? "已读" : "未读";
+          if (!item.isRead) badge.classList.add("teal");
+          const open = () => void openMessageDetail(item.id).then(() => renderMessages(panel));
+          article.querySelector(".notice-main").onclick = open;
+          article.querySelector("[data-role=detail]").onclick = open;
+          list.appendChild(article);
+        });
+      }
+
+      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 20)));
+      pager.innerHTML =
+        "<span></span><div><button class='ghost' type='button' data-dir='-1'>上一页</button><button class='ghost' type='button' data-dir='1'>下一页</button></div>";
+      pager.querySelector("span").textContent =
+        "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页";
+      pager.querySelectorAll("button").forEach((button) => {
+        button.onclick = () => {
+          const next = messageQuery.page + Number(button.dataset.dir);
+          if (next < 1 || next > totalPages) return;
+          messageQuery.page = next;
+          renderMessages(panel);
+        };
+      });
     }
 
     function fillNoticeList(list, body) {

@@ -14,6 +14,7 @@ DEFAULT_NAV_GROUPS = [
     {"id": "nav-group-finance", "key": "finance", "label": "财务管理", "categoryKey": "business", "iconKey": "WalletCards", "sortOrder": 40, "enabled": True},
     {"id": "nav-group-official", "key": "official", "label": "前端网站配置", "categoryKey": "web", "iconKey": "Globe", "sortOrder": 10, "enabled": True},
     {"id": "nav-group-notices", "key": "notices", "label": "公告管理", "categoryKey": "web", "iconKey": "Bell", "sortOrder": 20, "enabled": True},
+    {"id": "nav-group-wechatMp", "key": "wechatMp", "label": "微信公众号", "categoryKey": "web", "iconKey": "MessageCircle", "sortOrder": 30, "enabled": True},
     {"id": "nav-group-logs", "key": "logs", "label": "日志管理", "categoryKey": "system", "iconKey": "History", "sortOrder": 10, "enabled": True},
     {"id": "nav-group-system", "key": "system", "label": "系统设置", "categoryKey": "system", "iconKey": "Users", "sortOrder": 20, "enabled": True},
 ]
@@ -52,6 +53,7 @@ DEFAULT_NAV_ITEMS = [
     {"id": "nav-item-noticeCategoryMap", "viewId": "noticeCategoryMap", "label": "分类映射", "categoryKey": "system", "groupKey": "system", "permission": "notice.categoryMap.view", "iconKey": "LayoutList", "sortOrder": 23, "enabled": True},
     {"id": "nav-item-officialSites", "viewId": "officialSites", "label": "官网站点", "categoryKey": "web", "groupKey": "official", "permission": "site.view", "iconKey": "Globe", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-officialSeo", "viewId": "officialSeo", "label": "SEO配置", "categoryKey": "web", "groupKey": "official", "permission": "site.view", "iconKey": "Search", "sortOrder": 20, "enabled": True},
+    {"id": "nav-item-wechatPushLogs", "viewId": "wechatPushLogs", "label": "消息推送记录", "categoryKey": "web", "groupKey": "wechatMp", "permission": "wechatMp.view", "iconKey": "MessageCircle", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-sms", "viewId": "sms", "label": "短信日志", "categoryKey": "system", "groupKey": "logs", "permission": "sms.view", "iconKey": "MessageCircle", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-logs", "viewId": "logs", "label": "系统操作日志", "categoryKey": "system", "groupKey": "logs", "permission": "user.manage", "iconKey": "History", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-mcpLogs", "viewId": "mcpLogs", "label": "MCP调用日志", "categoryKey": "system", "groupKey": "logs", "permission": "mcpLog.view", "iconKey": "MessageCircle", "sortOrder": 30, "enabled": True},

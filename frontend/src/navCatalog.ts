@@ -61,6 +61,7 @@ export type CatalogViewId =
   | "trademarkCertificates"
   | "logs"
   | "mcpLogs"
+  | "wechatPushLogs"
   | "collectionAccounts"
   | "optionSettings"
   | "devOps"
@@ -143,6 +144,7 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "sms", label: "短信日志", iconKey: "MessageCircle", permission: "sms.view" },
   { viewId: "logs", label: "系统操作日志", iconKey: "History", permission: "user.manage" },
   { viewId: "mcpLogs", label: "MCP调用日志", iconKey: "MessageCircle", permission: "mcpLog.view" },
+  { viewId: "wechatPushLogs", label: "消息推送记录", iconKey: "MessageCircle", permission: "wechatMp.view" },
   { viewId: "collectionAccounts", label: "收款账号管理", iconKey: "Banknote", permission: "user.manage" },
   { viewId: "optionSettings", label: "选项管理", iconKey: "BadgeCheck", permission: "user.manage" },
   { viewId: "devOps", label: "定时任务", iconKey: "Timer", permission: "dev.ops.view" },
@@ -169,6 +171,7 @@ export const DEFAULT_NAV_GROUPS: NavGroup[] = [
   { id: "nav-group-finance", key: "finance", label: "财务管理", categoryKey: "business", iconKey: "WalletCards", sortOrder: 40, enabled: true },
   { id: "nav-group-official", key: "official", label: "前端网站配置", categoryKey: "web", iconKey: "Globe", sortOrder: 10, enabled: true },
   { id: "nav-group-notices", key: "notices", label: "公告管理", categoryKey: "web", iconKey: "Bell", sortOrder: 20, enabled: true },
+  { id: "nav-group-wechatMp", key: "wechatMp", label: "微信公众号", categoryKey: "web", iconKey: "MessageCircle", sortOrder: 30, enabled: true },
   { id: "nav-group-logs", key: "logs", label: "日志管理", categoryKey: "system", iconKey: "History", sortOrder: 10, enabled: true },
   { id: "nav-group-system", key: "system", label: "系统设置", categoryKey: "system", iconKey: "Users", sortOrder: 20, enabled: true },
 ];
@@ -232,6 +235,7 @@ export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-noticeCategoryMap", "noticeCategoryMap", "system", "system", 23),
   item("nav-item-officialSites", "officialSites", "web", "official", 10),
   item("nav-item-officialSeo", "officialSeo", "web", "official", 20),
+  item("nav-item-wechatPushLogs", "wechatPushLogs", "web", "wechatMp", 10),
   item("nav-item-sms", "sms", "system", "logs", 10),
   item("nav-item-logs", "logs", "system", "logs", 20),
   item("nav-item-mcpLogs", "mcpLogs", "system", "logs", 30),

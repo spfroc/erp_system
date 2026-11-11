@@ -63,6 +63,8 @@ const PERMISSION_OPTIONS: Array<{ id: PermissionKey; label: string }> = [
   { id: "sms.view", label: "查看短信日志" },
   { id: "sms.manage", label: "管理短信" },
   { id: "mcpLog.view", label: "查看MCP调用日志" },
+  { id: "wechatMp.view", label: "查看微信公众号" },
+  { id: "wechatMp.manage", label: "管理微信公众号" },
   { id: "customerAccount.view", label: "查看登录账号" },
   { id: "customerAccount.manage", label: "管理登录账号" },
   { id: "menu.view", label: "查看菜单配置" },

@@ -170,6 +170,8 @@ export const seedData: AppData = {
         "assistant.view",
         "assistant.use",
         "assistant.manage",
+        "wechatMp.view",
+        "wechatMp.manage",
         "user.manage",
       ],
     },
@@ -177,7 +179,7 @@ export const seedData: AppData = {
       id: "role-sales",
       name: "业务负责人",
       description: "维护客户、项目、报价、合同和收款跟进。",
-      permissions: ["dashboard.view", "project.view", "project.create", "project.edit", "entity.view", "entity.create", "product.view", "lead.manage", "library.view", "library.manage", "mallCustomer.view", "mallCustomer.manage", "sms.view", "sms.manage", "notice.view", "notice.manage", "notice.stats.view", "notice.tag.view", "notice.tag.manage", "notice.orgType.view", "notice.orgType.manage", "notice.nature.view", "notice.nature.manage", "notice.site.view", "notice.site.manage", "notice.categoryMap.view", "notice.categoryMap.manage", "trademarkCertificate.view", "trademarkCertificate.manage", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
+      permissions: ["dashboard.view", "project.view", "project.create", "project.edit", "entity.view", "entity.create", "product.view", "lead.manage", "library.view", "library.manage", "mallCustomer.view", "mallCustomer.manage", "sms.view", "sms.manage", "notice.view", "notice.manage", "notice.stats.view", "notice.tag.view", "notice.tag.manage", "notice.orgType.view", "notice.orgType.manage", "notice.nature.view", "notice.nature.manage", "notice.site.view", "notice.site.manage", "notice.categoryMap.view", "notice.categoryMap.manage", "wechatMp.view", "trademarkCertificate.view", "trademarkCertificate.manage", "serviceOrder.view", "serviceOrder.manage", "salesOrder.view", "salesOrder.manage", "purchaseOrder.view"],
     },
     {
       id: "role-purchase",

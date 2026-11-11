@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import CustomerAccountRecord
+from .notice_inbox_models import PortalNoticeInbox
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
 from .notice_subscription import normalize_subscription, subscription_has_filters
 from .notice_tagging import DEAL_KINDS, normalize_stats_period, period_bounds, safe_stats
@@ -804,6 +805,93 @@ def portal_notice_detail(request, notice_id: int):
         return JsonResponse(_serialize_detail(raw, parsed, goods))
     except (ProgrammingError, OperationalError):
         return JsonResponse({"detail": "公告表尚未创建"}, status=503)
+
+
+def _serialize_inbox_item(row: PortalNoticeInbox) -> dict:
+    return {
+        "id": row.id,
+        "noticeId": row.notice_raw_id,
+        "digestDate": row.digest_date.isoformat() if row.digest_date else "",
+        "title": row.title or "",
+        "projectName": row.project_name or "",
+        "buyerName": row.buyer_name or "",
+        "regionName": row.region_name or "",
+        "siteId": row.site_id or "",
+        "siteLabel": SITE_LABELS.get(row.site_id or "", row.site_id or ""),
+        "isRead": bool(row.is_read),
+        "readAt": row.read_at.isoformat() if row.read_at else "",
+        "createdAt": row.created_at.isoformat() if row.created_at else "",
+    }
+
+
+@require_http_methods(["GET"])
+def portal_messages(request):
+    """订阅命中公告消息列表（微信推送跳转落地页）。"""
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    page = max(int(request.GET.get("page") or 1), 1)
+    page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 100)
+    unread_only = str(request.GET.get("unread") or "").strip().lower() in {"1", "true", "yes"}
+    qs = PortalNoticeInbox.objects.filter(customer_account_id=record.id).order_by("-created_at", "-id")
+    if unread_only:
+        qs = qs.filter(is_read=False)
+    total = qs.count()
+    unread_total = PortalNoticeInbox.objects.filter(customer_account_id=record.id, is_read=False).count()
+    rows = list(qs[(page - 1) * page_size : page * page_size])
+    return JsonResponse(
+        {
+            "items": [_serialize_inbox_item(row) for row in rows],
+            "total": total,
+            "unreadTotal": unread_total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST", "GET"])
+def portal_message_detail(request, message_id: int):
+    """查看消息：标记已读并返回关联公告详情。"""
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    row = PortalNoticeInbox.objects.filter(id=message_id, customer_account_id=record.id).first()
+    if not row:
+        return JsonResponse({"detail": "消息不存在"}, status=404)
+    if not row.is_read:
+        row.is_read = True
+        row.read_at = timezone.now()
+        row.save(update_fields=["is_read", "read_at", "updated_at"])
+
+    account = public_account(record)
+    notice_error = None
+    detail = None
+    if "portal.notice.view" in set(account.get("permissions") or []):
+        scope = account_site_scope(account)
+        try:
+            raw = NoticeRaw.objects.filter(id=row.notice_raw_id).first()
+            if not raw:
+                notice_error = "公告不存在"
+            elif scope is not None and raw.site_id not in scope:
+                notice_error = "无权查看该公告"
+            else:
+                parsed = NoticeParsed.objects.filter(notice_raw_id=raw.id).first()
+                goods = list(NoticeGoods.objects.filter(notice_raw_id=raw.id).order_by("line_no", "id"))
+                detail = _serialize_detail(raw, parsed, goods)
+        except (ProgrammingError, OperationalError):
+            notice_error = "公告表尚未创建"
+    else:
+        notice_error = "无公告查看权限"
+
+    return JsonResponse(
+        {
+            "message": _serialize_inbox_item(row),
+            "notice": detail,
+            "noticeError": notice_error,
+        }
+    )
 
 
 @csrf_exempt

@@ -52,6 +52,8 @@ class Command(BaseCommand):
                         "dev.ops.view", "dev.ops.manage",
                         "assistant.view", "assistant.use", "assistant.manage",
                         "mcpLog.view",
+                        "wechatMp.view",
+                        "wechatMp.manage",
                         "user.manage",
                     ],
                 },

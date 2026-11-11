@@ -61,6 +61,8 @@ from .portal import (
     portal_notice_detail,
     portal_notices,
     portal_stats,
+    portal_message_detail,
+    portal_messages,
     portal_subscription,
     portal_subscription_options,
     portal_wechat_bind_url,
@@ -81,7 +83,7 @@ from .portal_enterprise import (
     portal_order_detail,
     portal_orders,
 )
-from .notice_push_views import customer_account_manual_notice_push
+from .notice_push_views import customer_account_manual_notice_push, wechat_push_logs
 
 
 urlpatterns = [
@@ -90,6 +92,8 @@ urlpatterns = [
     path("portal/me/", portal_me, name="portal-me"),
     path("portal/notices/", portal_notices, name="portal-notices"),
     path("portal/notices/<int:notice_id>/", portal_notice_detail, name="portal-notice-detail"),
+    path("portal/messages/", portal_messages, name="portal-messages"),
+    path("portal/messages/<int:message_id>/", portal_message_detail, name="portal-message-detail"),
     path("portal/stats/", portal_stats, name="portal-stats"),
     path("portal/subscription/", portal_subscription, name="portal-subscription"),
     path("portal/subscription/options/", portal_subscription_options, name="portal-subscription-options"),
@@ -131,6 +135,7 @@ urlpatterns = [
         customer_account_manual_notice_push,
         name="customer-account-manual-notice-push",
     ),
+    path("wechat/mp/push-logs/", wechat_push_logs, name="wechat-mp-push-logs"),
     path("website-leads/", website_leads, name="website-leads"),
     path("website-leads", website_leads, name="website-leads-no-slash"),
     path("public/official-site/", public_official_site, name="public-official-site"),

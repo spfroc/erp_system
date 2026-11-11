@@ -45,15 +45,32 @@ def oauth_redirect_uri() -> str:
     return str(getattr(settings, "WECHAT_MP_OAUTH_REDIRECT_URI", "") or "").strip()
 
 
-def portal_notice_url() -> str:
+def portal_base_url() -> str:
     configured = str(getattr(settings, "WECHAT_MP_PORTAL_NOTICE_URL", "") or "").strip()
     if configured:
-        return configured
+        # 兼容旧配置写到了具体 hash；归一到门户根
+        base = configured.split("#", 1)[0].rstrip("/")
+        if base.endswith("/portal"):
+            return base + "/"
+        if "/portal/" in base:
+            return base[: base.index("/portal/") + len("/portal/")]
+        return base + ("/" if not base.endswith("/") else "")
     redirect = oauth_redirect_uri()
     if redirect:
-        # 默认回到门户根；前端订阅页自行跳转
         return redirect.rsplit("/api/", 1)[0].rstrip("/") + "/"
     return ""
+
+
+def portal_notice_url() -> str:
+    """兼容旧调用：默认跳门户消息列表。"""
+    return portal_messages_url()
+
+
+def portal_messages_url() -> str:
+    base = portal_base_url()
+    if not base:
+        return ""
+    return f"{base.rstrip('/')}/#messages"
 
 
 def _http_json(url: str, *, data: dict | None = None, method: str = "GET") -> dict:

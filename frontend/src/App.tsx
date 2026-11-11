@@ -74,6 +74,7 @@ const OfficialSeoPanel = lazy(() => import("./OfficialSeo").then((m) => ({ defau
 const OfficialSitesPanel = lazy(() => import("./OfficialSites").then((m) => ({ default: m.OfficialSitesPanel })));
 const SmsPanel = lazy(() => import("./SmsPanel").then((m) => ({ default: m.SmsPanel })));
 const McpCallLogs = lazy(() => import("./McpCallLogs").then((m) => ({ default: m.McpCallLogs })));
+const WechatPushLogs = lazy(() => import("./WechatPushLogs").then((m) => ({ default: m.WechatPushLogs })));
 const ProfileCenter = lazy(() => import("./ProfileCenter").then((m) => ({ default: m.ProfileCenter })));
 import { DateTimeField } from "./DateTimeField";
 import { CopyableLine, Pagination, PanelTitle, SearchField, writeClipboardText } from "./listUi";
@@ -475,11 +476,13 @@ const permissionLabels: Record<PermissionKey, string> = {
   "assistant.use": "使用智能助手",
   "assistant.manage": "管理智能助手",
   "mcpLog.view": "查看MCP调用日志",
+  "wechatMp.view": "查看微信公众号",
+  "wechatMp.manage": "管理微信公众号",
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "notice.site.view", "notice.categoryMap.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "notice.site.manage", "notice.categoryMap.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "notice.site.view", "notice.categoryMap.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "wechatMp.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "notice.site.manage", "notice.categoryMap.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "wechatMp.manage", "assistant.use"] },
   { title: "客户门户", keys: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe", "portal.order.view", "portal.invoice.view", "portal.contract.view", "portal.account.view", "portal.account.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "assistant.manage", "user.manage"] },
@@ -536,6 +539,9 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
   }
   if (permission === "notice.categoryMap.manage") {
     return permissionSet.has("notice.manage");
+  }
+  if (permission === "wechatMp.view") {
+    return permissionSet.has("wechatMp.manage");
   }
   if (permission === "dev.ops.view") {
     return permissionSet.has("dev.ops.manage");
@@ -4022,6 +4028,7 @@ export default function App() {
           {view === "trademarkCertificates" && <TrademarkCertificates data={data} applyData={(next) => setData(next)} onNotice={setNotice} can={can} operatorName={currentUser.name} />}
           {view === "logs" && <OperationLogs data={data} commit={commit} can={can} />}
           {view === "mcpLogs" && <McpCallLogs onNotice={setNotice} />}
+          {view === "wechatPushLogs" && <WechatPushLogs onNotice={setNotice} />}
           {view === "collectionAccounts" && <OptionSettings data={data} commit={commit} mode="accounts" />}
           {view === "optionSettings" && <OptionSettings data={data} commit={commit} mode="options" />}
           {view === "devOps" && <DevOps onNotice={setNotice} canManage={can("dev.ops.manage")} />}

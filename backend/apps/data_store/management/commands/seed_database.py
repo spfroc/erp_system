@@ -113,6 +113,8 @@ ALL_PERMISSIONS = [
     "assistant.use",
     "assistant.manage",
     "mcpLog.view",
+    "wechatMp.view",
+    "wechatMp.manage",
     "user.manage",
 ]
 

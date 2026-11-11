@@ -852,6 +852,8 @@ export type PermissionKey =
   | "portal.contract.view"
   | "portal.account.view"
   | "portal.account.manage"
+  | "wechatMp.view"
+  | "wechatMp.manage"
   | "menu.view"
   | "menu.manage"
   | "lead.manage"
