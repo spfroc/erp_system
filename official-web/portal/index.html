@@ -495,11 +495,21 @@
       .notice h3 { font-size: 15px; -webkit-line-clamp: 3; }
       .notice p { -webkit-line-clamp: 3; }
       .message-toolbar {
-        flex-direction: column; align-items: stretch; gap: 12px; padding: 14px;
+        flex-direction: row; flex-wrap: wrap; align-items: center;
+        gap: 6px 8px; padding: 8px 10px; margin-bottom: 8px; border-radius: 12px;
+        box-shadow: none;
       }
-      .message-toolbar .message-tools { margin-left: 0; width: 100%; }
+      .message-toolbar .message-summary {
+        flex: 1 1 auto; font-size: 12px; line-height: 1.35;
+      }
+      .message-toolbar .message-summary .message-hint { display: none; }
+      .message-toolbar .message-tools {
+        margin-left: 0; width: auto; flex: none; gap: 6px;
+      }
       .message-toolbar .message-tools .ghost,
-      .message-toolbar .check-row { flex: 1; justify-content: center; }
+      .message-toolbar .check-row {
+        flex: none; min-height: 32px; height: 32px; padding: 0 10px; font-size: 13px;
+      }
       .message-item {
         grid-template-columns: 8px 1fr; gap: 8px 12px; padding: 14px;
       }
@@ -1961,7 +1971,7 @@
       const summary = toolbar.querySelector(".message-summary");
       if (summary) {
         summary.innerHTML =
-          "共 <strong></strong> 条消息，未读 <em></em> 条<br /><span style='font-size:12px;opacity:.9'>点开卡片可查看公告详情</span>";
+          "共 <strong></strong> 条，未读 <em></em> 条<span class='message-hint'> · 点卡片查看详情</span>";
         summary.querySelector("strong").textContent = String(body.total || 0);
         summary.querySelector("em").textContent = String(body.unreadTotal || 0);
       }
