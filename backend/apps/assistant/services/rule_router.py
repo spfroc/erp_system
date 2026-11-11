@@ -352,6 +352,43 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "reason": "customer_sales_orders",
         }
 
+    # 客户基础信息（优先于笼统「客户」订单查询）
+    if _has_any(text, ("客户基础信息", "客户资料", "企业资料", "单位资料")) or (
+        _has_any(text, ("添加客户", "新增客户", "录入客户", "创建客户"))
+        and _has_any(text, ("信用代码", "统一社会信用", "税号", "法人", "客户名称", "公司名称"))
+    ):
+        if _has_any(text, ("添加", "新增", "录入", "创建", "更新", "修改")):
+            return {
+                "intent": "erp.customer.create",
+                "tool_name": "erp.customer.create",
+                "params": {"text": text},
+                "confidence": 0.84,
+                "needs_clarification": False,
+                "reason": "customer_create",
+            }
+        keyword = _extract_keyword(
+            text,
+            (
+                "查询",
+                "查找",
+                "搜索",
+                "客户基础信息",
+                "客户资料",
+                "企业资料",
+                "单位资料",
+                "客户",
+                "的",
+            ),
+        )
+        return {
+            "intent": "erp.customer.search",
+            "tool_name": "erp.customer.search",
+            "params": {"keyword": (keyword or text).strip(" ，,。；;：:")},
+            "confidence": 0.78,
+            "needs_clarification": False,
+            "reason": "customer_search",
+        }
+
     # 平台账号
     if _has_any(text, ("平台账号", "入驻账号", "店铺账号")):
         if _has_any(text, ("添加", "新增", "录入", "创建")):

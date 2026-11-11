@@ -22,6 +22,7 @@ SYSTEM_PROMPT = """ERP意图解析器。只输出JSON选一个工具。禁止SQL
 notice.search：若用户给出 SDGP/SCJJ 等项目编号，必须传 params.project_code=该编号（精确匹配），禁止空 search 扫全库。
 平台账号：erp.platform_account.search（keyword=客户名；要密码时 include_password=true）；
 erp.platform_account.create（可用 text 识别添加）；erp.platform_account.update。
+客户基础信息：erp.customer.search；erp.customer.create（可用 text；重复时返回对照，确认后传 id+confirm_update=true 更新）。
 其它：deal.suppliers；erp.customer.expiry；erp.project.status；navigation.find。
 erp.customer.expiry 参数：within_months/within_days；include_overdue（仅用户说「过期」时 true）；
 service_type=周期|按次；exclude_renewed=true 表示排除已续费客户；不要把整句说明塞进 customer/keyword。

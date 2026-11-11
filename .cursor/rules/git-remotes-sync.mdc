@@ -1,0 +1,11 @@
+---
+description: GitHub 与 Codeup 双远端同步约定
+alwaysApply: true
+---
+
+# GitHub / Codeup 同步
+
+- **推送**：每次提交后同时推送到 `origin`（GitHub）与 `codeup`（阿里云 Codeup）。
+- **更新来源**：以 **Codeup** 为上游拉取/合并更新（`git fetch codeup`，从 `codeup/main` 合入）；合入完成后再同步推回 GitHub。
+- 若历史分叉导致 Codeup `main` 无法 fast-forward，在确认 GitHub/本地已包含 Codeup 独有功能后，可用 `--force-with-lease` 对齐 Codeup；不要对未确认的 tip 强推。
+- 官网静态资源等大文件冲突时，优先拣选业务提交，勿盲目整仓 merge。

@@ -37,6 +37,8 @@ MCP_READ_PERMISSIONS = (
     "project.view",
     "platformAccount.view",
     "platformAccount.manage",
+    "entity.view",
+    "entity.create",
 )
 
 

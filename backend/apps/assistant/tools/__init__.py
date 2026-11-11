@@ -11,6 +11,7 @@ def register_all_tools() -> None:
         return
     from . import (  # noqa: F401,WPS433
         buyer_tools,
+        customer_tools,
         devops_tools,
         erp_tools,
         navigation_tools,
@@ -20,6 +21,7 @@ def register_all_tools() -> None:
 
     notice_tools.register()
     buyer_tools.register()
+    customer_tools.register()
     erp_tools.register()
     platform_account_tools.register()
     navigation_tools.register()

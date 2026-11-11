@@ -21,6 +21,8 @@ class McpServerTests(SimpleTestCase):
         self.assertIn("erp.platform_account.search", names)
         self.assertIn("erp.platform_account.create", names)
         self.assertIn("erp.platform_account.update", names)
+        self.assertIn("erp.customer.search", names)
+        self.assertIn("erp.customer.create", names)
         self.assertNotIn("erp.invoice.delete", names)
         self.assertNotIn("devops.run_safe_job", names)
         self.assertNotIn("navigation.find", names)
