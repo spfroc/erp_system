@@ -2,7 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light only" />
+  <meta name="theme-color" content="#f3eee4" />
   <title>壹采科技数据服务平台</title>
   <style>
     :root {
@@ -20,11 +22,18 @@
       --control-font: 14px;
       --control-pad-x: 12px;
       --danger: #a33b2b;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-top: env(safe-area-inset-top, 0px);
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
-    html, body { height: 100%; margin: 0; overflow: hidden; }
-    body { color: var(--ink); background: #e9efe9; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    html, body { height: 100%; margin: 0; overflow: hidden; color-scheme: light only; }
+    body {
+      color: var(--ink); background: #e9efe9;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
     button, input, select, textarea { font: inherit; font-size: var(--control-font); }
     button { cursor: pointer; }
 
@@ -248,16 +257,89 @@
     .toolbar label { margin: 0; min-width: 160px; flex: 1; }
     .toolbar .primary, .toolbar .ghost { width: auto; margin: 0; flex: none; }
     .toolbar input[type="date"] { width: auto; min-width: 146px; }
-    .list-card { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 4px 16px; }
-    .notice { flex: 1 1 0; min-height: 0; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0e6d6; }
-    .notice:last-child { border-bottom: 0; }
+    .list-card {
+      flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px;
+      padding: 2px 2px 10px; -webkit-overflow-scrolling: touch;
+    }
+    .notice {
+      flex: none; display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px 16px; background: var(--card);
+      border: 1px solid rgba(234, 223, 206, .95); border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(62, 42, 16, .04);
+    }
+    .notice.is-unread { border-color: rgba(215, 164, 65, .55); box-shadow: 0 6px 18px rgba(141, 100, 18, .08); }
     .notice-main { min-width: 0; flex: 1; cursor: pointer; }
     .notice-main:hover h3 { color: var(--green); }
-    .notice h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .notice p { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .notice-actions { flex: none; display: flex; gap: 6px; }
-    .notice-actions .copy-link { background: transparent; border: 0; color: var(--green); padding: 4px 6px; font-size: 13px; }
+    .notice h3 {
+      margin: 0 0 8px; font-size: 15px; font-weight: 700; line-height: 1.45;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; word-break: break-word;
+    }
+    .notice p {
+      margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .notice-actions { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .notice-actions .copy-link {
+      background: transparent; border: 0; color: var(--green); padding: 6px 8px; font-size: 13px; min-height: 32px;
+    }
     .notice-actions .copy-link:hover { color: var(--green-dark); text-decoration: underline; }
+
+    /* 消息列表：更疏朗的卡片 + 状态条 */
+    #panel.message-panel { gap: 0; }
+    .message-toolbar {
+      flex: none; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      margin-bottom: 12px; padding: 14px 16px;
+      background: rgba(255,253,248,.88); border: 1px solid rgba(234,223,206,.95);
+      border-radius: 16px; box-shadow: 0 6px 18px rgba(62, 42, 16, .04);
+    }
+    .message-toolbar .message-summary { flex: 1 1 180px; min-width: 0; margin: 0; }
+    .message-toolbar .message-summary strong { color: var(--ink); font-weight: 700; }
+    .message-toolbar .message-summary em { color: #b24b2c; font-style: normal; font-weight: 700; }
+    .message-toolbar .message-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+    .message-toolbar .check-row {
+      padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px;
+      background: #fff; min-height: 36px;
+    }
+    .message-list { gap: 12px; padding: 2px 0 12px; }
+    .message-item {
+      position: relative; display: grid; grid-template-columns: 10px 1fr auto; gap: 12px 14px;
+      align-items: start; padding: 16px 16px 16px 14px; cursor: pointer;
+      background: var(--card); border: 1px solid rgba(234, 223, 206, .95);
+      border-radius: 16px; box-shadow: 0 6px 18px rgba(62, 42, 16, .05);
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .message-item:active { transform: scale(.992); }
+    .message-item.is-unread {
+      border-color: rgba(215, 164, 65, .5);
+      background: linear-gradient(180deg, #fffdf6 0%, #fffdf8 100%);
+      box-shadow: 0 8px 22px rgba(141, 100, 18, .08);
+    }
+    .message-item .message-dot {
+      width: 8px; height: 8px; margin-top: 7px; border-radius: 50%;
+      background: transparent;
+    }
+    .message-item.is-unread .message-dot { background: #d7a441; box-shadow: 0 0 0 4px rgba(215,164,65,.18); }
+    .message-item .message-body { min-width: 0; }
+    .message-item h3 {
+      margin: 0 0 10px; font-size: 16px; font-weight: 700; line-height: 1.45; color: var(--ink);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; word-break: break-word;
+    }
+    .message-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .message-meta span {
+      display: inline-flex; align-items: center; max-width: 100%;
+      padding: 4px 10px; border-radius: 999px; background: #f6f0e6; color: var(--muted);
+      font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .message-meta span.status-unread { background: #fbf3df; color: #8a6414; font-weight: 650; }
+    .message-meta span.status-read { background: #eef3ef; color: #5f6d63; }
+    .message-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .message-side .ghost {
+      height: 34px; min-height: 34px; padding: 0 12px; border-radius: 999px;
+      background: #f3faf6; border-color: rgba(31,138,86,.28); color: #0f6b40;
+    }
+    .message-side .ghost:hover { background: #e7f6ee; border-color: #1f8a56; color: #0f6b40; }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(36, 28, 20, .42); display: grid; place-items: center; padding: 20px; z-index: 40; }
     .modal { width: min(760px, 100%); max-height: min(86vh, 900px); overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 60px rgba(48, 32, 12, .2); }
     .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
@@ -343,13 +425,21 @@
     .table-scroll-hint { display: none; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
     @media (max-width: 960px) {
       .menu-toggle { display: inline-flex; }
-      .topbar { gap: 10px; }
+      .topbar {
+        gap: 8px; height: auto; min-height: 56px; padding: 10px 12px;
+        padding-top: calc(10px + var(--safe-top));
+      }
       .topbar h2 { flex: 1; min-width: 0; font-size: 16px; }
+      .topbar-actions { gap: 8px; }
+      .user-trigger { padding-right: 8px; max-width: min(46vw, 180px); }
+      .user-trigger #who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 88px; }
+      .msg-bell { width: 38px; height: 38px; }
       .app { display: block; position: relative; }
       .side {
         position: fixed; inset: 0 auto 0 0; width: min(280px, 86vw); z-index: 50;
         transform: translateX(-105%); transition: transform .22s ease;
         flex-direction: column; align-items: stretch; overflow: auto;
+        padding-top: calc(22px + var(--safe-top));
       }
       .app.side-open .side { transform: translateX(0); }
       .side-backdrop {
@@ -358,19 +448,21 @@
       .app.side-open .side-backdrop { opacity: 1; pointer-events: auto; }
       .brand { padding: 2px 8px 16px; }
       .nav { flex-direction: column; width: 100%; }
+      .nav button { min-height: 44px; padding: 12px; font-size: 15px; }
       .table-scroll-hint { display: block; }
       .enterprise-table { min-width: 640px; }
-    }
-
-    @media (max-width: 960px) {
+      .content {
+        padding: 12px 12px calc(16px + var(--safe-bottom));
+      }
       .login, .app, .metrics, .charts, .tag-metrics, .tag-tables, .detail-grid { grid-template-columns: 1fr; }
       .login-visual { height: 220px; }
       .login-visual img { height: 220px; }
       html, body { overflow: auto; }
       .login, .app { height: auto; min-height: 100%; overflow: visible; }
       .app { display: block; }
+      .workspace { min-height: 100dvh; }
       .content { overflow: visible; display: block; }
-      .list-card { overflow: visible; display: block; }
+      .list-card { overflow: visible; display: flex; gap: 10px; }
       /* 微信/窄屏：图表行改为自适应高度，避免两图挤在固定 300px 里叠画布 */
       #panel.stats-panel > .charts,
       .home-site-block .charts {
@@ -394,8 +486,40 @@
         position: relative;
         overflow: hidden;
       }
-      .notice { display: flex; padding: 12px 0; }
-      .notice h3, .notice p { white-space: normal; }
+      .notice {
+        flex-direction: column; gap: 10px; padding: 14px;
+      }
+      .notice-actions {
+        width: 100%; flex-direction: row; justify-content: space-between; align-items: center;
+      }
+      .notice h3 { font-size: 15px; -webkit-line-clamp: 3; }
+      .notice p { -webkit-line-clamp: 3; }
+      .message-toolbar {
+        flex-direction: column; align-items: stretch; gap: 12px; padding: 14px;
+      }
+      .message-toolbar .message-tools { margin-left: 0; width: 100%; }
+      .message-toolbar .message-tools .ghost,
+      .message-toolbar .check-row { flex: 1; justify-content: center; }
+      .message-item {
+        grid-template-columns: 8px 1fr; gap: 8px 12px; padding: 14px;
+      }
+      .message-item h3 { font-size: 15px; margin-bottom: 8px; -webkit-line-clamp: 3; }
+      .message-side {
+        grid-column: 2; width: 100%; flex-direction: row; justify-content: space-between; align-items: center;
+      }
+      .message-side .ghost { min-width: 88px; }
+      .pager {
+        flex-direction: column; align-items: stretch; gap: 10px;
+        padding-bottom: var(--safe-bottom);
+      }
+      .pager div { width: 100%; justify-content: space-between; }
+      .pager .ghost { flex: 1; min-height: 40px; }
+      .modal-backdrop { padding: 12px; align-items: end; }
+      .modal {
+        width: 100%; max-height: min(90dvh, 920px); border-radius: 18px 18px 12px 12px;
+      }
+      .modal-actions { justify-content: stretch; }
+      .modal-actions .primary, .modal-actions .ghost { flex: 1; min-height: 40px; }
     }
   </style>
 </head>
@@ -740,6 +864,7 @@
       document.getElementById("title").textContent = titles[id] || "";
       const panel = document.getElementById("panel");
       panel.classList.toggle("stats-panel", id === "stats" || id === "home");
+      panel.classList.toggle("message-panel", id === "messages");
       panel.innerHTML = '<p class="empty">加载中…</p>';
       try {
         if (id === "home") await renderHome(panel);
@@ -1798,25 +1923,27 @@
         page_size: "20",
       });
       if (messageQuery.unread) params.set("unread", "1");
-      if (!panel.querySelector(".list-card")) {
+      if (!panel.querySelector(".message-list")) {
         panel.innerHTML = '<p class="panel-loading">正在加载消息…</p>';
       }
       const body = await api("/api/portal/messages/?" + params.toString());
       if (requestId !== messageRequest) return;
 
-      let toolbar = panel.querySelector(".toolbar");
-      let list = panel.querySelector(".list-card");
+      let toolbar = panel.querySelector(".message-toolbar");
+      let list = panel.querySelector(".message-list");
       let pager = panel.querySelector(".pager");
       if (!toolbar || !list || !pager) {
         panel.innerHTML = "";
         toolbar = document.createElement("div");
-        toolbar.className = "toolbar";
+        toolbar.className = "message-toolbar";
         toolbar.innerHTML =
-          '<p class="muted" style="margin:0;flex:1">订阅命中的公告会汇总到这里。微信通知点击后进入本页。</p>' +
-          '<label class="check-row" style="margin:0"><input name="unread" type="checkbox" /> 仅未读</label>' +
-          '<button class="ghost" type="button" data-role="refresh">刷新</button>';
+          '<p class="message-summary muted"></p>' +
+          '<div class="message-tools">' +
+          '<label class="check-row"><input name="unread" type="checkbox" /> 仅未读</label>' +
+          '<button class="ghost" type="button" data-role="refresh">刷新</button>' +
+          "</div>";
         list = document.createElement("div");
-        list.className = "list-card";
+        list.className = "list-card message-list";
         pager = document.createElement("div");
         pager.className = "pager";
         panel.appendChild(toolbar);
@@ -1831,10 +1958,12 @@
       }
       toolbar.querySelector("[name=unread]").checked = Boolean(messageQuery.unread);
       setMessageBadge(body.unreadTotal || 0);
-      const unreadHint = toolbar.querySelector(".muted");
-      if (unreadHint) {
-        unreadHint.textContent =
-          "共 " + (body.total || 0) + " 条消息，未读 " + (body.unreadTotal || 0) + " 条。微信通知点击后进入本页。";
+      const summary = toolbar.querySelector(".message-summary");
+      if (summary) {
+        summary.innerHTML =
+          "共 <strong></strong> 条消息，未读 <em></em> 条<br /><span style='font-size:12px;opacity:.9'>点开卡片可查看公告详情</span>";
+        summary.querySelector("strong").textContent = String(body.total || 0);
+        summary.querySelector("em").textContent = String(body.unreadTotal || 0);
       }
 
       list.innerHTML = "";
@@ -1843,34 +1972,37 @@
       } else {
         body.items.forEach((item) => {
           const article = document.createElement("article");
-          article.className = "notice";
-          if (!item.isRead) article.style.borderColor = "#f0c36a";
+          article.className = "message-item" + (item.isRead ? "" : " is-unread");
           article.innerHTML =
-            '<div class="notice-main"><h3></h3><p></p></div>' +
-            '<div class="notice-actions">' +
-            '<button class="copy-link" type="button" data-role="detail">查看公告</button>' +
-            "</div>" +
-            '<span class="kind"></span>';
+            '<span class="message-dot" aria-hidden="true"></span>' +
+            '<div class="message-body"><h3></h3><div class="message-meta"></div></div>' +
+            '<div class="message-side">' +
+            '<button class="ghost" type="button" data-role="detail">查看公告</button>' +
+            "</div>";
           article.querySelector("h3").textContent = item.title || "未命名公告";
-          article.querySelector("p").textContent = [
-            item.isRead ? "已读" : "未读",
-            item.siteLabel,
-            item.buyerName,
-            item.regionName,
-            item.digestDate,
-            formatDateTimeShanghai(item.createdAt),
-          ]
-            .filter((part) => part && part !== "—")
-            .join(" · ");
-          const badge = article.querySelector(".kind");
-          badge.textContent = item.isRead ? "已读" : "未读";
-          if (!item.isRead) badge.classList.add("teal");
-          const open = () =>
+          const meta = article.querySelector(".message-meta");
+          const chips = [
+            { text: item.isRead ? "已读" : "未读", className: item.isRead ? "status-read" : "status-unread" },
+            { text: item.siteLabel },
+            { text: item.buyerName },
+            { text: item.regionName },
+            { text: item.digestDate },
+            { text: formatDateTimeShanghai(item.createdAt) },
+          ].filter((chip) => chip.text && chip.text !== "—");
+          chips.forEach((chip) => {
+            const span = document.createElement("span");
+            if (chip.className) span.className = chip.className;
+            span.textContent = chip.text;
+            meta.appendChild(span);
+          });
+          const open = (event) => {
+            if (event) event.stopPropagation();
             void openMessageDetail(item.id).then(() => {
               if (!item.isRead) setMessageBadge(Math.max(0, unreadBadgeCount - 1));
               return renderMessages(panel);
             });
-          article.querySelector(".notice-main").onclick = open;
+          };
+          article.onclick = open;
           article.querySelector("[data-role=detail]").onclick = open;
           list.appendChild(article);
         });
