@@ -5,7 +5,7 @@
 | site_id | 说明 |
 |---------|------|
 | `sd-ggzyjyzx` / `sd-mall` | 山东网上商城采购公告（全省）；CLI `--site sd-mall` |
-| `sd-gpfa-frame` / `sd-gpfa` | 框架协议专区（采购公告/成交结果单笔/终止）；每类默认 100 条，3h 调度 |
+| `sd-gpfa-frame` / `sd-gpfa` | 框架协议专区（采购/成交/终止 × 二次竞价/直接选定/顺序轮候）；每类默认 500 条，日间 1h / 夜间 3h 调度 |
 | `sd-ccgp` | 山东政府采购网（省级 + 市区县公开信息） |
 | `jd-quan-yicai` | 京东泉易采（普通竞价/反拍/询比）+ 附件 |
 | `jd-qing-huicai` | 京东青慧采（同一套接口，合同号 `JD_QHC_CONTRACT_NUM`） |

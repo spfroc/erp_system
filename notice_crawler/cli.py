@@ -4,7 +4,13 @@ import argparse
 
 from db import backfill_district_from_list_json, ensure_list_indexes, init_db, ping
 from pipeline.attachments import download_pending, parse_attachments
-from pipeline.crawl import crawl_jd, crawl_sd_ccgp, crawl_sd_mall, repair_ccgp_bodies
+from pipeline.crawl import (
+    crawl_jd,
+    crawl_sd_ccgp,
+    crawl_sd_gpfa,
+    crawl_sd_mall,
+    repair_ccgp_bodies,
+)
 from clients.qlyc_login import ensure_access_token
 from pipeline.crawl_supplier import crawl_suppliers
 from pipeline.parse_llm import parse_pending, reenrich_parsed, reparse_existing
@@ -25,11 +31,17 @@ def main() -> None:
     p_crawl = sub.add_parser("crawl", help="抓取列表+详情到 notice_raw")
     p_crawl.add_argument(
         "--site",
-        choices=["all", "sd-mall", "sd-ccgp", "jd"],
+        choices=["all", "sd-mall", "sd-gpfa", "sd-ccgp", "jd"],
         default="all",
     )
     p_crawl.add_argument("--max-pages", type=int, default=None, help="每类最多页数，调试用")
     p_crawl.add_argument("--page-size", type=int, default=20)
+    p_crawl.add_argument(
+        "--max-items",
+        type=int,
+        default=None,
+        help="每类最多处理条数（框架协议默认 100）",
+    )
     p_crawl.add_argument("--list-only", action="store_true", help="只抓列表不拉详情")
     p_crawl.add_argument(
         "--start-date",
@@ -45,7 +57,7 @@ def main() -> None:
         "--stop-dup",
         type=int,
         default=None,
-        help="同一类型连续多少条已入库后停止该类（京东和商城）",
+        help="同一类型连续多少条已入库后停止该类（京东/商城/框架协议）",
     )
 
     p_parse = sub.add_parser(
@@ -191,9 +203,9 @@ def main() -> None:
             stop_dup=args.stop_dup,
         )
 
-        def _run(label: str, fn) -> None:
+        def _run(label: str, fn, **extra) -> None:
             try:
-                fn(**common)
+                fn(**common, **extra)
             except Exception as exc:  # noqa: BLE001
                 # --site all 时单站失败不阻断后续站点
                 if args.site == "all":
@@ -203,6 +215,9 @@ def main() -> None:
 
         if args.site in ("all", "sd-mall"):
             _run("sd-mall", crawl_sd_mall)
+        if args.site in ("all", "sd-gpfa"):
+            gpfa_items = args.max_items if args.max_items is not None else 500
+            _run("sd-gpfa", crawl_sd_gpfa, max_items=gpfa_items)
         if args.site in ("all", "sd-ccgp"):
             _run("sd-ccgp", crawl_sd_ccgp)
         if args.site in ("all", "jd"):

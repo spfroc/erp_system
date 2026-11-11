@@ -324,9 +324,9 @@ def crawl_sd_gpfa(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     stop_dup: Optional[int] = None,
-    max_items: Optional[int] = 100,
+    max_items: Optional[int] = 500,
 ) -> None:
-    """框架协议专区：采购公告 / 成交结果单笔 / 终止公告；每类默认最多 100 条。"""
+    """框架协议专区：采购/成交/终止 × 二次竞价/直接选定/顺序轮候；每类默认最多 500 条。"""
     start_day = _as_day(start_date)
     end_day = _as_day(end_date)
     client = SdGpfaClient()
@@ -408,11 +408,15 @@ def crawl_sd_gpfa(
                             continue
                         fetched += 1
                         raw_region = item.get("regionFullName") or item.get("regionName")
+                        item_pt = item.get("projectType")
+                        auction_type = str(
+                            item_pt if item_pt not in (None, "") else project_type
+                        )
                         upsert_raw(
                             session,
                             site_id=GPFA_SITE,
                             notice_key=notice_guid,
-                            auction_type=str(project_type),
+                            auction_type=auction_type,
                             notice_type=str(notice_type),
                             title=item.get("title"),
                             region_name=normalize_region_name(GPFA_SITE, raw_region),
@@ -429,10 +433,14 @@ def crawl_sd_gpfa(
                                 detail = client.get_detail(notice_guid)
                                 html = detail.get("content") or ""
                                 text = html_to_text(html)
+                                detail_pt = detail.get("projectType")
+                                if detail_pt not in (None, ""):
+                                    auction_type = str(detail_pt)
                                 raw = upsert_raw(
                                     session,
                                     site_id=GPFA_SITE,
                                     notice_key=notice_guid,
+                                    auction_type=auction_type,
                                     detail_json=detail,
                                     content_html=html,
                                     content_text=text,
