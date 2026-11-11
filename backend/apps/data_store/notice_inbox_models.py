@@ -23,16 +23,16 @@ class PortalNoticeInbox(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["customer_account_id", "notice_raw_id", "digest_date"],
-                name="uniq_portal_notice_inbox_account_notice_day",
+                name="uniq_pinbox_acct_notice_day",
             )
         ]
         indexes = [
             models.Index(
                 fields=["customer_account_id", "-created_at"],
-                name="portal_inbox_account_created_idx",
+                name="pinbox_acct_created_idx",
             ),
             models.Index(
                 fields=["customer_account_id", "is_read", "-created_at"],
-                name="portal_inbox_account_read_idx",
+                name="pinbox_acct_read_idx",
             ),
         ]

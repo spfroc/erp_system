@@ -119,18 +119,18 @@ class Migration(migrations.Migration):
             model_name="portalnoticeinbox",
             constraint=models.UniqueConstraint(
                 fields=("customer_account_id", "notice_raw_id", "digest_date"),
-                name="uniq_portal_notice_inbox_account_notice_day",
+                name="uniq_pinbox_acct_notice_day",
             ),
         ),
         migrations.AddIndex(
             model_name="portalnoticeinbox",
-            index=models.Index(fields=["customer_account_id", "-created_at"], name="portal_inbox_account_created_idx"),
+            index=models.Index(fields=["customer_account_id", "-created_at"], name="pinbox_acct_created_idx"),
         ),
         migrations.AddIndex(
             model_name="portalnoticeinbox",
             index=models.Index(
                 fields=["customer_account_id", "is_read", "-created_at"],
-                name="portal_inbox_account_read_idx",
+                name="pinbox_acct_read_idx",
             ),
         ),
         migrations.RunPython(grant_wechat_mp_permissions, noop_reverse),
