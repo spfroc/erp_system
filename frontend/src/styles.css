@@ -1523,6 +1523,20 @@ nav button:hover {
   min-width: 0;
 }
 
+.page-toolbar-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.page-toolbar-tabs .segmented {
+  margin: 0;
+  flex-wrap: wrap;
+}
+
 .page-toolbar-actions {
   display: inline-flex;
   flex-wrap: nowrap;
@@ -2570,6 +2584,114 @@ nav button:hover {
 .table-row.notice-dict-table {
   grid-template-columns: minmax(180px, 1.4fr) 0.5fr 0.5fr 0.8fr;
   align-items: start;
+}
+
+.table-row.notice-site-table {
+  grid-template-columns: minmax(140px, 1.1fr) minmax(120px, 1fr) 0.7fr 0.45fr 0.45fr 0.9fr;
+  align-items: start;
+}
+
+.table-row.notice-map-table {
+  grid-template-columns: minmax(110px, 0.9fr) minmax(110px, 1fr) minmax(130px, 1.1fr) minmax(90px, 0.8fr) 0.4fr 0.4fr 0.8fr;
+  align-items: start;
+}
+
+.notice-map-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.6fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .notice-map-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.notice-map-categories,
+.notice-map-options {
+  min-width: 0;
+  border: 1px solid #e6ebf1;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.notice-map-category-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 68vh;
+  overflow: auto;
+}
+
+.notice-map-category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e6ebf1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.notice-map-category-item.active {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.notice-map-category-item span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notice-map-category-item em,
+.notice-map-option-item em,
+.notice-map-option-group-head em {
+  color: #7a8796;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.notice-map-option-group {
+  margin-top: 12px;
+  border-top: 1px solid #eef2f6;
+  padding-top: 12px;
+}
+
+.notice-map-option-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.notice-map-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.notice-map-option-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border: 1px solid #e6ebf1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.notice-map-option-item span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .notice-dict-main-cell {

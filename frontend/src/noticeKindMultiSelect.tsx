@@ -1,10 +1,11 @@
 const FALLBACK_NOTICE_KINDS = ["采购公告", "竞价公告", "询比公告", "成交公告", "终止公告", "失败公告", "废标公告"];
 
 export function noticeKindOptions(options?: string[]) {
-  const merged = [...(options || []), ...FALLBACK_NOTICE_KINDS];
+  // 后端已返回映射分类时，筛选项以映射为准，不再混入本地兜底类型
+  const source = options && options.length > 0 ? options : FALLBACK_NOTICE_KINDS;
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const kind of merged) {
+  for (const kind of source) {
     const text = (kind || "").trim();
     if (!text || seen.has(text)) continue;
     seen.add(text);

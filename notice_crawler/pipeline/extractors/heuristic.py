@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from pipeline.extractors.base import BaseExtractor, EXTRACT_SCHEMA
+from pipeline.extractors.base import BaseExtractor, EXTRACT_SCHEMA, strip_deal_supplier_if_pre_result
 
 
 def _first(patterns: List[str], text: str, flags: int = 0) -> Optional[str]:
@@ -56,6 +56,27 @@ def _money(patterns: List[str], text: str) -> Optional[float]:
     return None
 
 
+_LABEL_VALUE_NOISE = frozenset(
+    {
+        "地址",
+        "成交金额（元）",
+        "成交金额(元)",
+        "成交供应商",
+        "序号",
+        "采购项目名称",
+        "采购需求概况",
+        "预算金额",
+        "（万元）",
+        "(万元)",
+        "拟面向中小企业预留",
+        "预计采购时间",
+        "（填写到月）",
+        "(填写到月)",
+        "备注",
+    }
+)
+
+
 def _label_value(labels: List[str], text: str) -> Optional[str]:
     """支持「标签: 值」或「标签:\\n值」两种排版（框架协议常见）。"""
     for label in labels:
@@ -66,7 +87,7 @@ def _label_value(labels: List[str], text: str) -> Optional[str]:
         )
         if m:
             val = re.sub(r"\s+", " ", m.group(1).strip())
-            if val and val not in {"地址", "成交金额（元）", "成交金额(元)", "成交供应商"}:
+            if val and val not in _LABEL_VALUE_NOISE:
                 return val[:256]
     return None
 
@@ -105,37 +126,65 @@ def _extract_gpfa_deal(text: str) -> Dict[str, Any]:
     return out
 
 
+def _infer_gpfa_category(name: str, spec: str = "", context: str = "") -> str:
+    """服务/工程/租赁/律所等非货品也归到产品分类。"""
+    blob = f"{name} {spec} {context}"
+    rules = (
+        (("律师", "律所", "法律顾问", "法律服务"), "法律服务"),
+        (("租赁", "租用", "承租"), "租赁"),
+        (("工程", "施工", "装修", "维修改造"), "工程"),
+        (("运维", "维护", "保洁", "安保", "物业", "劳务", "咨询", "培训", "检测", "评估", "审计", "服务"), "服务"),
+        (("项目",), "项目"),
+    )
+    for keys, label in rules:
+        if any(k in blob for k in keys):
+            return label
+    return "服务"
+
+
 def _extract_gpfa_goods(text: str) -> List[Dict[str, Any]]:
-    """框架协议服务/商品分项。"""
+    """框架协议服务/商品/项目/租赁等分项，一律进 goods。"""
     goods: List[Dict[str, Any]] = []
     for m in re.finditer(
-        r"(?:服务分项名称|商品名称|标的名称)\s*[:：]\s*\n?\s*([^\n\r]+)"
+        r"(?:服务分项名称|商品名称|标的名称|采购标的|服务名称|项目名称|租赁标的|服务内容)\s*[:：]\s*\n?\s*([^\n\r]+)"
+        r"(?:"
+        r"[\s\S]{0,120}?"
+        r"(?:控制单价|报价单价|单价|限价)\s*[（(]?元[)）]?\s*[:：]\s*\n?\s*([0-9,.]+)"
+        r")?"
+        r"(?:"
         r"[\s\S]{0,80}?"
-        r"(?:控制单价|报价单价|单价)\s*[（(]?元[)）]?\s*[:：]\s*\n?\s*([0-9,.]+)"
-        r"[\s\S]{0,40}?"
-        r"数量\s*[:：]\s*\n?\s*([0-9,.]+)"
-        r"(?:[\s\S]{0,40}?服务内容\s*[:：]\s*\n?\s*([^\n\r]+))?",
+        r"(?:数量|采购数量)\s*[:：]\s*\n?\s*([0-9,.]+)\s*([^\n\r]{0,12})?"
+        r")?"
+        r"(?:"
+        r"[\s\S]{0,80}?"
+        r"(?:服务内容|规格|参数|说明)\s*[:：]\s*\n?\s*([^\n\r]+)"
+        r")?",
         text,
     ):
-        name = re.sub(r"\s+", " ", m.group(1).strip())
+        name = re.sub(r"\s+", " ", (m.group(1) or "").strip())
+        if not name or name in {"无", "/", "-", "—"}:
+            continue
         try:
-            unit_price = float(m.group(2).replace(",", ""))
+            unit_price = float(m.group(2).replace(",", "")) if m.group(2) else None
         except ValueError:
             unit_price = None
         try:
-            quantity = float(m.group(3).replace(",", ""))
+            quantity = float(m.group(3).replace(",", "")) if m.group(3) else None
         except ValueError:
             quantity = None
-        spec = m.group(4).strip() if m.group(4) else None
+        unit = (m.group(4) or "").strip() or None
+        if unit and re.fullmatch(r"[\d.,]+", unit):
+            unit = None
+        spec = (m.group(5) or "").strip() or None
         amount = None
         if unit_price is not None and quantity is not None:
             amount = round(unit_price * quantity, 2)
         goods.append(
             {
                 "name": name[:512],
-                "category": "服务" if "服务" in (name + (spec or "")) else None,
-                "quantity": quantity,
-                "unit": None,
+                "category": _infer_gpfa_category(name, spec or "", text[:300]),
+                "quantity": quantity if quantity is not None else 1,
+                "unit": unit[:64] if unit else None,
                 "brand": None,
                 "model": None,
                 "unit_price": unit_price,
@@ -143,7 +192,9 @@ def _extract_gpfa_goods(text: str) -> List[Dict[str, Any]]:
                 "amount": amount,
             }
         )
-    return goods[:50]
+        if len(goods) >= 50:
+            break
+    return goods
 
 
 def _num(s: str) -> Optional[float]:
@@ -628,6 +679,7 @@ class HeuristicExtractor(BaseExtractor):
             if out.get("quote_count") is None:
                 out["quote_count"] = len(quotes) or None
             out["suppliers"] = list({q["supplier_name"] for q in quotes if q.get("supplier_name")})
+        strip_deal_supplier_if_pre_result(out)
         filled = sum(
             1
             for k in ("project_code", "buyer_name", "deal_supplier", "deal_amount", "budget_amount")

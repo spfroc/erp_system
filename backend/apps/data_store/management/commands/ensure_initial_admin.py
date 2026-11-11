@@ -37,6 +37,8 @@ class Command(BaseCommand):
                         "notice.stats.view", "notice.tag.view", "notice.tag.manage",
                         "notice.orgType.view", "notice.orgType.manage",
                         "notice.nature.view", "notice.nature.manage",
+                        "notice.site.view", "notice.site.manage",
+                        "notice.categoryMap.view", "notice.categoryMap.manage",
                         "site.view", "site.manage",
                         "library.view", "library.manage",
                         "mallCustomer.view", "mallCustomer.manage",

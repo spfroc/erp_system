@@ -5,6 +5,7 @@
 | site_id | 说明 |
 |---------|------|
 | `sd-ggzyjyzx` / `sd-mall` | 山东网上商城采购公告（全省）；CLI `--site sd-mall` |
+| `sd-gpfa-frame` / `sd-gpfa` | 框架协议专区（采购公告/成交结果单笔/终止）；每类默认 100 条，3h 调度 |
 | `sd-ccgp` | 山东政府采购网（省级 + 市区县公开信息） |
 | `jd-quan-yicai` | 京东泉易采（普通竞价/反拍/询比）+ 附件 |
 | `jd-qing-huicai` | 京东青慧采（同一套接口，合同号 `JD_QHC_CONTRACT_NUM`） |
@@ -86,7 +87,8 @@ python cli.py ping
 
 `deploy/docker-compose.dev.yml` 与 `deploy/docker-compose.prod.yml` 含 `notice-crawler`。容器启动后立刻抓一轮，然后：
 
-- **公告/供应商**：按 3 小时窗口（`CRAWL_INTERVAL_SECONDS`）对齐：`sd-mall`、`sd-ccgp`、`jd`、供应商。各站点独立；`sd-ccgp` 临时去掉 SOCKS。超时则跳过已错过窗口。
+- **公告站点**（`sd-mall` / `sd-ccgp` / `jd` / `sd-gpfa`）：按本地墙钟分段——默认 **0:00–6:00 每 3 小时**（`CRAWL_NIGHT_INTERVAL_SECONDS`，兼容旧名 `CRAWL_INTERVAL_SECONDS`），**其余时段每 1 小时**（`CRAWL_DAY_INTERVAL_SECONDS`）。各站点独立；`sd-ccgp` 临时去掉 SOCKS。超时则跳过已错过窗口。
+- **供应商**：默认仍按夜间间隔全量同步（`CRAWL_SUPPLIER_INTERVAL_SECONDS`），避免白天每小时全扫。
 - **京东附件**：独立后台循环，默认每 30 分钟（`CRAWL_ATT_INTERVAL_SECONDS=1800`）跑 `download-att` + `parse-att`；`flock` 保证同时只跑一个，上轮未结束则跳过本轮。
 
 ```bash
@@ -154,3 +156,4 @@ CPU 上 1.5B 大约每条几十秒～两分钟；有 GPU 可设 `LOCAL_N_GPU_LAY
 3. 询比公告 `noticeType=5`（不是竞价的 1）；询比详情页路径为 `/xj/`，竞价为 `/jj/`。
 4. `crawl --site jd` 会依次抓泉易采与青慧采（`JD_QHC_CONTRACT_NUM` 为空则跳过青慧采）。
 5. 先 `--max-pages 1` 验证，再放开全量。
+6. 山东政府采购网（`sd-ccgp`）列表加密 `id` 会轮换，**不能**当 `notice_key`。入库用稳定指纹 `tp:sha256(标题|发布时间|栏目类型)`；历史重复用 `python scripts/dedupe_sd_ccgp.py` 清理。

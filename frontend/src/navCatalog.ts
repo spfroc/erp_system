@@ -44,6 +44,8 @@ export type CatalogViewId =
   | "noticeStats"
   | "noticeTags"
   | "noticeDict"
+  | "noticeSites"
+  | "noticeCategoryMap"
   | "libraryContacts"
   | "mallCustomers"
   | "customerAccounts"
@@ -121,6 +123,8 @@ export const VIEW_CATALOG: ViewCatalogEntry[] = [
   { viewId: "noticeStats", label: "公告统计", iconKey: "BarChart3", permission: "notice.stats.view" },
   { viewId: "noticeTags", label: "标签修正", iconKey: "BadgeCheck", permission: "notice.tag.view" },
   { viewId: "noticeDict", label: "类型与性质", iconKey: "LayoutList", permission: "notice.orgType.view" },
+  { viewId: "noticeSites", label: "站点管理", iconKey: "Globe", permission: "notice.site.view" },
+  { viewId: "noticeCategoryMap", label: "分类映射", iconKey: "LayoutList", permission: "notice.categoryMap.view" },
   { viewId: "serviceOrders", label: "服务订单", iconKey: "ShieldCheck", permission: "serviceOrder.view" },
   { viewId: "salesOrders", label: "销售订单", iconKey: "ShoppingCart", permission: "salesOrder.view" },
   { viewId: "purchaseOrders", label: "采购订单", iconKey: "Truck", permission: "purchaseOrder.view" },
@@ -224,6 +228,8 @@ export const DEFAULT_NAV_ITEMS: NavMenuItem[] = [
   item("nav-item-noticeStats", "noticeStats", "web", "notices", 20),
   item("nav-item-noticeTags", "noticeTags", "web", "notices", 30),
   item("nav-item-noticeDict", "noticeDict", "web", "notices", 40),
+  item("nav-item-noticeSites", "noticeSites", "system", "system", 22),
+  item("nav-item-noticeCategoryMap", "noticeCategoryMap", "system", "system", 23),
   item("nav-item-officialSites", "officialSites", "web", "official", 10),
   item("nav-item-officialSeo", "officialSeo", "web", "official", 20),
   item("nav-item-sms", "sms", "system", "logs", 10),

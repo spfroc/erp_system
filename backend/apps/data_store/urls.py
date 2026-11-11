@@ -32,6 +32,17 @@ from .dev_ops_views import (
     dev_ops_scripts,
 )
 from .notice_dict_views import notice_dict_detail, notice_dict_list, notice_dict_options
+from .notice_site_views import (
+    notice_category_map_detail,
+    notice_category_map_list,
+    notice_mapped_category_detail,
+    notice_mapped_category_list,
+    notice_mapped_category_options,
+    notice_site_detail,
+    notice_site_list,
+    notice_site_meta,
+    notice_site_option_list,
+)
 from .notice_tag_views import notice_result_stats, notice_tag_batch, notice_tag_detail, notice_tag_identify, notice_tag_list
 from .notice_views import notice_detail as crawled_notice_detail
 from .notice_views import notice_list as crawled_notice_list
@@ -148,6 +159,23 @@ urlpatterns = [
     path("notices/dict/", notice_dict_list, name="notice-dict-list"),
     path("notices/dict/<int:item_id>/", notice_dict_detail, name="notice-dict-detail"),
     path("notices/dict/options/", notice_dict_options, name="notice-dict-options"),
+    path("notices/sites/meta/", notice_site_meta, name="notice-site-meta"),
+    path("notices/sites/", notice_site_list, name="notice-site-list"),
+    path("notices/sites/<int:site_pk>/", notice_site_detail, name="notice-site-detail"),
+    path("notices/site-options/", notice_site_option_list, name="notice-site-option-list"),
+    path("notices/mapped-categories/", notice_mapped_category_list, name="notice-mapped-category-list"),
+    path(
+        "notices/mapped-categories/<int:category_pk>/options/",
+        notice_mapped_category_options,
+        name="notice-mapped-category-options",
+    ),
+    path(
+        "notices/mapped-categories/<int:category_pk>/",
+        notice_mapped_category_detail,
+        name="notice-mapped-category-detail",
+    ),
+    path("notices/category-maps/", notice_category_map_list, name="notice-category-map-list"),
+    path("notices/category-maps/<int:map_pk>/", notice_category_map_detail, name="notice-category-map-detail"),
     path("notices/stats/", notice_result_stats, name="notice-result-stats"),
     path("notices/", crawled_notice_list, name="notice-list"),
     path("notices/<int:notice_id>/", crawled_notice_detail, name="notice-detail"),

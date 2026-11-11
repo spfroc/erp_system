@@ -64,6 +64,8 @@ const LibraryContactsPanel = lazy(() => import("./LibraryContacts").then((m) => 
 const MallCustomersPanel = lazy(() => import("./MallCustomers").then((m) => ({ default: m.MallCustomersPanel })));
 const NoticeStats = lazy(() => import("./NoticeStats").then((m) => ({ default: m.NoticeStats })));
 const NoticeDictAdmin = lazy(() => import("./NoticeDictAdmin").then((m) => ({ default: m.NoticeDictAdmin })));
+const NoticeSites = lazy(() => import("./NoticeSites").then((m) => ({ default: m.NoticeSites })));
+const NoticeCategoryMap = lazy(() => import("./NoticeCategoryMap").then((m) => ({ default: m.NoticeCategoryMap })));
 const NoticeTags = lazy(() => import("./NoticeTags").then((m) => ({ default: m.NoticeTags })));
 const DevOps = lazy(() => import("./DevOps").then((m) => ({ default: m.DevOps })));
 const AssistantPage = lazy(() => import("./assistant/AssistantPage").then((m) => ({ default: m.AssistantPage })));
@@ -440,6 +442,10 @@ const permissionLabels: Record<PermissionKey, string> = {
   "notice.orgType.manage": "管理公告类型",
   "notice.nature.view": "查看性质",
   "notice.nature.manage": "管理性质",
+  "notice.site.view": "查看站点管理",
+  "notice.site.manage": "管理站点",
+  "notice.categoryMap.view": "查看分类映射",
+  "notice.categoryMap.manage": "管理分类映射",
   "site.view": "查看前端网站配置",
   "site.manage": "管理前端网站配置",
   "library.view": "查看政企客户资料库",
@@ -472,8 +478,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   "user.manage": "管理用户权限",
 };
 const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
+  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "notice.site.view", "notice.categoryMap.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
+  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "notice.site.manage", "notice.categoryMap.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "assistant.use"] },
   { title: "客户门户", keys: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe", "portal.order.view", "portal.invoice.view", "portal.contract.view", "portal.account.view", "portal.account.manage"] },
   { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
   { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "assistant.manage", "user.manage"] },
@@ -517,6 +523,18 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
     return permissionSet.has("notice.nature.manage") || permissionSet.has("notice.manage");
   }
   if (permission === "notice.nature.manage") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.site.view") {
+    return permissionSet.has("notice.site.manage") || permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.site.manage") {
+    return permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.categoryMap.view") {
+    return permissionSet.has("notice.categoryMap.manage") || permissionSet.has("notice.manage");
+  }
+  if (permission === "notice.categoryMap.manage") {
     return permissionSet.has("notice.manage");
   }
   if (permission === "dev.ops.view") {
@@ -3952,6 +3970,12 @@ export default function App() {
               canManageOrgType={can("notice.orgType.manage")}
               canManageNature={can("notice.nature.manage")}
             />
+          )}
+          {view === "noticeSites" && (
+            <NoticeSites onNotice={setNotice} canManage={can("notice.site.manage")} />
+          )}
+          {view === "noticeCategoryMap" && (
+            <NoticeCategoryMap onNotice={setNotice} canManage={can("notice.categoryMap.manage")} />
           )}
           {view === "customerAccounts" && (
             <CustomerAccountsPanel

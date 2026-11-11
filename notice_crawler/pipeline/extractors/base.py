@@ -56,6 +56,20 @@ EXTRACT_SCHEMA: Dict[str, Any] = {
     "confidence": 0.0,
 }
 
+# 尚未产生成交结果的公告种类：不解析成交供应商相关字段
+NO_DEAL_SUPPLIER_KINDS = frozenset({"采购公告", "竞价公告", "意向公开", "单一来源公示"})
+
+
+def strip_deal_supplier_if_pre_result(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """竞价/采购公告无成交供应商，强制清空误抽字段。"""
+    kind = str(parsed.get("notice_kind") or "").strip()
+    if kind in NO_DEAL_SUPPLIER_KINDS:
+        parsed["deal_supplier"] = None
+        parsed["deal_supplier_phone"] = None
+        parsed["deal_supplier_address"] = None
+    return parsed
+
+
 SYSTEM_PROMPT = """你是政府采购公告信息抽取助手。
 只根据给定正文抽取字段，不要编造。
 不确定的字段填 null 或空数组。
@@ -64,6 +78,7 @@ SYSTEM_PROMPT = """你是政府采购公告信息抽取助手。
 goods 必须是数组：公告里有几条产品就输出几条，不要合并成一条。
 成交供应商的电话/地址填 deal_supplier_phone / deal_supplier_address；
 项目联系人填 buyer_contact_name / buyer_phone / buyer_address。
+竞价公告、采购公告尚未产生成交结果：deal_supplier / deal_supplier_phone / deal_supplier_address 必须填 null，不要从正文套话误抽。
 必须只输出一个 JSON 对象，不要 Markdown。
 字段模板：
 """ + json.dumps(EXTRACT_SCHEMA, ensure_ascii=False, indent=2)

@@ -7,14 +7,20 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import ProgrammingError
-from django.db.models import Exists, OuterRef, Q, TextField
-from django.db.models.functions import Cast
+from django.db.models import Count, Exists, OuterRef, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
+from .notice_site_config import (
+    list_enabled_sites,
+    mapped_category_options,
+    q_for_mapped_category,
+    resolve_mapped_category,
+    site_label as mapped_site_label,
+)
 from .notice_tag_models import NoticeResultTag
 from .views import _require_permission
 
@@ -64,6 +70,7 @@ _FILTERED_COUNT_TTL_SEC = 20.0
 _options_cache: dict[str, tuple[float, Any]] = {}
 _raw_count_cache: tuple[float, int] | None = None
 _filtered_count_cache: dict[str, tuple[float, int]] = {}
+_site_counts_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
 def _cached_options(key: str, builder):
@@ -164,27 +171,20 @@ def _keyword_search_q(keyword: str) -> Q:
             return _project_code_filter_q(token)
         if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
             return Q(
-                Exists(
-                    NoticeParsed.objects.filter(
-                        notice_raw_id=OuterRef("pk"),
-                        buyer_name__icontains=token,
-                    )
-                )
+                id__in=NoticeParsed.objects.filter(buyer_name__icontains=token).values("notice_raw_id")
             )
         return (
             Q(title__icontains=token)
             | Q(notice_key__icontains=token)
             | Q(region_name__icontains=token)
             | Q(
-                Exists(
-                    NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
-                        Q(project_code__icontains=token)
-                        | Q(project_name__icontains=token)
-                        | Q(buyer_name__icontains=token)
-                        | Q(deal_supplier__icontains=token)
-                        | Q(notice_title__icontains=token)
-                    )
-                )
+                id__in=NoticeParsed.objects.filter(
+                    Q(project_code__icontains=token)
+                    | Q(project_name__icontains=token)
+                    | Q(buyer_name__icontains=token)
+                    | Q(deal_supplier__icontains=token)
+                    | Q(notice_title__icontains=token)
+                ).values("notice_raw_id")
             )
         )
 
@@ -704,16 +704,30 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
     detail = _safe_json_dict(raw, "detail_json")
     list_item = _safe_json_dict(raw, "list_json")
 
-    # 有站点 notice_type 映射时以其为准（与筛选、抓取分类一致）
-    # 避免正文套话把采购公告误标成终止公告
-    mapped = _kind_from_notice_type(raw.site_id, raw.notice_type)
-    if not mapped:
-        mapped = _kind_from_notice_type(
-            raw.site_id,
+    notice_type = raw.notice_type
+    if notice_type in (None, ""):
+        notice_type = (
             detail.get("noticeType")
             if detail.get("noticeType") not in (None, "")
-            else list_item.get("noticeType"),
+            else list_item.get("noticeType")
         )
+    auction_type = raw.auction_type
+    if auction_type in (None, ""):
+        auction_type = (
+            detail.get("projectType")
+            if detail.get("projectType") not in (None, "")
+            else list_item.get("projectType")
+            if list_item.get("projectType") not in (None, "")
+            else list_item.get("auctionType")
+        )
+
+    # 优先：系统配置「分类映射」
+    configured = resolve_mapped_category(raw.site_id, auction_type, notice_type)
+    if configured:
+        return configured
+
+    # 兼容：站点内置 notice_type 标签（映射未覆盖时）
+    mapped = _kind_from_notice_type(raw.site_id, notice_type)
     if mapped:
         return mapped
 
@@ -745,8 +759,10 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
 
 
 def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
-    """公告类型筛选：优先站点 notice_type；解析字段作无编码时的兜底。"""
-    q = Q()
+    """公告类型筛选：优先分类映射；其次内置 notice_type；解析字段兜底。"""
+    mapped_q = q_for_mapped_category(notice_kind, site_id)
+    q = mapped_q
+
     for sid, mapping in NOTICE_TYPE_LABELS.items():
         if site_id and sid != site_id:
             continue
@@ -802,16 +818,19 @@ def _raw_ids_for_kinds(notice_kinds: list[str], site_id: str) -> Q:
 
 
 def _notice_kind_options(site_id: str) -> list[str]:
-    def build() -> list[str]:
-        labels: set[str] = set()
-        # 只用站点映射枚举，避免对 notice_parsed 做 distinct 全表扫描
-        for sid, mapping in NOTICE_TYPE_LABELS.items():
-            if site_id and sid != site_id:
-                continue
-            labels.update(mapping.values())
-        return sorted(labels)
-
-    return _cached_options(f"notice_kinds:{site_id or '*'}", build)
+    """类型筛选按钮：优先系统配置的映射分类，未配置时回退站点原始类型标签。"""
+    try:
+        mapped = mapped_category_options(site_id)
+        if mapped:
+            return mapped
+    except Exception:  # noqa: BLE001
+        pass
+    labels: set[str] = set()
+    for sid, mapping in NOTICE_TYPE_LABELS.items():
+        if site_id and sid != site_id:
+            continue
+        labels.update(mapping.values())
+    return sorted(labels)
 
 
 def _is_closed_kind(kind: str, title: str = "") -> bool:
@@ -900,7 +919,7 @@ def _serialize_list_item(raw: NoticeRaw, parsed: NoticeParsed | None, now=None) 
     return {
         "id": raw.id,
         "siteId": raw.site_id,
-        "siteLabel": SITE_LABELS.get(raw.site_id or "", raw.site_id or ""),
+        "siteLabel": mapped_site_label(raw.site_id) or SITE_LABELS.get(raw.site_id or "", raw.site_id or ""),
         "noticeKey": raw.notice_key,
         "title": (parsed.notice_title if parsed and parsed.notice_title else None) or raw.title,
         "projectCode": parsed.project_code if parsed else None,
@@ -950,7 +969,8 @@ def _related_kind_sort_key(kind: str | None) -> tuple[int, str]:
         return (len(_RELATED_KIND_ORDER), label)
 
 
-_PROJECT_CODE_SUFFIX_RE = re.compile(r"[，,]\d+$")
+# 包号后缀：，1 / ,1 / -1~-99 / _A（不可吃掉 SCFP-3707… 这类编号中段）
+_PROJECT_CODE_SUFFIX_RE = re.compile(r"(?:[，,]\d+|-\d{1,2}|_[A-Za-z])$")
 # 政府采购常见项目编号（含包号后缀 _A / -1 等）；用于精确检索，避免整句模糊扫全表
 _GOV_PROJECT_CODE_RE = re.compile(
     r"(?i)((?:SDGP|SDKJXY|SCJJ|ECJJ|SDKJ)[0-9A-Za-z_\-]{6,})"
@@ -972,10 +992,14 @@ def extract_gov_project_codes(text: str | None) -> list[str]:
 
 
 def _normalize_project_code(code: str | None) -> str:
-    """去掉成交公告常见的「，1」包号后缀，让同一项目能对上。"""
+    """去掉包号后缀（，1 / -1 / _A），让同一项目的采购/成交/终止能对上。"""
     text = (code or "").strip().replace("－", "-").replace("，", ",")
-    text = _PROJECT_CODE_SUFFIX_RE.sub("", text)
-    return text.strip(" ,，")
+    while True:
+        nxt = _PROJECT_CODE_SUFFIX_RE.sub("", text)
+        if nxt == text:
+            break
+        text = nxt
+    return text.strip(" ,，-_")
 
 
 def _auction_no(site_id: str | None, notice_key: str | None) -> str:
@@ -995,10 +1019,12 @@ def _project_code_of(parsed: NoticeParsed | None) -> str:
 
 
 def _sort_related_items(items: list[dict]) -> list[dict]:
+    """项目公告流程：发布时间从早到晚；无时间的排最后，再按种类、id。"""
     items.sort(
         key=lambda item: (
+            1 if not (item.get("publishTime") or "").strip() else 0,
+            (item.get("publishTime") or "").strip(),
             _related_kind_sort_key(item.get("noticeKind")),
-            item.get("publishTime") or "",
             item.get("id") or 0,
         )
     )
@@ -1030,9 +1056,10 @@ def _load_related_notices(raw: NoticeRaw, parsed: NoticeParsed | None, now=None)
     code = _project_code_of(parsed)
     if not code:
         return []
+    raw_code = (parsed.project_code or "").strip() if parsed else ""
+    lookup = _project_code_lookup_values([code] + ([raw_code] if raw_code else []))
     raw_ids = list(
-        NoticeParsed.objects.filter(site_id=raw.site_id)
-        .filter(Q(project_code=code) | Q(project_code__startswith=code + "，") | Q(project_code__startswith=code + ","))
+        NoticeParsed.objects.filter(site_id=raw.site_id, project_code__in=lookup)
         .exclude(notice_raw_id=raw.id)
         .values_list("notice_raw_id", flat=True)[:80]
     )
@@ -1044,17 +1071,25 @@ def _load_related_notices(raw: NoticeRaw, parsed: NoticeParsed | None, now=None)
 def _project_code_lookup_values(codes: list[str]) -> list[str]:
     """展开项目编号等值匹配集合，避免 project_code LIKE 前缀扫表。
 
-    成交公告常见「编号，1 / 编号,1」包号；列表关联只按等值 IN 查询。
+    含包号变体：编号，1 / 编号,1 / 编号-1 / 编号_A。
     """
     values: set[str] = set()
     for code in codes:
-        text = (code or "").strip()
-        if not text:
+        raw = (code or "").strip()
+        if not raw:
             continue
-        values.add(text)
-        for idx in range(1, 31):
-            values.add(f"{text}，{idx}")
-            values.add(f"{text},{idx}")
+        base = _normalize_project_code(raw) or raw
+        for text in {raw, base}:
+            if not text:
+                continue
+            values.add(text)
+            for idx in range(1, 31):
+                values.add(f"{text}，{idx}")
+                values.add(f"{text},{idx}")
+                values.add(f"{text}-{idx}")
+            for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                values.add(f"{text}_{letter}")
+                values.add(f"{text}_{letter.lower()}")
     return sorted(values)
 
 
@@ -1077,10 +1112,12 @@ def _sibling_kinds_by_project(
     if not parsed_rows:
         return {}
     raw_ids = [row["notice_raw_id"] for row in parsed_rows]
+    # 与列表/详情展示一致：优先分类映射，再内置 notice_type，最后才用 parsed.notice_kind
+    # 否则会出现「展示成交公告、另有结果公告」其实是同一条 0302
     raw_type = {
-        rid: (sid, ntype)
-        for rid, sid, ntype in NoticeRaw.objects.filter(id__in=raw_ids).values_list(
-            "id", "site_id", "notice_type"
+        rid: (sid, auction_type, ntype)
+        for rid, sid, auction_type, ntype in NoticeRaw.objects.filter(id__in=raw_ids).values_list(
+            "id", "site_id", "auction_type", "notice_type"
         )
     }
     buckets: dict[tuple[str, str], set[str]] = {}
@@ -1090,9 +1127,14 @@ def _sibling_kinds_by_project(
             continue
         sid = row.get("site_id") or ""
         raw_meta = raw_type.get(row["notice_raw_id"])
-        notice_type = raw_meta[1] if raw_meta else None
-        kind = _kind_from_notice_type(sid, notice_type) or _normalize_display_kind(
-            sid, row.get("notice_kind") or ""
+        auction_type = raw_meta[1] if raw_meta else None
+        notice_type = raw_meta[2] if raw_meta else None
+        if raw_meta and raw_meta[0]:
+            sid = sid or raw_meta[0]
+        kind = (
+            resolve_mapped_category(sid, auction_type, notice_type)
+            or _kind_from_notice_type(sid, notice_type)
+            or _normalize_display_kind(sid, row.get("notice_kind") or "")
         )
         if not kind or str(kind).strip().isdigit():
             continue
@@ -1104,25 +1146,43 @@ def _sibling_kinds_by_project(
 
 
 def _sibling_kinds_by_auction(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], list[str]]:
-    """(site_id, auction_no) -> 该竞价单下的公告种类。"""
+    """(site_id, auction_no) -> 该竞价单下的公告种类。
+
+    用 notice_key 等值 IN（auction:1..6）走 uk_site_notice，避免 startswith + 延迟加载 JSON/auction_type 的 N+1。
+    """
     unique = sorted({(site, auction) for site, auction in pairs if site and auction})
     if not unique:
         return {}
-    query = Q()
-    for site, auction in unique:
-        query |= Q(site_id=site, notice_key__startswith=f"{auction}:")
-    raw_rows = list(NoticeRaw.objects.filter(query).only("id", "site_id", "notice_key", "notice_type", "title")[:400])
-    parsed_map = {
-        item.notice_raw_id: item
-        for item in NoticeParsed.objects.filter(notice_raw_id__in=[row.id for row in raw_rows])
+    site_ids = sorted({site for site, _ in unique})
+    notice_keys: list[str] = []
+    for _, auction in unique:
+        for notice_type in ("1", "2", "3", "4", "5", "6"):
+            notice_keys.append(f"{auction}:{notice_type}")
+    raw_rows = list(
+        NoticeRaw.objects.filter(site_id__in=site_ids, notice_key__in=notice_keys).only(
+            "id", "site_id", "notice_key", "notice_type", "auction_type", "title"
+        )[:400]
+    )
+    if not raw_rows:
+        return {}
+    parsed_kind = {
+        item.notice_raw_id: item.notice_kind
+        for item in NoticeParsed.objects.filter(notice_raw_id__in=[row.id for row in raw_rows]).only(
+            "notice_raw_id", "notice_kind"
+        )
     }
     buckets: dict[tuple[str, str], set[str]] = {}
     for raw in raw_rows:
         auction = _auction_no(raw.site_id, raw.notice_key)
         if not auction:
             continue
-        kind = _resolve_kind(raw, parsed_map.get(raw.id))
-        if not kind:
+        configured = resolve_mapped_category(raw.site_id, raw.auction_type, raw.notice_type)
+        kind = (
+            configured
+            or _kind_from_notice_type(raw.site_id, raw.notice_type)
+            or _normalize_display_kind(raw.site_id, parsed_kind.get(raw.id) or "")
+        )
+        if not kind or str(kind).strip().isdigit():
             continue
         buckets.setdefault((raw.site_id or "", auction), set()).add(kind)
     return {key: sorted(kinds, key=_related_kind_sort_key) for key, kinds in buckets.items()}
@@ -1337,10 +1397,8 @@ def _notice_day_filter_q(
             raw_filters["publish_time__gte"] = publish_lo
         if publish_hi:
             raw_filters["publish_time__lt"] = publish_hi
-        # raw 有发布时间优先走索引；parsed 兜底用 Exists（无 raw 时间的历史行）
-        q &= Q(**raw_filters) | (
-            Q(publish_time__isnull=True) & _parsed_time_range_q("publish_time", publish_lo, publish_hi)
-        )
+        # 当前库 raw.publish_time 已全覆盖；只走 raw 索引，避免 OR + Exists 拖慢筛选
+        q &= Q(**raw_filters)
 
     start_lo, start_hi = _range_bound_strings(_parse_filter_ymd(start_from), _parse_filter_ymd(start_to))
     if start_lo or start_hi:
@@ -1371,45 +1429,59 @@ def _notice_field_filter_q(
         q &= _project_code_filter_q(project_code)
     if project_name:
         applied = True
-        q &= Q(title__icontains=project_name) | Q(
-            Exists(
-                NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).filter(
-                    Q(project_name__icontains=project_name) | Q(notice_title__icontains=project_name)
-                )
-            )
-        )
+        # id__in 子查询通常比相关 Exists 更易被优化；同时保留 raw.title 命中
+        parsed_title_ids = NoticeParsed.objects.filter(
+            Q(project_name__icontains=project_name) | Q(notice_title__icontains=project_name)
+        ).values("notice_raw_id")
+        q &= Q(title__icontains=project_name) | Q(id__in=parsed_title_ids)
     if buyer_name:
         applied = True
         q &= Q(
-            Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), buyer_name__icontains=buyer_name))
+            id__in=NoticeParsed.objects.filter(buyer_name__icontains=buyer_name).values("notice_raw_id")
         )
     if supplier_name:
         applied = True
-        # 优先 deal_supplier；JSON 文本兜底用 Exists，避免把全部命中 id 拉进 Python
-        supplier_parsed = (
-            NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"))
-            .annotate(
-                quotes_text=Cast("quotes_json", TextField()),
-                suppliers_text=Cast("suppliers_json", TextField()),
-            )
-            .filter(
-                Q(deal_supplier__icontains=supplier_name)
-                | Q(quotes_text__icontains=supplier_name)
-                | Q(suppliers_text__icontains=supplier_name)
+        # 列表筛只走 deal_supplier；不对 quotes/suppliers JSON 做全文 CAST+LIKE（会扫全表且极慢）
+        q &= Q(
+            id__in=NoticeParsed.objects.filter(deal_supplier__icontains=supplier_name).values(
+                "notice_raw_id"
             )
         )
-        q &= Q(Exists(supplier_parsed))
     if goods_name:
         applied = True
         q &= Q(
-            Exists(
-                NoticeGoods.objects.filter(
-                    notice_raw_id=OuterRef("pk"),
-                    product_name__icontains=goods_name,
-                )
-            )
+            id__in=NoticeGoods.objects.filter(product_name__icontains=goods_name).values("notice_raw_id")
         )
     return q if applied else None
+
+
+def _site_count_breakdown(qs) -> list[dict[str, Any]]:
+    """按站点汇总数量（用于进行中 / 未开始时展示各平台条数）。"""
+    # 必须清空 order_by，否则 MySQL/Django 会把排序列并进 GROUP BY，每条都变成 count=1
+    rows = list(qs.order_by().values("site_id").annotate(count=Count("id")))
+    count_map = {(row.get("site_id") or ""): int(row.get("count") or 0) for row in rows}
+    enabled = list_enabled_sites()
+    if not enabled:
+        enabled = [{"siteId": key, "label": label} for key, label in SITE_LABELS.items()]
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in enabled:
+        sid = str(item.get("siteId") or "")
+        if not sid:
+            continue
+        seen.add(sid)
+        out.append(
+            {
+                "id": sid,
+                "label": item.get("label") or SITE_LABELS.get(sid, sid),
+                "count": count_map.get(sid, 0),
+            }
+        )
+    for sid, count in sorted(count_map.items()):
+        if not sid or sid in seen:
+            continue
+        out.append({"id": sid, "label": SITE_LABELS.get(sid, sid), "count": count})
+    return out
 
 
 def _progress_filter_q(progress_target: str, now=None) -> Q:
@@ -1611,8 +1683,7 @@ def notice_list(request):
 
     try:
         qs = _list_raw_qs().order_by("-publish_time", "-id")
-        if site_id:
-            qs = qs.filter(site_id=site_id)
+        # 站点筛选稍后施加，便于「进行中/未开始」先汇总各平台数量
         if parse_status:
             qs = qs.filter(parse_status=parse_status)
         if region_name:
@@ -1620,7 +1691,8 @@ def notice_list(request):
         if search:
             qs = qs.filter(_keyword_search_q(search))
         if notice_kinds:
-            qs = qs.filter(_raw_ids_for_kinds(notice_kinds, site_id))
+            # 分平台计数时不限站点；列表再按 site_id 收窄
+            qs = qs.filter(_raw_ids_for_kinds(notice_kinds, ""))
         field_q = _notice_field_filter_q(
             project_code=project_code,
             project_name=project_name,
@@ -1653,6 +1725,31 @@ def notice_list(request):
         if progress_target:
             qs = qs.filter(_progress_filter_q(progress_target, now=now))
 
+        site_counts: list[dict[str, Any]] = []
+        if progress_target in {"ongoing", "upcoming"}:
+            # 进度随时间变化，短缓存即可
+            counts_key = (
+                "site_counts:"
+                f"{progress_target}:{parse_status}:{region_name}:{search}:"
+                f"{','.join(notice_kinds)}:{project_code}:{project_name}:{buyer_name}:"
+                f"{supplier_name}:{goods_name}:{publish_from}:{publish_to}:"
+                f"{start_from}:{start_to}:{end_from}:{end_to}"
+            )
+            now_mono = time.monotonic()
+            hit = _site_counts_cache.get(counts_key)
+            if hit and hit[0] > now_mono:
+                site_counts = hit[1]
+            else:
+                site_counts = _site_count_breakdown(qs)
+                _site_counts_cache[counts_key] = (now_mono + _FILTERED_COUNT_TTL_SEC, site_counts)
+                if len(_site_counts_cache) > 64:
+                    alive = {k: v for k, v in _site_counts_cache.items() if v[0] > now_mono}
+                    _site_counts_cache.clear()
+                    _site_counts_cache.update(alive)
+
+        if site_id:
+            qs = qs.filter(site_id=site_id)
+
         has_filter = bool(
             site_id
             or parse_status
@@ -1663,25 +1760,26 @@ def notice_list(request):
             or day_q is not None
             or progress_target
         )
-        # 无筛选时短缓存 COUNT；仅默认发布日筛也缓存，避免重复慢 COUNT
+        # 无筛选 / 常见轻量筛（日期、站点、类型）短缓存 COUNT，避免重复慢聚合
+        light_only = (
+            day_q is not None or site_id or notice_kinds
+        ) and not (
+            parse_status
+            or region_name
+            or search
+            or field_q is not None
+            or progress_target
+        )
         if not has_filter:
             total = _cached_raw_total()
-        elif (
-            day_q is not None
-            and not (
-                site_id
-                or parse_status
-                or region_name
-                or search
-                or notice_kinds
-                or field_q is not None
-                or progress_target
-            )
-        ):
+        elif light_only:
+            kinds_key = ",".join(notice_kinds) if notice_kinds else ""
             total = _cached_filtered_total(
-                f"pub:{publish_from}:{publish_to}",
+                f"list:{site_id}:{kinds_key}:{publish_from}:{publish_to}:{start_from}:{start_to}:{end_from}:{end_to}",
                 qs.count,
             )
+        elif progress_target in {"ongoing", "upcoming"} and site_counts and not site_id:
+            total = sum(int(item.get("count") or 0) for item in site_counts)
         else:
             total = qs.count()
         offset = (page - 1) * page_size
@@ -1693,16 +1791,28 @@ def notice_list(request):
             )
         )
 
+        sites_payload = [
+            {"id": item["siteId"], "label": item["label"]}
+            for item in list_enabled_sites()
+        ] or [
+            {"id": key, "label": label}
+            for key, label in SITE_LABELS.items()
+        ]
+        if site_counts:
+            count_map = {item["id"]: item["count"] for item in site_counts}
+            sites_payload = [
+                {**site, "count": int(count_map.get(site["id"], 0))}
+                for site in sites_payload
+            ]
+
         return JsonResponse(
             {
                 "items": items,
                 "total": total,
                 "page": page,
                 "pageSize": page_size,
-                "sites": [
-                    {"id": key, "label": label}
-                    for key, label in SITE_LABELS.items()
-                ],
+                "sites": sites_payload,
+                "siteCounts": site_counts,
                 "noticeKinds": _notice_kind_options(site_id),
                 "regionNames": _region_options(site_id),
             }

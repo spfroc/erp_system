@@ -100,7 +100,7 @@ function NoticeClearable({
   );
 }
 
-type SiteOption = { id: string; label: string };
+type SiteOption = { id: string; label: string; count?: number };
 
 type NoticeListResponse = {
   items: NoticeListItem[];
@@ -108,6 +108,7 @@ type NoticeListResponse = {
   page: number;
   pageSize: number;
   sites?: SiteOption[];
+  siteCounts?: SiteOption[];
   noticeKinds?: string[];
   regionNames?: string[];
   detail?: string;
@@ -206,6 +207,7 @@ export function Notices({
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<NoticeListItem[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
+  const [siteCountsTotal, setSiteCountsTotal] = useState<number | null>(null);
   const [noticeKinds, setNoticeKinds] = useState<string[]>([]);
   const [regionNames, setRegionNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -258,7 +260,19 @@ export function Notices({
       const data = await fetchNotices(params);
       setItems(data.items || []);
       setTotal(data.total || 0);
-      if (data.sites?.length) setSites(data.sites);
+      if (data.sites?.length) {
+        setSites(data.sites);
+      } else if (data.siteCounts?.length) {
+        setSites(data.siteCounts);
+      }
+      const counts = data.siteCounts?.length
+        ? data.siteCounts
+        : (data.sites || []).filter((site) => typeof site.count === "number");
+      if (counts.length > 0 && (filters.progress === "ongoing" || filters.progress === "upcoming")) {
+        setSiteCountsTotal(counts.reduce((sum, site) => sum + (site.count || 0), 0));
+      } else {
+        setSiteCountsTotal(null);
+      }
       const kinds = data.noticeKinds || [];
       setNoticeKinds(kinds);
       const regions = data.regionNames || [];
@@ -309,24 +323,53 @@ export function Notices({
     <div className="stack">
       <div className="panel">
         <div className="page-toolbar">
-          <div className="segmented" role="tablist" aria-label="公告进度">
-            {[
-              { id: "", label: "全部" },
-              { id: "ongoing", label: "进行中" },
-              { id: "upcoming", label: "未开始" },
-              { id: "ended", label: "已截止" },
-            ].map((item) => (
-              <button
-                key={item.id || "all"}
-                type="button"
-                className={draft.progress === item.id ? "active" : ""}
-                onClick={() => {
-                  applyQuery({ ...draft, progress: item.id }, 1);
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="page-toolbar-tabs">
+            <div className="segmented" role="tablist" aria-label="公告进度">
+              {[
+                { id: "", label: "全部" },
+                { id: "ongoing", label: "进行中" },
+                { id: "upcoming", label: "未开始" },
+                { id: "ended", label: "已截止" },
+              ].map((item) => (
+                <button
+                  key={item.id || "all"}
+                  type="button"
+                  className={draft.progress === item.id ? "active" : ""}
+                  onClick={() => {
+                    applyQuery({ ...draft, progress: item.id }, 1);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {(draft.progress === "ongoing" || draft.progress === "upcoming") &&
+            sites.some((site) => typeof site.count === "number") ? (
+              <div className="segmented" role="tablist" aria-label="采集平台">
+                <button
+                  type="button"
+                  className={!draft.siteId ? "active" : ""}
+                  onClick={() => {
+                    applyQuery({ ...draft, siteId: "", noticeKinds: [], regionName: "" }, 1);
+                  }}
+                >
+                  全部{siteCountsTotal != null ? ` ${siteCountsTotal}` : ""}
+                </button>
+                {sites.map((site) => (
+                  <button
+                    key={site.id}
+                    type="button"
+                    className={draft.siteId === site.id ? "active" : ""}
+                    onClick={() => {
+                      applyQuery({ ...draft, siteId: site.id, noticeKinds: [], regionName: "" }, 1);
+                    }}
+                  >
+                    {site.label}
+                    {typeof site.count === "number" ? ` ${site.count}` : ""}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="page-toolbar-actions">
             <SearchField
@@ -367,7 +410,7 @@ export function Notices({
                   <option value="">全部站点</option>
                   {sites.map((site) => (
                     <option key={site.id} value={site.id}>
-                      {site.label}
+                      {typeof site.count === "number" ? `${site.label}（${site.count}）` : site.label}
                     </option>
                   ))}
                 </select>

@@ -48,6 +48,8 @@ DEFAULT_NAV_ITEMS = [
     {"id": "nav-item-noticeStats", "viewId": "noticeStats", "label": "公告统计", "categoryKey": "web", "groupKey": "notices", "permission": "notice.stats.view", "iconKey": "BarChart3", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-noticeTags", "viewId": "noticeTags", "label": "标签修正", "categoryKey": "web", "groupKey": "notices", "permission": "notice.tag.view", "iconKey": "BadgeCheck", "sortOrder": 30, "enabled": True},
     {"id": "nav-item-noticeDict", "viewId": "noticeDict", "label": "类型与性质", "categoryKey": "web", "groupKey": "notices", "permission": "notice.orgType.view", "iconKey": "LayoutList", "sortOrder": 40, "enabled": True},
+    {"id": "nav-item-noticeSites", "viewId": "noticeSites", "label": "站点管理", "categoryKey": "system", "groupKey": "system", "permission": "notice.site.view", "iconKey": "Globe", "sortOrder": 22, "enabled": True},
+    {"id": "nav-item-noticeCategoryMap", "viewId": "noticeCategoryMap", "label": "分类映射", "categoryKey": "system", "groupKey": "system", "permission": "notice.categoryMap.view", "iconKey": "LayoutList", "sortOrder": 23, "enabled": True},
     {"id": "nav-item-officialSites", "viewId": "officialSites", "label": "官网站点", "categoryKey": "web", "groupKey": "official", "permission": "site.view", "iconKey": "Globe", "sortOrder": 10, "enabled": True},
     {"id": "nav-item-officialSeo", "viewId": "officialSeo", "label": "SEO配置", "categoryKey": "web", "groupKey": "official", "permission": "site.view", "iconKey": "Search", "sortOrder": 20, "enabled": True},
     {"id": "nav-item-sms", "viewId": "sms", "label": "短信日志", "categoryKey": "system", "groupKey": "logs", "permission": "sms.view", "iconKey": "MessageCircle", "sortOrder": 10, "enabled": True},

@@ -393,6 +393,7 @@ def _ensure_mall_customer_columns() -> None:
             ("idx_signed", "signed"),
             ("idx_origin", "origin"),
             ("idx_legacy_customer_id", "legacy_customer_id"),
+            ("idx_mall_customer_crawled_at", "crawled_at"),
         ):
             if index_name in existing:
                 continue
@@ -517,6 +518,105 @@ def raw_exists(session: Session, site_id: str, notice_key: str) -> bool:
         select(NoticeRaw.id).where(NoticeRaw.site_id == site_id, NoticeRaw.notice_key == notice_key)
     ).scalar_one_or_none()
     return row_id is not None
+
+
+def find_ccgp_raw(
+    session: Session,
+    *,
+    notice_key: str,
+    title: Optional[str] = None,
+    publish_time: Optional[datetime] = None,
+    notice_type: Optional[str] = None,
+) -> Optional["NoticeRaw"]:
+    """山东政采查重：先稳定 notice_key，再兼容旧版不稳定 id hash（按标题+发布时间+类型）。"""
+    row = session.execute(
+        select(NoticeRaw).where(NoticeRaw.site_id == "sd-ccgp", NoticeRaw.notice_key == notice_key)
+    ).scalar_one_or_none()
+    if row is not None:
+        return row
+
+    title_text = (title or "").strip()
+    kind = (notice_type or "").strip()
+    if not title_text or publish_time is None or not kind:
+        return None
+
+    # 标题空白差异：SQL 侧先按发布时间+类型收窄，再在 Python 里归一化比对
+    candidates = session.execute(
+        select(NoticeRaw)
+        .where(
+            NoticeRaw.site_id == "sd-ccgp",
+            NoticeRaw.notice_type == kind,
+            NoticeRaw.publish_time == publish_time,
+        )
+        .order_by(NoticeRaw.id.asc())
+    ).scalars().all()
+    if not candidates:
+        return None
+
+    import re
+
+    needle = re.sub(r"\s+", "", title_text)
+    for item in candidates:
+        if re.sub(r"\s+", "", (item.title or "").strip()) == needle:
+            return item
+    return None
+
+
+_PROJECT_CODE_PATTERNS = (
+    # 标题 【SDGP…】
+    r"【((?:SDGP|SDKJXY|SCJJ|ECJJ|SCDZ)[\w\-]+)】",
+    # 正文 项目编号：SDGP…
+    r"(?:采购)?项目编号\s*[:：]?\s*((?:SDGP|SDKJXY|SCJJ|ECJJ|SCDZ)[\w\-]+)",
+    r"项目(?:采购)?编号\s*[:：]?\s*((?:SDGP|SDKJXY|SCJJ|ECJJ|SCDZ)[\w\-]+)",
+    # 兜底裸编号
+    r"\b((?:SDGP|SDKJXY|SCJJ|ECJJ|SCDZ)[A-Z0-9_\-]{8,})\b",
+)
+
+
+def extract_project_code(*texts: Optional[str]) -> Optional[str]:
+    """从标题/正文抽出政府采购项目编号。"""
+    import re
+
+    for raw in texts:
+        blob = (raw or "").strip()
+        if not blob:
+            continue
+        for pattern in _PROJECT_CODE_PATTERNS:
+            m = re.search(pattern, blob, flags=re.I)
+            if m:
+                return m.group(1).strip()
+    return None
+
+
+def mall_has_project_code(session: Session, project_code: str) -> bool:
+    """网上商城（sd-ggzyjyzx）是否已有同项目编号公告。"""
+    code = (project_code or "").strip()
+    if not code:
+        return False
+    found = session.execute(
+        select(NoticeParsed.id)
+        .join(NoticeRaw, NoticeRaw.id == NoticeParsed.notice_raw_id)
+        .where(
+            NoticeRaw.site_id == "sd-ggzyjyzx",
+            NoticeParsed.project_code == code,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if found is not None:
+        return True
+    # 商城刚入库尚未 parse 时，用标题/正文兜底
+    found = session.execute(
+        select(NoticeRaw.id)
+        .where(
+            NoticeRaw.site_id == "sd-ggzyjyzx",
+            or_(
+                NoticeRaw.title.contains(code),
+                NoticeRaw.content_text.contains(code),
+            ),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return found is not None
 
 
 def upsert_raw(
@@ -693,8 +793,11 @@ def backfill_district_from_list_json(*, limit: int | None = None, batch: int = 5
 def exists_mall_customer(session: Session, platform_id: str) -> bool:
     if not platform_id:
         return False
+    # 历史数据可能同 platform_customer_id 多行，只判断是否存在
     row_id = session.execute(
-        select(MallCustomer.id).where(MallCustomer.platform_customer_id == platform_id)
+        select(MallCustomer.id)
+        .where(MallCustomer.platform_customer_id == platform_id)
+        .limit(1)
     ).scalar_one_or_none()
     return row_id is not None
 
@@ -703,7 +806,10 @@ def upsert_mall_customer(session: Session, data: dict) -> MallCustomer:
     name = (data.get("name") or "").strip()
     if not name:
         raise ValueError("缺少公司名称")
-    row = session.execute(select(MallCustomer).where(MallCustomer.name == name)).scalar_one_or_none()
+    # 同名多行时取最早一条做更新，避免 MultipleResultsFound 中断全量抓取
+    row = session.execute(
+        select(MallCustomer).where(MallCustomer.name == name).order_by(MallCustomer.id.asc()).limit(1)
+    ).scalar_one_or_none()
     now = now_shanghai()
     if row is None:
         row = MallCustomer(name=name, crawled_at=now)

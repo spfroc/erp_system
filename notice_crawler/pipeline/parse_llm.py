@@ -17,6 +17,7 @@ from utils import (
     START_TIME_KEYS,
     extract_district_name,
     extract_time_window,
+    html_to_text,
     normalize_region_name,
     pick_time_value,
 )
@@ -79,13 +80,14 @@ SYSTEM_PROMPT = """你是政府采购公告信息抽取助手。
 金额、单价、数量输出纯数字（可带小数），不要货币符号和千分位。
 时间统一为 YYYY-MM-DD HH:MM:SS；若只有日期则 YYYY-MM-DD。
 goods 必须是数组：有几条产品就输出几条，不要合并。
+竞价公告、采购公告尚未产生成交结果：deal_supplier / deal_supplier_phone / deal_supplier_address 必须填 null，不要从正文套话误抽。
 必须只输出一个 JSON 对象，不要 Markdown。
 字段说明如下：
 """ + json.dumps(PARSE_SCHEMA_HINT, ensure_ascii=False, indent=2)
 
 
-# 与 heuristic.MAX_SANE_AMOUNT 对齐：过大金额多为账号/税号误抽
-_MAX_SANE_AMOUNT = Decimal("1000000000")  # 10亿
+# 意向公开工程类预算可达数十亿；再大更可能是误抽
+_MAX_SANE_AMOUNT = Decimal("10000000000")  # 100亿
 
 
 def _to_decimal(v: Any) -> Optional[Decimal]:
@@ -98,9 +100,10 @@ def _to_decimal(v: Any) -> Optional[Decimal]:
         return None
     if amount < 0 or amount > _MAX_SANE_AMOUNT:
         return None
+    # 账号/税号多为 8～12 位且不以 000 结尾的“不规则”整数；万元换算金额通常以 000 结尾
     if amount >= Decimal("1000000") and amount == amount.to_integral_value():
         digits = len(str(int(amount)))
-        if digits >= 8:
+        if 8 <= digits <= 12 and not str(int(amount)).endswith("000"):
             return None
     return amount
 
@@ -195,6 +198,35 @@ def extract_fields(
             detail=detail,
             list_item=list_item,
         )
+    # 山东政府采购网意向公开 / 采购需求公示：专用表格规则
+    if site_id == "sd-ccgp":
+        from pipeline.extractors.sd_ccgp_intention import extract_ccgp_intention, looks_like_intention
+
+        notice_type = str(
+            (list_item or {}).get("noticeType")
+            or (list_item or {}).get("colCode")
+            or (detail or {}).get("noticeType")
+            or ""
+        )
+        if looks_like_intention(
+            title=title or "",
+            text=text or "",
+            notice_type=notice_type,
+            list_item=list_item,
+        ):
+            return extract_ccgp_intention(
+                text or "",
+                title=title or "",
+                html=html,
+                list_item=list_item,
+                detail=detail,
+            )
+
+    # 框架协议：正文多为服务/项目/租赁等，规则抽取即可（含 goods 兜底）
+    if site_id == "sd-gpfa-frame":
+        from pipeline.extractors.heuristic import HeuristicExtractor
+
+        return HeuristicExtractor().extract(text or html_to_text(html or ""), title=title)
     # 京东：详情 JSON 结构化映射（对齐 xiaoyihuicai JdBusinessOpportunityService）
     if is_jd_site(site_id):
         from pipeline.extractors.jd_json import extract_jd_json
@@ -227,8 +259,21 @@ def extract_attachment_with_local_model(text: str, title: str = "") -> Dict[str,
         goods_are_placeholder,
         parse_jd_attachment_goods,
     )
+    from pipeline.extractors.mall_attachment import parse_mall_acceptance_goods
 
     body = (text or "").strip()
+    mall_goods = normalize_goods(parse_mall_acceptance_goods(body))
+    # 商城采购清单：一行也有效（常见单标的服务/商品）
+    if mall_goods and not goods_are_placeholder(mall_goods):
+        return {
+            "goods": mall_goods,
+            "extra": {
+                "extractor": "mall_acceptance_table",
+                "table_goods_count": len(mall_goods),
+                "model_goods_count": 0,
+            },
+            "confidence": 0.85,
+        }
     table_goods = normalize_goods(parse_jd_attachment_goods(body))
     # 清单表已够用：跳过本地模型（CPU 上每件要数分钟）
     if len(table_goods) >= 2:
@@ -437,6 +482,8 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
         )
     if not parsed.get("project_name"):
         parsed["project_name"] = _pick(
+            (detail or {}).get("projectName"),
+            (list_item or {}).get("projectName"),
             (detail or {}).get("auctionName"),
             (list_item or {}).get("auctionName"),
             jd_base.get("auctionName"),
@@ -522,10 +569,12 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
     if not parsed.get("buyer_name"):
         parsed["buyer_name"] = _pick(
             (detail or {}).get("buyerName"),
+            (detail or {}).get("orgName"),
             (detail or {}).get("purchaseUnitName"),
             (detail or {}).get("purchaserName"),
             (list_item or {}).get("purchaseUnitName"),
             (list_item or {}).get("buyerName"),
+            (list_item or {}).get("orgName"),
             jd_base.get("purchaseUnitName"),
         )
     if raw.site_id == "sd-ccgp":
@@ -631,31 +680,47 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
         if picked is not None:
             parsed["budget_amount"] = picked
 
-    # 项目编号
+    # 项目编号（勿用 tp:/id: 合成 notice_key 冒充）
+    from pipeline.extractors.sd_ccgp_intention import is_header_noise, is_synthetic_project_code
+
+    if is_synthetic_project_code(parsed.get("project_code")):
+        parsed["project_code"] = None
+    if is_header_noise(parsed.get("project_name")):
+        parsed["project_name"] = None
     if not parsed.get("project_code"):
         if raw.title:
             m = re.search(r"【((?:SDGP|SDKJXY|SCJJ|ECJJ)[\w\-]+)】", raw.title)
             if m:
                 parsed["project_code"] = m.group(1)
         if not parsed.get("project_code"):
-            parsed["project_code"] = _pick(
+            code_candidates = [
+                (detail or {}).get("projectNumber"),
+                (list_item or {}).get("projectNumber"),
                 (list_item or {}).get("projectCode"),
+                (detail or {}).get("projectCode"),
                 (detail or {}).get("noticeCode"),
                 (list_item or {}).get("noticeCode"),
                 (detail or {}).get("auctionNo"),
                 (list_item or {}).get("auctionNo"),
                 jd_base.get("auctionNo"),
                 (list_item or {}).get("noticeGuid"),
-                raw.notice_key,
-            )
+            ]
+            notice_key = str(raw.notice_key or "").strip()
+            if notice_key and not is_synthetic_project_code(notice_key):
+                code_candidates.append(notice_key)
+            parsed["project_code"] = _pick(*code_candidates)
 
     # 公告种类：有站点 noticeType 映射时强制对齐（纠正正文套话误判）
-    nt = str(
-        (detail or {}).get("noticeType")
-        or (list_item or {}).get("noticeType")
-        or raw.notice_type
-        or ""
-    )
+    # 框架协议：列表分类 notice_type 为准（详情 noticeType 可能是内部码，如废标=5）
+    if raw.site_id == "sd-gpfa-frame":
+        nt = str(raw.notice_type or (list_item or {}).get("noticeType") or "")
+    else:
+        nt = str(
+            (detail or {}).get("noticeType")
+            or (list_item or {}).get("noticeType")
+            or raw.notice_type
+            or ""
+        )
     if is_jd_site(raw.site_id):
         jd_kind = {
             "1": "竞价公告",
@@ -729,10 +794,13 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 ),
             )
         elif raw.site_id == "sd-gpfa-frame":
+            # 列表 auction_type=projectType（17 二次竞价 / 33 顺序轮候），勿被详情内部码覆盖
+            pt = str(raw.auction_type or (list_item or {}).get("projectType") or "")
             title = raw.title or ""
-            if "顺序轮候" in title:
+            body = raw.content_text or ""
+            if pt == "33" or "顺序轮候" in title or "顺序轮候" in body:
                 parsed["procurement_mode"] = "顺序轮候"
-            elif "二次竞价" in title or "二次竞价" in (raw.content_text or ""):
+            elif pt == "17" or "二次竞价" in title or "二次竞价" in body:
                 parsed["procurement_mode"] = "二次竞价"
             else:
                 parsed["procurement_mode"] = "框架协议"
@@ -768,10 +836,123 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             if goods:
                 parsed["goods"] = goods
 
+    # 框架协议：服务/项目/租赁/律所等非货品也必须落入 notice_goods
+    if raw.site_id == "sd-gpfa-frame":
+        goods = normalize_goods(parsed.get("goods") or [])
+        if not goods:
+            from pipeline.extractors.heuristic import _infer_gpfa_category
+
+            name = _pick(
+                parsed.get("project_name"),
+                (detail or {}).get("projectName"),
+                parsed.get("notice_title"),
+                raw.title,
+            )
+            if name:
+                goods = [
+                    {
+                        "name": str(name)[:512],
+                        "category": _infer_gpfa_category(
+                            str(name),
+                            "",
+                            " ".join(
+                                x
+                                for x in (
+                                    raw.title,
+                                    raw.content_text,
+                                    parsed.get("notice_kind"),
+                                )
+                                if x
+                            )[:500],
+                        ),
+                        "quantity": 1,
+                        "unit": None,
+                        "brand": None,
+                        "model": None,
+                        "unit_price": None,
+                        "spec": None,
+                        "amount": _pick(parsed.get("deal_amount"), parsed.get("budget_amount")),
+                    }
+                ]
+        parsed["goods"] = goods
+
+    # 意向公开：覆盖误抽表头/合成编号，并回填预算、明细、预计采购月
+    if raw.site_id == "sd-ccgp":
+        from pipeline.extractors.sd_ccgp_intention import (
+            extract_ccgp_intention,
+            is_header_noise,
+            is_synthetic_project_code,
+            looks_like_intention,
+        )
+
+        if looks_like_intention(
+            title=raw.title or "",
+            text=raw.content_text or "",
+            notice_type=str(raw.notice_type or ""),
+            list_item=list_item if isinstance(list_item, dict) else None,
+        ):
+            intention = extract_ccgp_intention(
+                raw.content_text or "",
+                title=raw.title or "",
+                html=raw.content_html,
+                list_item=list_item if isinstance(list_item, dict) else None,
+                detail=detail if isinstance(detail, dict) else None,
+            )
+            parsed["notice_kind"] = "意向公开"
+            if is_synthetic_project_code(parsed.get("project_code")):
+                parsed["project_code"] = None
+            if intention.get("project_code"):
+                parsed["project_code"] = intention.get("project_code")
+            else:
+                parsed["project_code"] = None
+            for key in (
+                "project_name",
+                "buyer_name",
+                "budget_amount",
+                "start_time",
+                "end_time",
+                "region_name",
+            ):
+                val = intention.get(key)
+                if val in (None, "", []):
+                    continue
+                if key == "project_name" and is_header_noise(parsed.get(key)):
+                    parsed[key] = val
+                elif key == "buyer_name" and (
+                    not parsed.get(key)
+                    or is_header_noise(parsed.get(key))
+                    or len(str(parsed.get(key))) < 4
+                ):
+                    parsed[key] = val
+                elif parsed.get(key) in (None, "", []) or key in {
+                    "budget_amount",
+                    "start_time",
+                    "end_time",
+                    "project_name",
+                }:
+                    parsed[key] = val
+            if intention.get("goods"):
+                parsed["goods"] = intention["goods"]
+            if isinstance(intention.get("extra"), dict):
+                extra = parsed.get("extra") if isinstance(parsed.get("extra"), dict) else {}
+                parsed["extra"] = {**extra, **intention["extra"]}
+            # 需求公示等无预计采购月时，用发布时间兜底起止
+            if not _to_dt(parsed.get("start_time")) and raw.publish_time:
+                parsed["start_time"] = raw.publish_time
+            if not _to_dt(parsed.get("end_time")) and _to_dt(parsed.get("start_time")):
+                # 意向公开无明确截止时，默认公开后 30 天
+                start_dt = _to_dt(parsed.get("start_time"))
+                if start_dt:
+                    from datetime import timedelta
+
+                    parsed["end_time"] = start_dt + timedelta(days=30)
+
     if not isinstance(parsed.get("extra"), dict):
         parsed["extra"] = {}
     parsed["extra"]["enriched_from_raw"] = True
-    return parsed
+    from pipeline.extractors.base import strip_deal_supplier_if_pre_result
+
+    return strip_deal_supplier_if_pre_result(parsed)
 
 
 def parsed_row_to_dict(row: NoticeParsed, goods_rows: Optional[list] = None) -> Dict[str, Any]:
@@ -1050,6 +1231,10 @@ def save_parsed(session, raw: NoticeRaw, parsed: Dict[str, Any]) -> NoticeParsed
         raw.district_name = row.district_name
     if row.region_guid and not getattr(raw, "region_guid", None):
         raw.region_guid = str(row.region_guid)[:64]
+    from pipeline.extractors.base import strip_deal_supplier_if_pre_result
+
+    # 落库前再清一次：竞价/采购公告无成交供应商
+    strip_deal_supplier_if_pre_result(parsed)
     row.budget_amount = _to_decimal(parsed.get("budget_amount"))
     row.deal_amount = _to_decimal(parsed.get("deal_amount"))
     row.deal_supplier = parsed.get("deal_supplier")

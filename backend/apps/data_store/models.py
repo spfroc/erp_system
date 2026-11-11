@@ -446,6 +446,13 @@ class UserApiToken(models.Model):
         ]
 
 
+from apps.data_store.notice_site_models import (  # noqa: E402,F401
+    NoticeCategoryMap,
+    NoticeCategoryOptionLink,
+    NoticeCrawlSite,
+    NoticeMappedCategory,
+    NoticeSiteOption,
+)
 from apps.data_store.notice_tag_models import (  # noqa: E402,F401
     NoticeBuyerProfile,
     NoticeDictItem,

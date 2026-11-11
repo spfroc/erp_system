@@ -5,6 +5,7 @@ import hashlib
 import random
 import re
 import time
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import quote, urlencode
 
@@ -390,9 +391,66 @@ class SdCcgpClient:
 
     @staticmethod
     def notice_key(notice_id: str) -> str:
-        """列表 id 为长加密串，入库用 sha256，原文保留在 list_json.id。"""
+        """旧版：列表加密 id 的 sha256。已不稳定，仅兼容历史数据。"""
         raw = (notice_id or "").strip()
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def normalize_title(title: Any) -> str:
+        """去空白后的标题，用于稳定指纹。"""
+        return re.sub(r"\s+", "", str(title or "").strip())
+
+    @staticmethod
+    def format_publish_stamp(value: Any) -> str:
+        """发布时间压成秒级字符串；无法解析则返回空。"""
+        if value is None or value == "":
+            return ""
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value).strip().replace("T", " ")
+            dt = None
+            for fmt, n in (
+                ("%Y-%m-%d %H:%M:%S", 19),
+                ("%Y/%m/%d %H:%M:%S", 19),
+                ("%Y-%m-%d %H:%M", 16),
+                ("%Y/%m/%d %H:%M", 16),
+                ("%Y-%m-%d", 10),
+                ("%Y/%m/%d", 10),
+            ):
+                try:
+                    dt = datetime.strptime(text[:n], fmt)
+                    break
+                except ValueError:
+                    continue
+            if dt is None:
+                return ""
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    @classmethod
+    def stable_notice_key(
+        cls,
+        *,
+        title: Any,
+        publish_time: Any,
+        notice_type: Any,
+        notice_id: Optional[str] = None,
+    ) -> str:
+        """稳定去重键：标题 + 发布时间 + 栏目类型。
+
+        省平台列表加密 id 会轮换，不能再当主键。列表阶段就能拿到 title/date/colCode。
+        缺标题或时间时回退到旧版 id hash（避免空键撞车）。
+        """
+        title_n = cls.normalize_title(title)
+        stamp = cls.format_publish_stamp(publish_time)
+        kind = str(notice_type or "").strip()
+        if title_n and stamp:
+            raw = f"{title_n}|{stamp}|{kind}"
+            return "tp:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if notice_id:
+            return "id:" + cls.notice_key(notice_id)
+        raw = f"{title_n}|{stamp}|{kind}|{notice_id or ''}"
+        return "tp:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     @staticmethod
     def notice_detail_url(notice_id: str, col_code: str, *, old_data: Any = 0) -> str:

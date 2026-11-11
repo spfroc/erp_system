@@ -142,9 +142,18 @@ function buildProjectFlow(detail: NoticeDetail): NoticeListItem[] {
       return true;
     })
     .sort((a, b) => {
+      // 从早到晚；无发布时间的排到最后
+      const at = String(a.publishTime || "").trim();
+      const bt = String(b.publishTime || "").trim();
+      if (at && bt) {
+        const timeDiff = at.localeCompare(bt);
+        if (timeDiff !== 0) return timeDiff;
+      } else if (at !== bt) {
+        return at ? -1 : 1;
+      }
       const kindDiff = noticeFlowKindRank(a.noticeKind) - noticeFlowKindRank(b.noticeKind);
       if (kindDiff !== 0) return kindDiff;
-      return String(a.publishTime || "").localeCompare(String(b.publishTime || ""));
+      return a.id - b.id;
     });
 }
 
@@ -187,7 +196,7 @@ function ProjectNoticeFlow({
         <h4>项目公告流程</h4>
         <span>
           {detail.projectCode ? `编号 ${detail.projectCode} · ` : ""}
-          按竞价 → 成交 / 失败 / 终止串联，点击节点切换详情
+          按发布时间从早到晚，点击节点切换详情
         </span>
       </div>
       <ol className="notice-flow-track">

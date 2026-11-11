@@ -11,13 +11,28 @@ from clients.sd_ccgp import SITE_ID as CCGP_SITE
 from clients.sd_ccgp import SdCcgpClient, decode_notice_body
 from clients.sd_mall import SITE_ID as MALL_SITE
 from clients.sd_mall import SdMallClient, is_connection_failure
+from clients.sd_gpfa import SITE_ID as GPFA_SITE
+from clients.sd_gpfa import SdGpfaClient
+from clients.sd_gpfa import is_connection_failure as is_gpfa_connection_failure
 from sqlalchemy import select
 
-from db import NoticeRaw, _ensure_notice_key_width, get_session, raw_exists, save_cursor, upsert_raw
+from db import (
+    NoticeRaw,
+    _ensure_notice_key_width,
+    dumps,
+    extract_project_code,
+    find_ccgp_raw,
+    get_session,
+    mall_has_project_code,
+    raw_exists,
+    save_cursor,
+    upsert_raw,
+)
 from pipeline.attachments import (
     ingest_attachments,
     parse_attachments,
     sync_missing_jd_attachments,
+    sync_missing_mall_attachments,
 )
 from pipeline.parse_llm import enrich_from_raw, extract_fields, save_parsed
 from utils import extract_district_name, html_to_text, normalize_region_name, parse_dt
@@ -214,6 +229,7 @@ def crawl_sd_mall(
                         if with_detail:
                             try:
                                 detail = client.get_detail(notice_guid)
+                                detail = client.merge_except_gd(notice_guid, detail)
                                 html = detail.get("content") or ""
                                 text = html_to_text(html)
                                 raw = upsert_raw(
@@ -224,6 +240,11 @@ def crawl_sd_mall(
                                     content_html=html,
                                     content_text=text,
                                     title=detail.get("title") or item.get("title"),
+                                    auction_type=str(
+                                        detail.get("projectType")
+                                        if detail.get("projectType") not in (None, "")
+                                        else project_type
+                                    ),
                                     crawl_status="detail_ok",
                                 )
                                 try:
@@ -231,7 +252,17 @@ def crawl_sd_mall(
                                 except Exception as exc:  # noqa: BLE001
                                     raw.parse_status = "parse_fail"
                                     raw.error_message = str(exc)[:1000]
+                                files = client.extract_attachments(detail)
                                 session.commit()
+                                if files:
+                                    raw = session.execute(
+                                        select(NoticeRaw).where(
+                                            NoticeRaw.site_id == MALL_SITE,
+                                            NoticeRaw.notice_key == notice_guid,
+                                        )
+                                    ).scalar_one()
+                                    ingest_attachments(session, raw, files)
+                                    session.commit()
                             except Exception as exc:  # noqa: BLE001
                                 session.rollback()
                                 upsert_raw(
@@ -251,6 +282,206 @@ def crawl_sd_mall(
                     page += 1
             finally:
                 pbar.close()
+    finally:
+        session.close()
+
+    if with_detail:
+        import os
+
+        limit = int(os.getenv("CRAWL_ATT_LIMIT", "100") or "100")
+        synced = sync_missing_mall_attachments(limit=max(limit, 1), use_llm=False)
+        if synced:
+            tqdm.write(f"商城历史采购清单已补下载 {synced} 个")
+        flag = (os.getenv("CRAWL_PARSE_ATT") or "0").strip().lower()
+        if flag in {"1", "true", "yes", "on"}:
+            parsed_n = parse_attachments(
+                limit=max(limit, 1), site_id=MALL_SITE, use_llm=True
+            )
+            if parsed_n:
+                tqdm.write(f"商城采购清单本地模型已解析 {parsed_n} 个")
+
+
+def _gpfa_wait_proxy(client: SdGpfaClient, *, rounds: int = 3) -> bool:
+    for i in range(1, rounds + 1):
+        try:
+            client.probe()
+            if i > 1:
+                tqdm.write(f"{GPFA_SITE} 代理探活成功（第 {i} 次）")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            wait = min(180.0, 30.0 * i)
+            tqdm.write(f"{GPFA_SITE} 代理探活失败 {i}/{rounds}：{exc}；{wait:.0f}s 后重试")
+            client.reset_session()
+            time.sleep(wait)
+    return False
+
+
+def crawl_sd_gpfa(
+    *,
+    max_pages: Optional[int] = None,
+    page_size: int = 50,
+    with_detail: bool = True,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    stop_dup: Optional[int] = None,
+    max_items: Optional[int] = 100,
+) -> None:
+    """框架协议专区：采购公告 / 成交结果单笔 / 终止公告；每类默认最多 100 条。"""
+    start_day = _as_day(start_date)
+    end_day = _as_day(end_date)
+    client = SdGpfaClient()
+    if not _gpfa_wait_proxy(client):
+        tqdm.write(f"{GPFA_SITE} 代理不可用，跳过本轮框架协议采集")
+        return
+    session = get_session()
+    conn_skip_streak = 0
+    item_cap = max_items if max_items and max_items > 0 else None
+    try:
+        for project_type, notice_type, label in client.iter_categories():
+            if conn_skip_streak >= 3:
+                tqdm.write(f"{GPFA_SITE} 连续 {conn_skip_streak} 类因连接失败跳过，中止本轮剩余类别")
+                break
+            cursor_key = f"{project_type}:{notice_type}"
+            page = 1
+            total_pages = None
+            fetched = 0
+            dup = _DupStop(stop_dup)
+            stop_category = False
+            page1_retries = 0
+            pbar = tqdm(desc=f"{GPFA_SITE}/{label}", unit="page")
+            try:
+                while True:
+                    if max_pages and page > max_pages:
+                        break
+                    if item_cap is not None and fetched >= item_cap:
+                        break
+                    try:
+                        data = client.list_notices(
+                            project_type=project_type,
+                            notice_type=notice_type,
+                            page_num=page,
+                            page_size=page_size,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        if page == 1 and is_gpfa_connection_failure(exc) and page1_retries < 2:
+                            page1_retries += 1
+                            wait = 45.0 * page1_retries
+                            tqdm.write(
+                                f"{GPFA_SITE}/{label} 第 1 页连接失败，"
+                                f"{wait:.0f}s 后重试该类 ({page1_retries}/2)：{exc}"
+                            )
+                            client.reset_session()
+                            time.sleep(wait)
+                            continue
+                        tqdm.write(f"{GPFA_SITE}/{label} 第 {page} 页列表失败，跳过该类：{exc}")
+                        if is_gpfa_connection_failure(exc):
+                            conn_skip_streak += 1
+                        else:
+                            conn_skip_streak = 0
+                        break
+                    conn_skip_streak = 0
+                    items = client.list_items(data)
+                    total = int(data.get("total") or 0)
+                    if total_pages is None:
+                        total_pages = max(1, (total + page_size - 1) // page_size) if total else 1
+                        pbar.total = min(total_pages, max_pages or total_pages)
+
+                    for item in items:
+                        if item_cap is not None and fetched >= item_cap:
+                            stop_category = True
+                            break
+                        notice_guid = str(item.get("noticeGuid") or "").strip()
+                        if not notice_guid:
+                            continue
+                        published = _day_of(item.get("publishTime") or item.get("createDate"))
+                        if start_day and published and published < start_day:
+                            stop_category = True
+                            tqdm.write(f"{label} 早于 {start_day.isoformat()}，停止该类")
+                            break
+                        if end_day and published and published > end_day:
+                            continue
+                        if dup.hit(raw_exists(session, GPFA_SITE, notice_guid)):
+                            stop_category = True
+                            tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
+                            break
+                        if dup.streak:
+                            continue
+                        fetched += 1
+                        raw_region = item.get("regionFullName") or item.get("regionName")
+                        upsert_raw(
+                            session,
+                            site_id=GPFA_SITE,
+                            notice_key=notice_guid,
+                            auction_type=str(project_type),
+                            notice_type=str(notice_type),
+                            title=item.get("title"),
+                            region_name=normalize_region_name(GPFA_SITE, raw_region),
+                            district_name=extract_district_name(raw_region),
+                            region_guid=item.get("regionGuid"),
+                            publish_time=parse_dt(item.get("publishTime") or item.get("createDate")),
+                            list_json=item,
+                            source_url=client.notice_detail_url(notice_guid),
+                            crawl_status="list_only",
+                        )
+                        session.commit()
+                        if with_detail:
+                            try:
+                                detail = client.get_detail(notice_guid)
+                                html = detail.get("content") or ""
+                                text = html_to_text(html)
+                                raw = upsert_raw(
+                                    session,
+                                    site_id=GPFA_SITE,
+                                    notice_key=notice_guid,
+                                    detail_json=detail,
+                                    content_html=html,
+                                    content_text=text,
+                                    title=detail.get("title") or item.get("title"),
+                                    region_name=normalize_region_name(
+                                        GPFA_SITE,
+                                        detail.get("regionFullName")
+                                        or detail.get("regionName")
+                                        or raw_region,
+                                    ),
+                                    district_name=extract_district_name(
+                                        detail.get("regionFullName")
+                                        or detail.get("regionName")
+                                        or raw_region
+                                    ),
+                                    region_guid=detail.get("regionGuid") or item.get("regionGuid"),
+                                    publish_time=parse_dt(
+                                        detail.get("publishTime")
+                                        or detail.get("createDate")
+                                        or item.get("publishTime")
+                                    ),
+                                    crawl_status="detail_ok",
+                                )
+                                try:
+                                    _parse_after_detail(session, raw, html=html, text=text)
+                                except Exception as exc:  # noqa: BLE001
+                                    raw.parse_status = "parse_fail"
+                                    raw.error_message = str(exc)[:1000]
+                                session.commit()
+                            except Exception as exc:  # noqa: BLE001
+                                session.rollback()
+                                upsert_raw(
+                                    session,
+                                    site_id=GPFA_SITE,
+                                    notice_key=notice_guid,
+                                    crawl_status="detail_fail",
+                                    error_message=str(exc),
+                                )
+                                session.commit()
+
+                    save_cursor(session, GPFA_SITE, cursor_key, page, total)
+                    session.commit()
+                    pbar.update(1)
+                    if stop_category or page >= total_pages or not items:
+                        break
+                    page += 1
+            finally:
+                pbar.close()
+                tqdm.write(f"{GPFA_SITE}/{label} 本轮处理 {fetched} 条")
     finally:
         session.close()
 
@@ -388,21 +619,124 @@ def crawl_sd_ccgp(
                     notice_id = str(item.get("id") or "").strip()
                     if not notice_id:
                         continue
-                    notice_key = client.notice_key(notice_id)
                     item_col = str(item.get("colCode") or col_code)
-                    published = _day_of(item.get("date") or item.get("publishTime"))
+                    publish_dt = parse_dt(item.get("date") or item.get("publishTime"))
+                    published = _day_of(publish_dt or item.get("date") or item.get("publishTime"))
+                    # 列表加密 id 会轮换；稳定键 = 标题 + 发布时间 + 栏目类型
+                    notice_key = client.stable_notice_key(
+                        title=item.get("title"),
+                        publish_time=publish_dt or item.get("date") or item.get("publishTime"),
+                        notice_type=canonical,
+                        notice_id=notice_id,
+                    )
                     if start_day and published and published < start_day:
                         stop_category = True
                         tqdm.write(f"{label} 早于 {start_day.isoformat()}，停止该类")
                         break
                     if end_day and published and published > end_day:
                         continue
-                    if dup.hit(raw_exists(session, CCGP_SITE, notice_key)):
-                        stop_category = True
-                        tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
-                        break
-                    if dup.streak:
+                    existing = find_ccgp_raw(
+                        session,
+                        notice_key=notice_key,
+                        title=item.get("title"),
+                        publish_time=publish_dt,
+                        notice_type=canonical,
+                    )
+                    if existing is not None:
+                        # 旧数据仍是 id-hash 键时，顺带迁到稳定键，便于后续 raw_exists
+                        if existing.notice_key != notice_key:
+                            clash = session.execute(
+                                select(NoticeRaw.id).where(
+                                    NoticeRaw.site_id == CCGP_SITE,
+                                    NoticeRaw.notice_key == notice_key,
+                                    NoticeRaw.id != existing.id,
+                                )
+                            ).scalar_one_or_none()
+                            if clash is None:
+                                existing.notice_key = notice_key
+                        existing.list_json = dumps(item)
+                        existing.source_url = client.notice_detail_url(
+                            notice_id, item_col, old_data=item.get("oldData")
+                        )
+                        session.commit()
+                        if dup.hit(True):
+                            stop_category = True
+                            tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
+                            break
                         continue
+                    # 新公告：重置连续重复计数
+                    dup.hit(False)
+
+                    publisher = str(
+                        item.get("userName") or item.get("publisher") or ""
+                    ).strip()
+                    # 发布人=网上商城：多为商城镜像；商城已有同项目编号则不再入库
+                    skip_mall_mirror = False
+                    prefetched_detail = None
+                    prefetched_html = ""
+                    prefetched_text = ""
+                    if publisher == "网上商城" and with_detail:
+                        try:
+                            prefetched_detail = client.get_detail(
+                                notice_id,
+                                item_col,
+                                old_data=item.get("oldData"),
+                            )
+                            prefetched_html = decode_notice_body(
+                                (prefetched_detail or {}).get("body") or ""
+                            )
+                            if (
+                                (prefetched_detail or {}).get("existNoticeBody")
+                                and len(prefetched_html) < 40
+                            ):
+                                try:
+                                    body_extra = client.get_notice_body(
+                                        notice_id, item_col
+                                    )
+                                    extra_html = decode_notice_body(
+                                        body_extra.get("body")
+                                        or body_extra.get("content")
+                                        or body_extra.get("value")
+                                        or ""
+                                    )
+                                    if extra_html:
+                                        prefetched_html = extra_html
+                                        prefetched_detail = {
+                                            **prefetched_detail,
+                                            "noticeBody": body_extra,
+                                        }
+                                except Exception:  # noqa: BLE001
+                                    pass
+                            if isinstance(prefetched_detail, dict):
+                                prefetched_detail = {
+                                    **prefetched_detail,
+                                    "body": prefetched_html,
+                                }
+                            prefetched_text = html_to_text(prefetched_html)
+                            code = extract_project_code(
+                                item.get("title"),
+                                (prefetched_detail or {}).get("title"),
+                                prefetched_text,
+                                prefetched_html,
+                            )
+                            if code and mall_has_project_code(session, code):
+                                skip_mall_mirror = True
+                        except Exception as exc:  # noqa: BLE001
+                            tqdm.write(
+                                f"{label} 网上商城镜像预检失败，按普通公告处理："
+                                f"{(item.get('title') or '')[:40]} {exc}"
+                            )
+                            prefetched_detail = None
+
+                    if skip_mall_mirror:
+                        if dup.hit(True):
+                            stop_category = True
+                            tqdm.write(
+                                f"{label} 连续重复 {dup.limit} 条（含网上商城已镜像），停止该类"
+                            )
+                            break
+                        continue
+
                     region_name, district_name, region_guid = _ccgp_region_fields(item)
                     upsert_raw(
                         session,
@@ -414,7 +748,7 @@ def crawl_sd_ccgp(
                         region_name=region_name,
                         district_name=district_name,
                         region_guid=region_guid,
-                        publish_time=parse_dt(item.get("date") or item.get("publishTime")),
+                        publish_time=publish_dt,
                         list_json=item,
                         source_url=client.notice_detail_url(
                             notice_id, item_col, old_data=item.get("oldData")
@@ -424,29 +758,75 @@ def crawl_sd_ccgp(
                     session.commit()
                     if with_detail:
                         try:
-                            detail = client.get_detail(
-                                notice_id,
-                                item_col,
-                                old_data=item.get("oldData"),
-                            )
-                            html = decode_notice_body(detail.get("body") or "")
-                            if detail.get("existNoticeBody") and len(html) < 40:
-                                try:
-                                    body_extra = client.get_notice_body(notice_id, item_col)
-                                    extra_html = decode_notice_body(
-                                        body_extra.get("body")
-                                        or body_extra.get("content")
-                                        or body_extra.get("value")
-                                        or ""
-                                    )
-                                    if extra_html:
-                                        html = extra_html
-                                        detail = {**detail, "noticeBody": body_extra}
-                                except Exception:  # noqa: BLE001
-                                    pass
-                            if isinstance(detail, dict):
-                                detail = {**detail, "body": html}
-                            text = html_to_text(html)
+                            if prefetched_detail is not None:
+                                detail = prefetched_detail
+                                html = prefetched_html
+                                text = prefetched_text
+                            else:
+                                detail = client.get_detail(
+                                    notice_id,
+                                    item_col,
+                                    old_data=item.get("oldData"),
+                                )
+                                html = decode_notice_body(detail.get("body") or "")
+                                if detail.get("existNoticeBody") and len(html) < 40:
+                                    try:
+                                        body_extra = client.get_notice_body(
+                                            notice_id, item_col
+                                        )
+                                        extra_html = decode_notice_body(
+                                            body_extra.get("body")
+                                            or body_extra.get("content")
+                                            or body_extra.get("value")
+                                            or ""
+                                        )
+                                        if extra_html:
+                                            html = extra_html
+                                            detail = {
+                                                **detail,
+                                                "noticeBody": body_extra,
+                                            }
+                                    except Exception:  # noqa: BLE001
+                                        pass
+                                if isinstance(detail, dict):
+                                    detail = {**detail, "body": html}
+                                text = html_to_text(html)
+                            # 列表未标发布人时，详情也可能是网上商城镜像
+                            detail_publisher = str(
+                                (detail or {}).get("userName")
+                                or (detail or {}).get("publisher")
+                                or publisher
+                                or ""
+                            ).strip()
+                            if detail_publisher == "网上商城":
+                                code = extract_project_code(
+                                    item.get("title"),
+                                    (detail or {}).get("title"),
+                                    text,
+                                    html,
+                                )
+                                if code and mall_has_project_code(session, code):
+                                    session.rollback()
+                                    orphan = session.execute(
+                                        select(NoticeRaw).where(
+                                            NoticeRaw.site_id == CCGP_SITE,
+                                            NoticeRaw.notice_key == notice_key,
+                                        )
+                                    ).scalar_one_or_none()
+                                    if orphan is not None and orphan.crawl_status in (
+                                        "list_only",
+                                        "detail_fail",
+                                    ):
+                                        session.delete(orphan)
+                                        session.commit()
+                                    if dup.hit(True):
+                                        stop_category = True
+                                        tqdm.write(
+                                            f"{label} 连续重复 {dup.limit} 条"
+                                            f"（含网上商城已镜像），停止该类"
+                                        )
+                                        break
+                                    continue
                             raw = upsert_raw(
                                 session,
                                 site_id=CCGP_SITE,
