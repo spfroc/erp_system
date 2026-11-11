@@ -794,13 +794,15 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 ),
             )
         elif raw.site_id == "sd-gpfa-frame":
-            # 列表 auction_type=projectType（17 二次竞价 / 33 顺序轮候），勿被详情内部码覆盖
+            # 列表 auction_type=projectType：17/35 二次竞价，31/32 直接选定，33 顺序轮候
             pt = str(raw.auction_type or (list_item or {}).get("projectType") or "")
             title = raw.title or ""
             body = raw.content_text or ""
-            if pt == "33" or "顺序轮候" in title or "顺序轮候" in body:
+            if pt in {"31", "32"} or "直接选定" in title or "直接选定" in body[:300]:
+                parsed["procurement_mode"] = "直接选定"
+            elif pt == "33" or "顺序轮候" in title or "顺序轮候" in body[:300]:
                 parsed["procurement_mode"] = "顺序轮候"
-            elif pt == "17" or "二次竞价" in title or "二次竞价" in body:
+            elif pt in {"17", "35"} or "二次竞价" in title or "二次竞价" in body[:300]:
                 parsed["procurement_mode"] = "二次竞价"
             else:
                 parsed["procurement_mode"] = "框架协议"
@@ -836,10 +838,11 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             if goods:
                 parsed["goods"] = goods
 
-    # 框架协议：服务/项目/租赁/律所等非货品也必须落入 notice_goods
+    # 框架协议：服务/项目/租赁/律所等非货品也必须落入 notice_goods（终止/废标除外）
     if raw.site_id == "sd-gpfa-frame":
         goods = normalize_goods(parsed.get("goods") or [])
-        if not goods:
+        kind = str(parsed.get("notice_kind") or "")
+        if not goods and kind not in {"终止公告", "废标公告"}:
             from pipeline.extractors.heuristic import _infer_gpfa_category
 
             name = _pick(

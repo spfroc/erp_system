@@ -95,6 +95,25 @@ def _label_value(labels: List[str], text: str) -> Optional[str]:
 def _extract_gpfa_deal(text: str) -> Dict[str, Any]:
     """框架协议结果公告：成交供应商表头在上一行，值在后续行。"""
     out: Dict[str, Any] = {}
+    # 直接选定成交：成交供应商名称 / 项目成交金额
+    name = _label_value(["成交供应商名称"], text)
+    if name and not name.startswith("地址"):
+        out["deal_supplier"] = name[:256]
+    addr = _label_value(["成交供应商地址"], text)
+    if addr:
+        out["deal_supplier_address"] = re.sub(r"\s+", " ", addr.replace("_", ""))[:512]
+    amount = _money(
+        [
+            r"项目成交金额\s*[:：]?\s*\n?\s*￥?\s*([0-9,.]+)\s*元?",
+            r"成交金额\s*[（(]?元[)）]?\s*[:：]?\s*\n?\s*￥?\s*([0-9,.]+)",
+        ],
+        text,
+    )
+    if amount is not None:
+        out["deal_amount"] = amount
+    if out.get("deal_supplier") and out.get("deal_amount") is not None:
+        return out
+
     m = re.search(
         r"二、成交供应商\s+"
         r"成交供应商\s+"
@@ -126,6 +145,112 @@ def _extract_gpfa_deal(text: str) -> Dict[str, Any]:
     return out
 
 
+def _extract_gpfa_direct_goods(text: str) -> List[Dict[str, Any]]:
+    """直接选定结果公告：成交标的表（产品名称/技术规格/数量/单价/金额）。"""
+    m = re.search(
+        r"(?:四、成交标的|成交标的)\s*([\s\S]+?)(?=\n五、|\n公告期限|\n合计\b|$)",
+        text,
+    )
+    if not m:
+        return []
+    section = m.group(1)
+    section = re.sub(
+        r"^\s*产品名称\s*\n?\s*技术规格\s*\n?\s*数量\s*\n?\s*单价[^\n]*\s*\n?\s*金额[^\n]*\s*",
+        "",
+        section,
+        count=1,
+    )
+    goods: List[Dict[str, Any]] = []
+    for row in re.finditer(
+        r"(?m)^([^\n￥合计][^\n]{0,120})\n"
+        r"([\s\S]*?)\n"
+        r"([0-9]+(?:\.[0-9]+)?)\n"
+        r"￥?\s*([0-9,.]+)\n"
+        r"￥?\s*([0-9,.]+)",
+        section,
+    ):
+        name = re.sub(r"\s+", " ", row.group(1).strip())
+        if not name or name in {"产品名称", "技术规格", "数量"}:
+            continue
+        spec = re.sub(r"\s+", " ", (row.group(2) or "").strip())
+        quantity = _num(row.group(3))
+        unit_price = _sane_amount(_num(row.group(4)))
+        amount = _sane_amount(_num(row.group(5)))
+        brand = None
+        model = None
+        if "/" in spec:
+            brand = spec.split("/", 1)[0].strip()[:64] or None
+        goods.append(
+            {
+                "name": name[:512],
+                "category": _infer_gpfa_category(name, spec, "货物"),
+                "quantity": quantity if quantity is not None else 1,
+                "unit": None,
+                "brand": brand,
+                "model": model,
+                "spec": spec[:1024] if spec else None,
+                "unit_price": unit_price,
+                "amount": amount,
+            }
+        )
+        if len(goods) >= 40:
+            break
+    return goods
+
+
+def _extract_gpfa_service_goods(text: str) -> List[Dict[str, Any]]:
+    """直接选定服务类结果：采购包/服务内容 + 成交金额。"""
+    name = _label_value(
+        ["框架协议合同授予阶段采购包名称", "服务分项名称", "服务内容"],
+        text,
+    )
+    if not name or name.startswith("车辆"):
+        name = _label_value(["框架协议合同授予阶段项目名称", "项目名称"], text)
+    if not name:
+        return []
+    amount = _money(
+        [
+            r"项目成交金额\s*[:：]?\s*\n?\s*￥?\s*([0-9,.]+)\s*元?",
+            r"单车小计\s*[（(]?元[)）]?\s*[:：]?\s*\n?\s*([0-9,.]+)",
+            r"成交金额\s*[（(]?元[)）]?\s*[:：]?\s*\n?\s*￥?\s*([0-9,.]+)",
+        ],
+        text,
+    )
+    return [
+        {
+            "name": name[:512],
+            "category": _infer_gpfa_category(name, "", text[:400]),
+            "quantity": 1,
+            "unit": None,
+            "brand": None,
+            "model": None,
+            "spec": None,
+            "unit_price": amount,
+            "amount": amount,
+        }
+    ]
+
+
+def _extract_gpfa_terminate(text: str) -> Dict[str, Any]:
+    """直接选定/二次竞价终止公告短文。"""
+    out: Dict[str, Any] = {}
+    out["project_name"] = _label_value(["项目名称"], text) or _first(
+        [r"项目名称[:：]\s*([^\n\r]+)"], text, flags=re.M
+    )
+    out["project_code"] = _label_value(["项目编号"], text) or _first(
+        [r"项目编号[:：]\s*([A-Za-z0-9\-_/]+)"], text, flags=re.M
+    )
+    out["buyer_name"] = _label_value(["采购单位", "采购人名称"], text) or _first(
+        [r"采购单位[:：]\s*([^\n\r]+)", r"采购人名称[:：]\s*([^\n\r]+)"],
+        text,
+        flags=re.M,
+    )
+    reason = _first([r"现因【([^】]+)】"], text)
+    if reason:
+        out["extra"] = {"terminate_reason": reason[:256]}
+    return out
+
+
 def _infer_gpfa_category(name: str, spec: str = "", context: str = "") -> str:
     """服务/工程/租赁/律所等非货品也归到产品分类。"""
     blob = f"{name} {spec} {context}"
@@ -140,6 +265,51 @@ def _infer_gpfa_category(name: str, spec: str = "", context: str = "") -> str:
         if any(k in blob for k in keys):
             return label
     return "服务"
+
+
+def _extract_gpfa_bid_goods(text: str) -> List[Dict[str, Any]]:
+    """二次竞价采购公告：标的物表格（序号/采购标的/规格/数量/最高限价）。"""
+    m = re.search(
+        r"标的物信息\s*([\s\S]+?)(?=\n耗材配件信息|\n二、|\n申请人的资格|$)",
+        text,
+    )
+    if not m:
+        return []
+    section = m.group(1)
+    goods: List[Dict[str, Any]] = []
+    for row in re.finditer(
+        r"(?m)^(\d+)\n"
+        r"([^\n]{1,200})\n"
+        r"([\s\S]*?)\n"
+        r"([0-9]+(?:\.[0-9]+)?)\s*[（(]?([^)）\n]*)[)）]?\n"
+        r"([0-9,.]+)",
+        section,
+    ):
+        name = re.sub(r"\s+", " ", row.group(2).strip())
+        if not name or name in {"采购标的", "规格型号"}:
+            continue
+        spec = re.sub(r"\s+", " ", (row.group(3) or "").strip())
+        quantity = _num(row.group(4))
+        unit = (row.group(5) or "").strip() or None
+        if unit:
+            unit = re.sub(r"^[（(]|[)）]$", "", unit).strip() or None
+        price = _sane_amount(_num(row.group(6)))
+        goods.append(
+            {
+                "name": name[:512],
+                "category": _infer_gpfa_category(name, spec, "货物"),
+                "quantity": quantity if quantity is not None else 1,
+                "unit": unit[:64] if unit else None,
+                "brand": None,
+                "model": None,
+                "spec": spec[:1024] if spec else None,
+                "unit_price": price,
+                "amount": price,
+            }
+        )
+        if len(goods) >= 40:
+            break
+    return goods
 
 
 def _extract_gpfa_goods(text: str) -> List[Dict[str, Any]]:
@@ -404,7 +574,10 @@ class HeuristicExtractor(BaseExtractor):
         out["notice_title"] = title or None
         # 标题里的【SDGP…】通常是本次采购包编号，优先于框架协议总编号
         title_code = _first([r"【((?:SDGP|SDKJXY|SCJJ|ECJJ)[\w\-]+)】"], title or "")
-        out["project_code"] = title_code or _first(
+        out["project_code"] = title_code or _label_value(
+            ["框架协议合同授予阶段项目编号", "框架协议项目编号", "项目编号"],
+            full,
+        ) or _first(
             [
                 r"项目编号[:：]\s*([A-Za-z0-9\-_/]+)",
                 r"框架协议项目编号[:：]?\s*\n?\s*([A-Za-z0-9\-_/]+)",
@@ -420,7 +593,13 @@ class HeuristicExtractor(BaseExtractor):
                 out["project_code"] = m.group(0)
 
         out["project_name"] = _label_value(
-            ["采购包名称", "项目名称", "采购项目名称", "框架协议项目名称"],
+            [
+                "框架协议合同授予阶段项目名称",
+                "采购包名称",
+                "项目名称",
+                "采购项目名称",
+                "框架协议项目名称",
+            ],
             full,
         ) or _first(
             [
@@ -509,8 +688,9 @@ class HeuristicExtractor(BaseExtractor):
             )
         out["deal_amount"] = _money(
             [
+                r"项目成交金额\s*[:：]?\s*\n?\s*￥?\s*([0-9,.]+)\s*元?",
                 r"成交金额\s*[:：]\s*([0-9,.]+)",
-                r"成交金额\s*[（(]?元[)）]?\s*[:：]\s*([0-9,.]+)",
+                r"成交金额\s*[（(]?元[)）]?\s*[:：]?\s*\n?\s*([0-9,.]+)",
                 r"成交总?价\s*[（(]?元[)）]?\s*[:：]?\s*([0-9,.]+)",
                 r"成交供应商报价[:：]\s*([0-9,.]+)",
             ],
@@ -518,6 +698,7 @@ class HeuristicExtractor(BaseExtractor):
         )
         out["deal_supplier"] = _first(
             [
+                r"成交供应商名称\s*[:：]?\s*\n?\s*([^\n\r]+)",
                 r"供应商名称\s*[:：]\s*(.+)",
                 r"(?<![成地])供应商\s*[:：]\s*(.+)",
                 r"成交供应商[:：]\s*(.+)",
@@ -565,16 +746,54 @@ class HeuristicExtractor(BaseExtractor):
             out["deal_supplier"] = gpfa_deal["deal_supplier"]
         if gpfa_deal.get("deal_amount") is not None:
             out["deal_amount"] = _sane_amount(gpfa_deal["deal_amount"])
-        # 废标/终止类公告通常无成交额，避免正文里的账号被误抽
-        if re.search(r"(废标|终止|流标|未成交)", full) and not re.search(
-            r"成交金额\s*[:：]", full
-        ):
-            out["deal_amount"] = None
+        # 直接选定/二次竞价终止短文
+        is_terminate = bool(
+            re.search(r"(废标|终止|流标|未成交)", title or "")
+            or re.search(r"(?:项目)?终止公告|现因【", full[:400])
+        )
+        if is_terminate:
+            term = _extract_gpfa_terminate(full)
+            for key in ("project_name", "project_code", "buyer_name"):
+                if term.get(key) and not out.get(key):
+                    out[key] = term[key]
+            if term.get("extra"):
+                extra = out.get("extra") if isinstance(out.get("extra"), dict) else {}
+                extra.update(term["extra"])
+                out["extra"] = extra
+            # 终止类通常无成交额，避免正文里的账号被误抽
+            if not re.search(r"(?:项目)?成交金额\s*[:：]", full):
+                out["deal_amount"] = None
+                out["deal_supplier"] = None
         out["deal_amount"] = _sane_amount(out.get("deal_amount"))
         out["budget_amount"] = _sane_amount(out.get("budget_amount"))
         if gpfa_deal.get("deal_supplier_address"):
             out["deal_supplier_address"] = gpfa_deal["deal_supplier_address"]
-        out["goods"] = mall_goods or _extract_gpfa_goods(full) or out["goods"]
+        looks_direct_select = bool(
+            "直接选定" in (title or "")
+            or "直接选定" in full[:400]
+            or "成交供应商名称" in full
+            or "项目成交金额" in full
+            or "货物类直接选定" in full
+            or "服务类直接选定" in full
+        )
+        gpfa_direct_goods = [] if is_terminate else _extract_gpfa_direct_goods(full)
+        gpfa_service_goods = (
+            []
+            if is_terminate or gpfa_direct_goods or mall_goods or not looks_direct_select
+            else _extract_gpfa_service_goods(full)
+        )
+        gpfa_bid_goods = [] if is_terminate else _extract_gpfa_bid_goods(full)
+        if is_terminate:
+            out["goods"] = []
+        else:
+            out["goods"] = (
+                mall_goods
+                or gpfa_direct_goods
+                or gpfa_service_goods
+                or gpfa_bid_goods
+                or _extract_gpfa_goods(full)
+                or out["goods"]
+            )
         if mall_quotes:
             out["quotes"] = mall_quotes
             out["suppliers"] = [q["supplier_name"] for q in mall_quotes if q.get("supplier_name")]
@@ -633,6 +852,7 @@ class HeuristicExtractor(BaseExtractor):
         mode_map = [
             ("反拍", "反拍"),
             ("询比", "询比"),
+            ("直接选定", "直接选定"),
             ("二次竞价", "二次竞价"),
             ("顺序轮候", "顺序轮候"),
             ("框架协议", "框架协议"),
@@ -645,6 +865,9 @@ class HeuristicExtractor(BaseExtractor):
             if key in (title or "") or key in full[:300]:
                 out["procurement_mode"] = mode
                 break
+        # 正文常有「框架协议…」套话；有直接选定结构字段时以直接选定为准
+        if looks_direct_select:
+            out["procurement_mode"] = "直接选定"
 
         # 若商城排名表未命中，再粗抽「供应商…报价」
         if not out.get("quotes"):
@@ -686,7 +909,9 @@ class HeuristicExtractor(BaseExtractor):
             if out.get(k) not in (None, "", [])
         )
         out["confidence"] = 0.7 if (filled >= 3 and out["goods"]) else (0.55 if filled >= 3 or out["goods"] else 0.35)
-        out["extra"] = {"extractor": self.name}
+        extra = out.get("extra") if isinstance(out.get("extra"), dict) else {}
+        extra["extractor"] = self.name
+        out["extra"] = extra
         return out
 
 
