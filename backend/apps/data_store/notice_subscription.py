@@ -147,6 +147,7 @@ def notice_matches_subscription(
     district: str = "",
     region_name: str = "",
 ) -> bool:
+    """多维度为「或」：任一已填维度命中即匹配；同一维度内多个选项仍为「或」。"""
     sub = normalize_subscription(subscription)
     if not subscription_has_filters(sub):
         return False
@@ -161,31 +162,32 @@ def notice_matches_subscription(
     if not any(notice_region.values()) and region_name:
         notice_region = {"province": region_name, "city": "", "district": ""}
 
-    if sub["keywords"]:
-        if not any(keyword in title_blob for keyword in sub["keywords"]):
-            return False
+    if sub["keywords"] and any(keyword in title_blob for keyword in sub["keywords"]):
+        return True
+
     if sub["contentTags"]:
         tag = (content_tag or "").strip()
-        if not tag or tag not in sub["contentTags"]:
-            return False
+        if tag and tag in sub["contentTags"]:
+            return True
+
     if sub["orgTypes"]:
         org = (org_type or "").strip()
-        if not org or org not in sub["orgTypes"]:
-            return False
+        if org and org in sub["orgTypes"]:
+            return True
+
     if sub["buyers"]:
         buyer = buyer_name or ""
-        if not any(token in buyer for token in sub["buyers"]):
-            return False
+        if any(token in buyer for token in sub["buyers"]):
+            return True
+
     if sub["regions"]:
-        if not any(_region_match(notice_region, rule) for rule in sub["regions"]):
-            # region_name 兜底：整串包含规则拼接
-            fallback = region_name or "".join(notice_region.values())
-            ok = False
-            for rule in sub["regions"]:
-                needle = "".join(filter(None, [rule.get("province"), rule.get("city"), rule.get("district")]))
-                if needle and needle in fallback:
-                    ok = True
-                    break
-            if not ok:
-                return False
-    return True
+        if any(_region_match(notice_region, rule) for rule in sub["regions"]):
+            return True
+        # region_name 兜底：整串包含规则拼接
+        fallback = region_name or "".join(notice_region.values())
+        for rule in sub["regions"]:
+            needle = "".join(filter(None, [rule.get("province"), rule.get("city"), rule.get("district")]))
+            if needle and needle in fallback:
+                return True
+
+    return False

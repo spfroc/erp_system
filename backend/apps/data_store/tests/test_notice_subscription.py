@@ -13,7 +13,7 @@ class NoticeSubscriptionMatchTests(SimpleTestCase):
         self.assertEqual(sub["keywords"], ["空调", "印刷"])
         self.assertTrue(subscription_has_filters(sub))
 
-    def test_and_across_dimensions(self):
+    def test_or_across_dimensions(self):
         sub = {
             "enabled": True,
             "contentTags": ["印刷"],
@@ -22,20 +22,32 @@ class NoticeSubscriptionMatchTests(SimpleTestCase):
             "buyers": [],
             "orgTypes": [],
         }
+        # 标签命中即可，即使地区不符
         self.assertTrue(
             notice_matches_subscription(
                 subscription=sub,
                 title="年鉴印刷服务项目",
                 content_tag="印刷",
                 province="山东省",
+                city="青岛市",
+            )
+        )
+        # 地区命中即可，即使标签不符
+        self.assertTrue(
+            notice_matches_subscription(
+                subscription=sub,
+                title="办公设备采购",
+                content_tag="打印机",
+                province="山东省",
                 city="济南市",
             )
         )
+        # 各维度都不命中
         self.assertFalse(
             notice_matches_subscription(
                 subscription=sub,
-                title="年鉴印刷服务项目",
-                content_tag="印刷",
+                title="办公设备采购",
+                content_tag="打印机",
                 province="山东省",
                 city="青岛市",
             )
@@ -58,7 +70,7 @@ class NoticeSubscriptionMatchTests(SimpleTestCase):
             )
         )
 
-    def test_buyer_and_org_type(self):
+    def test_buyer_or_org_type(self):
         sub = {
             "enabled": True,
             "buyers": ["交通管理"],
@@ -69,6 +81,14 @@ class NoticeSubscriptionMatchTests(SimpleTestCase):
                 subscription=sub,
                 title="运维服务",
                 buyer_name="济南市公安局交通管理支队",
+                org_type="教育",
+            )
+        )
+        self.assertTrue(
+            notice_matches_subscription(
+                subscription=sub,
+                title="运维服务",
+                buyer_name="某学校",
                 org_type="公安系统",
             )
         )
@@ -76,7 +96,7 @@ class NoticeSubscriptionMatchTests(SimpleTestCase):
             notice_matches_subscription(
                 subscription=sub,
                 title="运维服务",
-                buyer_name="济南市公安局交通管理支队",
+                buyer_name="某学校",
                 org_type="教育",
             )
         )
