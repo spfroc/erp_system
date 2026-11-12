@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+import random
+import time
+from typing import Any, Callable, Optional
 
 from sqlalchemy import (
     JSON,
@@ -25,7 +27,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from datetime import datetime
 
 from config import settings
-from utils import now as now_shanghai
+from utils import now as now_shanghai, strip_surrogates
 
 
 class Base(DeclarativeBase):
@@ -264,8 +266,59 @@ class MallCustomer(Base):
     )
 
 
-engine = create_engine(settings.db_url, pool_pre_ping=True, future=True)
+# READ COMMITTED：避免 REPEATABLE READ 的间隙锁。
+# 多个抓取进程同时 DELETE+INSERT notice_goods 时，间隙锁会互相死锁。
+engine = create_engine(
+    settings.db_url,
+    pool_pre_ping=True,
+    future=True,
+    isolation_level="READ COMMITTED",
+)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+
+_LOCK_MYSQL_CODES = {1205, 1213}
+
+
+def is_lock_conflict_message(message: Optional[str]) -> bool:
+    text_value = message or ""
+    return "Deadlock found" in text_value or "Lock wait timeout" in text_value
+
+
+def is_lock_conflict(exc: BaseException) -> bool:
+    """InnoDB 死锁 (1213) 或锁等待超时 (1205)。调用方应回滚后重试。"""
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        orig = getattr(current, "orig", None)
+        args = getattr(orig, "args", None) or ()
+        if args and args[0] in _LOCK_MYSQL_CODES:
+            return True
+        if is_lock_conflict_message(str(current)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def commit_with_retry(session: Session, write: Callable[[], Any], *, attempts: int = 5) -> Any:
+    """执行写入并提交。死锁时回滚并整段重做，避免把公告标成永久失败。"""
+    delay = 0.05
+    last: Optional[BaseException] = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            result = write()
+            session.commit()
+            return result
+        except Exception as exc:
+            last = exc
+            session.rollback()
+            if attempt >= attempts or not is_lock_conflict(exc):
+                raise
+            time.sleep(delay + random.random() * delay)
+            delay = min(delay * 2, 1.0)
+    if last is not None:
+        raise last
+    return None
 
 
 def _ensure_table_columns(table: str, alters: list[tuple[str, str]]) -> None:
@@ -508,9 +561,22 @@ def get_session() -> Session:
     return SessionLocal()
 
 
+def _json_safe(obj: Any) -> Any:
+    if isinstance(obj, str):
+        return strip_surrogates(obj)
+    if isinstance(obj, dict):
+        return {
+            strip_surrogates(key) if isinstance(key, str) else key: _json_safe(value)
+            for key, value in obj.items()
+        }
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(value) for value in obj]
+    return obj
+
+
 def dumps(obj: Any) -> Any:
     """Ensure JSON-serializable structures for MySQL JSON columns."""
-    return json.loads(json.dumps(obj, ensure_ascii=False, default=str))
+    return json.loads(json.dumps(_json_safe(obj), ensure_ascii=False, default=str))
 
 
 def raw_exists(session: Session, site_id: str, notice_key: str) -> bool:
@@ -518,6 +584,22 @@ def raw_exists(session: Session, site_id: str, notice_key: str) -> bool:
         select(NoticeRaw.id).where(NoticeRaw.site_id == site_id, NoticeRaw.notice_key == notice_key)
     ).scalar_one_or_none()
     return row_id is not None
+
+
+def notice_already_stored(session: Session, site_id: str, notice_key: str) -> bool:
+    """已入库且不需要再拉详情。死锁写成的 detail_fail 视为未完成，下一轮重抓。"""
+    row = session.execute(
+        select(NoticeRaw.crawl_status, NoticeRaw.error_message).where(
+            NoticeRaw.site_id == site_id,
+            NoticeRaw.notice_key == notice_key,
+        )
+    ).first()
+    if row is None:
+        return False
+    status, message = row[0], row[1]
+    if status == "detail_fail" and is_lock_conflict_message(message):
+        return False
+    return True
 
 
 def find_ccgp_raw(

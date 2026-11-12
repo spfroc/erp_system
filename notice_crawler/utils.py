@@ -16,6 +16,37 @@ def now() -> datetime:
     return datetime.now(APP_TZ).replace(tzinfo=None)
 
 
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
+
+def strip_surrogates(value: str) -> str:
+    """去掉无法用 UTF-8 编码的孤立代理项。
+
+    PDF 抽文本偶发把一个字符拆成单独的 \\uD800–\\uDFFF。MySQL / PyMySQL
+    一遇到就会整段回滚。成对的代理项还原成增补平面字符，落单的直接丢掉。
+    """
+    if not isinstance(value, str) or not value or not _SURROGATE_RE.search(value):
+        return value
+    chars: list[str] = []
+    index = 0
+    length = len(value)
+    while index < length:
+        code = ord(value[index])
+        if 0xD800 <= code <= 0xDBFF and index + 1 < length:
+            nxt = ord(value[index + 1])
+            if 0xDC00 <= nxt <= 0xDFFF:
+                point = 0x10000 + ((code - 0xD800) << 10) + (nxt - 0xDC00)
+                chars.append(chr(point))
+                index += 2
+                continue
+        if 0xD800 <= code <= 0xDFFF:
+            index += 1
+            continue
+        chars.append(value[index])
+        index += 1
+    return "".join(chars)
+
+
 def html_to_text(html: Optional[str]) -> str:
     if not html:
         return ""

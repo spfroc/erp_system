@@ -950,6 +950,10 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
 
                     parsed["end_time"] = start_dt + timedelta(days=30)
 
+    # 正文和结构化字段都没有开始时间时，用发布时间兜底
+    if not _to_dt(parsed.get("start_time")) and _to_dt(parsed.get("publish_time") or raw.publish_time):
+        parsed["start_time"] = _to_dt(parsed.get("publish_time") or raw.publish_time)
+
     if not isinstance(parsed.get("extra"), dict):
         parsed["extra"] = {}
     parsed["extra"]["enriched_from_raw"] = True
@@ -1281,7 +1285,8 @@ def replace_goods(
     parsed_row: NoticeParsed,
     goods: list,
 ) -> None:
-    """按公告重写产品明细行。"""
+    """按公告重写产品明细行。先锁公告行，同一条公告的写入按同一顺序排队。"""
+    session.execute(select(NoticeRaw.id).where(NoticeRaw.id == raw.id).with_for_update())
     session.execute(delete(NoticeGoods).where(NoticeGoods.notice_raw_id == raw.id))
     for i, item in enumerate(goods, start=1):
         session.add(

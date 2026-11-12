@@ -12,7 +12,15 @@ from tqdm import tqdm
 from clients.http_session import proxy_url
 from clients.jd_quan import JdQuanClient, is_jd_site
 from config import settings
-from db import NoticeAttachment, NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
+from db import (
+    NoticeAttachment,
+    NoticeGoods,
+    NoticeParsed,
+    NoticeRaw,
+    dumps,
+    get_session,
+    is_lock_conflict,
+)
 from pipeline.extractors.jd_attachment import (
     goods_are_placeholder,
     should_replace_goods_with_attachment,
@@ -23,8 +31,7 @@ from pipeline.parse_llm import (
     parsed_row_to_dict,
     save_parsed,
 )
-from utils import ensure_https
-from utils import now as now_shanghai
+from utils import ensure_https, now as now_shanghai, strip_surrogates
 
 
 def _ext_from_name(name: str, url: str) -> str:
@@ -166,23 +173,20 @@ def extract_text_from_file(path: Path) -> str:
     ext = path.suffix.lower().lstrip(".")
     with path.open("rb") as fh:
         head = fh.read(5)
+    text = ""
     if ext == "pdf" or head == b"%PDF-":
         text = _pdf_text(path)
-        if text.strip():
-            return text
-        ocr_text = _ocr_pdf(path)
-        if ocr_text.strip():
-            return ocr_text
-        return ""
-    if ext in {"png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"}:
-        return _ocr_image(path)
-    if ext in {"txt", "md", "csv", "json", "html", "htm"}:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    if ext in {"docx"}:
-        return _docx_text(path)
-    if ext in {"xlsx", "xlsm"}:
-        return _xlsx_text(path)
-    return ""
+        if not text.strip():
+            text = _ocr_pdf(path)
+    elif ext in {"png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"}:
+        text = _ocr_image(path)
+    elif ext in {"txt", "md", "csv", "json", "html", "htm"}:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    elif ext == "docx":
+        text = _docx_text(path)
+    elif ext in {"xlsx", "xlsm"}:
+        text = _xlsx_text(path)
+    return strip_surrogates(text)
 
 
 def _pdf_text(path: Path) -> str:
@@ -442,13 +446,32 @@ def parse_attachments(*, limit: int = 50, site_id: Optional[str] = None, use_llm
         ).limit(limit)
         rows = session.execute(stmt).scalars().all()
         for att in tqdm(rows, desc="parse-att"):
+            saved = False
+            last_exc: Optional[Exception] = None
+            for _attempt in range(4):
+                try:
+                    parsed_ok = bool(parse_attachment_row(session, att, use_llm=use_llm))
+                    session.commit()
+                    if parsed_ok:
+                        ok += 1
+                    saved = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    session.rollback()
+                    if not is_lock_conflict(exc):
+                        break
+            if saved:
+                continue
+            exc = last_exc or RuntimeError("parse-att failed")
             try:
-                if parse_attachment_row(session, att, use_llm=use_llm):
-                    ok += 1
-            except Exception as exc:  # noqa: BLE001
                 att.parse_status = "parse_fail"
-                att.error_message = str(exc)[:1000]
-            session.commit()
+                att.error_message = strip_surrogates(str(exc))[:1000]
+                if isinstance(att.extracted_text, str):
+                    att.extracted_text = strip_surrogates(att.extracted_text)
+                session.commit()
+            except Exception:
+                session.rollback()
     finally:
         session.close()
     return ok

@@ -19,12 +19,15 @@ from sqlalchemy import select
 from db import (
     NoticeRaw,
     _ensure_notice_key_width,
+    commit_with_retry,
     dumps,
     extract_project_code,
     find_ccgp_raw,
     get_session,
+    is_lock_conflict,
+    is_lock_conflict_message,
     mall_has_project_code,
-    raw_exists,
+    notice_already_stored,
     save_cursor,
     upsert_raw,
 )
@@ -200,7 +203,7 @@ def crawl_sd_mall(
                             break
                         if end_day and published and published > end_day:
                             continue
-                        if dup.hit(raw_exists(session, MALL_SITE, notice_guid)):
+                        if dup.hit(notice_already_stored(session, MALL_SITE, notice_guid)):
                             stop_category = True
                             tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
                             break
@@ -232,28 +235,32 @@ def crawl_sd_mall(
                                 detail = client.merge_except_gd(notice_guid, detail)
                                 html = detail.get("content") or ""
                                 text = html_to_text(html)
-                                raw = upsert_raw(
-                                    session,
-                                    site_id=MALL_SITE,
-                                    notice_key=notice_guid,
-                                    detail_json=detail,
-                                    content_html=html,
-                                    content_text=text,
-                                    title=detail.get("title") or item.get("title"),
-                                    auction_type=str(
-                                        detail.get("projectType")
-                                        if detail.get("projectType") not in (None, "")
-                                        else project_type
-                                    ),
-                                    crawl_status="detail_ok",
-                                )
-                                try:
-                                    _parse_after_detail(session, raw, html=html, text=text)
-                                except Exception as exc:  # noqa: BLE001
-                                    raw.parse_status = "parse_fail"
-                                    raw.error_message = str(exc)[:1000]
-                                files = client.extract_attachments(detail)
-                                session.commit()
+                                def write_detail() -> list:
+                                    raw = upsert_raw(
+                                        session,
+                                        site_id=MALL_SITE,
+                                        notice_key=notice_guid,
+                                        detail_json=detail,
+                                        content_html=html,
+                                        content_text=text,
+                                        title=detail.get("title") or item.get("title"),
+                                        auction_type=str(
+                                            detail.get("projectType")
+                                            if detail.get("projectType") not in (None, "")
+                                            else project_type
+                                        ),
+                                        crawl_status="detail_ok",
+                                    )
+                                    try:
+                                        _parse_after_detail(session, raw, html=html, text=text)
+                                    except Exception as exc:  # noqa: BLE001
+                                        if is_lock_conflict(exc):
+                                            raise
+                                        raw.parse_status = "parse_fail"
+                                        raw.error_message = str(exc)[:1000]
+                                    return client.extract_attachments(detail)
+
+                                files = commit_with_retry(session, write_detail) or []
                                 if files:
                                     raw = session.execute(
                                         select(NoticeRaw).where(
@@ -400,7 +407,7 @@ def crawl_sd_gpfa(
                             break
                         if end_day and published and published > end_day:
                             continue
-                        if dup.hit(raw_exists(session, GPFA_SITE, notice_guid)):
+                        if dup.hit(notice_already_stored(session, GPFA_SITE, notice_guid)):
                             stop_category = True
                             tqdm.write(f"{label} 连续重复 {dup.limit} 条，停止该类")
                             break
@@ -436,40 +443,44 @@ def crawl_sd_gpfa(
                                 detail_pt = detail.get("projectType")
                                 if detail_pt not in (None, ""):
                                     auction_type = str(detail_pt)
-                                raw = upsert_raw(
-                                    session,
-                                    site_id=GPFA_SITE,
-                                    notice_key=notice_guid,
-                                    auction_type=auction_type,
-                                    detail_json=detail,
-                                    content_html=html,
-                                    content_text=text,
-                                    title=detail.get("title") or item.get("title"),
-                                    region_name=normalize_region_name(
-                                        GPFA_SITE,
-                                        detail.get("regionFullName")
-                                        or detail.get("regionName")
-                                        or raw_region,
-                                    ),
-                                    district_name=extract_district_name(
-                                        detail.get("regionFullName")
-                                        or detail.get("regionName")
-                                        or raw_region
-                                    ),
-                                    region_guid=detail.get("regionGuid") or item.get("regionGuid"),
-                                    publish_time=parse_dt(
-                                        detail.get("publishTime")
-                                        or detail.get("createDate")
-                                        or item.get("publishTime")
-                                    ),
-                                    crawl_status="detail_ok",
-                                )
-                                try:
-                                    _parse_after_detail(session, raw, html=html, text=text)
-                                except Exception as exc:  # noqa: BLE001
-                                    raw.parse_status = "parse_fail"
-                                    raw.error_message = str(exc)[:1000]
-                                session.commit()
+                                def write_detail() -> None:
+                                    raw = upsert_raw(
+                                        session,
+                                        site_id=GPFA_SITE,
+                                        notice_key=notice_guid,
+                                        auction_type=auction_type,
+                                        detail_json=detail,
+                                        content_html=html,
+                                        content_text=text,
+                                        title=detail.get("title") or item.get("title"),
+                                        region_name=normalize_region_name(
+                                            GPFA_SITE,
+                                            detail.get("regionFullName")
+                                            or detail.get("regionName")
+                                            or raw_region,
+                                        ),
+                                        district_name=extract_district_name(
+                                            detail.get("regionFullName")
+                                            or detail.get("regionName")
+                                            or raw_region
+                                        ),
+                                        region_guid=detail.get("regionGuid") or item.get("regionGuid"),
+                                        publish_time=parse_dt(
+                                            detail.get("publishTime")
+                                            or detail.get("createDate")
+                                            or item.get("publishTime")
+                                        ),
+                                        crawl_status="detail_ok",
+                                    )
+                                    try:
+                                        _parse_after_detail(session, raw, html=html, text=text)
+                                    except Exception as exc:  # noqa: BLE001
+                                        if is_lock_conflict(exc):
+                                            raise
+                                        raw.parse_status = "parse_fail"
+                                        raw.error_message = str(exc)[:1000]
+
+                                commit_with_retry(session, write_detail)
                             except Exception as exc:  # noqa: BLE001
                                 session.rollback()
                                 upsert_raw(
@@ -650,7 +661,10 @@ def crawl_sd_ccgp(
                         publish_time=publish_dt,
                         notice_type=canonical,
                     )
-                    if existing is not None:
+                    if existing is not None and not (
+                        existing.crawl_status == "detail_fail"
+                        and is_lock_conflict_message(existing.error_message)
+                    ):
                         # 旧数据仍是 id-hash 键时，顺带迁到稳定键，便于后续 raw_exists
                         if existing.notice_key != notice_key:
                             clash = session.execute(
@@ -835,26 +849,30 @@ def crawl_sd_ccgp(
                                         )
                                         break
                                     continue
-                            raw = upsert_raw(
-                                session,
-                                site_id=CCGP_SITE,
-                                notice_key=notice_key,
-                                detail_json=detail,
-                                content_html=html,
-                                content_text=text,
-                                title=detail.get("title") or item.get("title"),
-                                publish_time=parse_dt(
-                                    detail.get("date") or item.get("date")
-                                ),
-                                crawl_status="detail_ok",
-                            )
-                            try:
-                                _parse_after_detail(session, raw, html=html, text=text)
-                            except Exception as exc:  # noqa: BLE001
-                                raw.parse_status = "parse_fail"
-                                raw.error_message = str(exc)[:1000]
-                            files = client.extract_attachments(detail)
-                            session.commit()
+                            def write_detail() -> list:
+                                raw = upsert_raw(
+                                    session,
+                                    site_id=CCGP_SITE,
+                                    notice_key=notice_key,
+                                    detail_json=detail,
+                                    content_html=html,
+                                    content_text=text,
+                                    title=detail.get("title") or item.get("title"),
+                                    publish_time=parse_dt(
+                                        detail.get("date") or item.get("date")
+                                    ),
+                                    crawl_status="detail_ok",
+                                )
+                                try:
+                                    _parse_after_detail(session, raw, html=html, text=text)
+                                except Exception as exc:  # noqa: BLE001
+                                    if is_lock_conflict(exc):
+                                        raise
+                                    raw.parse_status = "parse_fail"
+                                    raw.error_message = str(exc)[:1000]
+                                return client.extract_attachments(detail)
+
+                            files = commit_with_retry(session, write_detail) or []
                             if files:
                                 raw = session.execute(
                                     select(NoticeRaw).where(
@@ -977,7 +995,7 @@ def _crawl_jd_site(
                         tqdm.write(f"{client.label}/{label} 早于 {start_day.isoformat()}，停止该类")
                         break
                     notice_key = f"{auction_no}:{item_notice_type}"
-                    if dup.hit(raw_exists(session, site_id, notice_key)):
+                    if dup.hit(notice_already_stored(session, site_id, notice_key)):
                         stop_category = True
                         tqdm.write(f"{client.label}/{label} 连续重复 {dup.limit} 条，停止该类")
                         break
@@ -1011,24 +1029,29 @@ def _crawl_jd_site(
                             detail = client.get_detail(auction_no, item_notice_type or notice_type)
                             # JD 详情多为结构化 JSON，无整页 HTML；拼可读文本供规则/模型
                             content_text = json_detail_to_text(detail)
-                            raw = upsert_raw(
-                                session,
-                                site_id=site_id,
-                                notice_key=notice_key,
-                                detail_json=detail,
-                                content_html=None,
-                                content_text=content_text,
-                                title=detail.get("noticeTitle") or item.get("noticeTitle"),
-                                crawl_status="detail_ok",
-                            )
-                            try:
-                                _parse_after_detail(session, raw, text=content_text)
-                            except Exception as exc:  # noqa: BLE001
-                                raw.parse_status = "parse_fail"
-                                raw.error_message = str(exc)[:1000]
-                            files = client.extract_attachments(detail)
+
+                            def write_detail() -> list:
+                                raw = upsert_raw(
+                                    session,
+                                    site_id=site_id,
+                                    notice_key=notice_key,
+                                    detail_json=detail,
+                                    content_html=None,
+                                    content_text=content_text,
+                                    title=detail.get("noticeTitle") or item.get("noticeTitle"),
+                                    crawl_status="detail_ok",
+                                )
+                                try:
+                                    _parse_after_detail(session, raw, text=content_text)
+                                except Exception as exc:  # noqa: BLE001
+                                    if is_lock_conflict(exc):
+                                        raise
+                                    raw.parse_status = "parse_fail"
+                                    raw.error_message = str(exc)[:1000]
+                                return client.extract_attachments(detail)
+
                             # 详情+解析先落库，再下附件，避免下载时占着 notice_goods 行锁
-                            session.commit()
+                            files = commit_with_retry(session, write_detail) or []
                             if files:
                                 raw = session.execute(
                                     select(NoticeRaw).where(

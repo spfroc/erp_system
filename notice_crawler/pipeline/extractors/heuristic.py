@@ -169,8 +169,8 @@ def _extract_gpfa_direct_goods(text: str) -> List[Dict[str, Any]]:
         r"￥?\s*([0-9,.]+)",
         section,
     ):
-        name = re.sub(r"\s+", " ", row.group(1).strip())
-        if not name or name in {"产品名称", "技术规格", "数量"}:
+        product_name = re.sub(r"\s+", " ", row.group(1).strip())
+        if not product_name or product_name in {"产品名称", "技术规格", "数量"}:
             continue
         spec = re.sub(r"\s+", " ", (row.group(2) or "").strip())
         quantity = _num(row.group(3))
@@ -180,10 +180,11 @@ def _extract_gpfa_direct_goods(text: str) -> List[Dict[str, Any]]:
         model = None
         if "/" in spec:
             brand = spec.split("/", 1)[0].strip()[:64] or None
+        # 产品类：分类用产品名称，产品名称用技术规格
         goods.append(
             {
-                "name": name[:512],
-                "category": _infer_gpfa_category(name, spec, "货物"),
+                "name": (spec or product_name)[:512],
+                "category": product_name[:256],
                 "quantity": quantity if quantity is not None else 1,
                 "unit": None,
                 "brand": brand,
