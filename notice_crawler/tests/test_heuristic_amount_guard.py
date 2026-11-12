@@ -52,6 +52,61 @@ class HeuristicAmountGuardTests(unittest.TestCase):
         if out.get("deal_amount") is not None:
             self.assertLess(out["deal_amount"], 10_000_000)
 
+    def test_gpfa_product_category_is_name_and_name_is_spec(self):
+        text = """
+四、成交标的
+产品名称
+技术规格
+数量
+单价（元）
+金额（元）
+复印纸
+晨光/M&G, 红晨光多功能复印纸70gA4-8包APYVQ957, APYVQ957;
+17
+￥176.00
+￥2992.00
+合计
+￥2992.00
+五、公告期限
+"""
+        out = self.ext.extract(text, title="平度市同和街道白埠小学复印纸直接选定结果公告")
+        goods = out.get("goods") or []
+        self.assertEqual(len(goods), 1)
+        self.assertEqual(goods[0]["category"], "复印纸")
+        self.assertIn("红晨光多功能复印纸", goods[0]["name"])
+        self.assertEqual(goods[0]["brand"], "晨光")
+        self.assertEqual(goods[0]["quantity"], 17)
+
+    def test_missing_start_time_uses_publish_time(self):
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        from pipeline.parse_llm import enrich_from_raw
+
+        published = datetime(2026, 11, 12, 14, 9, 12)
+        raw = SimpleNamespace(
+            detail_json=None,
+            list_json=None,
+            title="复印纸直接选定结果公告",
+            district_name=None,
+            region_guid=None,
+            region_name="青岛市",
+            publish_time=published,
+            site_id="sd-gpfa-frame",
+            content_text="五、公告期限\n发布日期:\n2026年11月12日",
+            content_html=None,
+            notice_type="1",
+            notice_key="908599293131292672",
+            auction_type="17",
+        )
+        parsed = enrich_from_raw({"goods": [{"name": "规格", "category": "复印纸"}]}, raw)
+        self.assertEqual(parsed["start_time"], published)
+        kept = enrich_from_raw(
+            {"goods": [{"name": "规格", "category": "复印纸"}], "start_time": "2026-11-01 09:00:00"},
+            raw,
+        )
+        self.assertEqual(kept["start_time"], "2026-11-01 09:00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

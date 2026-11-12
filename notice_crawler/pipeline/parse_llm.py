@@ -950,6 +950,10 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
 
                     parsed["end_time"] = start_dt + timedelta(days=30)
 
+    # 正文和结构化字段都没有开始时间时，用发布时间兜底
+    if not _to_dt(parsed.get("start_time")) and _to_dt(parsed.get("publish_time") or raw.publish_time):
+        parsed["start_time"] = _to_dt(parsed.get("publish_time") or raw.publish_time)
+
     if not isinstance(parsed.get("extra"), dict):
         parsed["extra"] = {}
     parsed["extra"]["enriched_from_raw"] = True
