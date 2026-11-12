@@ -37,30 +37,32 @@
   }
 
   function ensureStyles() {
-    if (document.getElementById("home-notice-quad-styles")) return;
-    var style = document.createElement("style");
-    style.id = "home-notice-quad-styles";
+    var style = document.getElementById("home-notice-quad-styles");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "home-notice-quad-styles";
+      document.head.appendChild(style);
+    }
     style.textContent =
-      "#home-notice-quad{padding:36px 0 20px;background:linear-gradient(180deg,#0b1a28 0%,#12283c 100%);color:#e8eef5;}" +
-      "#home-notice-quad.is-light{background:#f5f8fc;color:#1a3a5c;}" +
-      "#home-notice-quad .hnq-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}" +
-      "#home-notice-quad .hnq-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px 16px 10px;min-height:280px;display:flex;flex-direction:column;box-shadow:0 10px 28px rgba(0,0,0,.12);}" +
-      "#home-notice-quad.is-light .hnq-card{background:#fff;border-color:#e6edf5;box-shadow:0 8px 24px rgba(26,58,92,.06);}" +
-      "#home-notice-quad .hnq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}" +
-      "#home-notice-quad .hnq-head h3{margin:0;font-size:17px;font-weight:750;}" +
-      "#home-notice-quad .hnq-more{font-size:13px;opacity:.85;text-decoration:none;color:inherit;}" +
+      "#home-notice-quad{--hnq-bg:#0f2030;--hnq-line:rgba(255,255,255,.1);padding:36px 0 20px;background:var(--hnq-bg);color:#e8eef5;}" +
+      "#home-notice-quad.is-light{--hnq-bg:#f5f8fc;--hnq-line:#e6edf5;background:var(--hnq-bg);color:#1a3a5c;}" +
+      "#home-notice-quad .hnq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;box-sizing:border-box;}" +
+      "#home-notice-quad .hnq-card{min-width:0;width:100%;max-width:100%;overflow:hidden;background:var(--hnq-bg);border:1px solid var(--hnq-line);border-radius:16px;padding:16px 16px 10px;min-height:280px;display:flex;flex-direction:column;box-shadow:none;box-sizing:border-box;}" +
+      "#home-notice-quad.is-light .hnq-card{background:var(--hnq-bg);border-color:var(--hnq-line);box-shadow:none;}" +
+      "#home-notice-quad .hnq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;min-width:0;}" +
+      "#home-notice-quad .hnq-head h3{margin:0;font-size:17px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+      "#home-notice-quad .hnq-more{flex:none;font-size:13px;opacity:.85;text-decoration:none;color:inherit;white-space:nowrap;}" +
       "#home-notice-quad .hnq-more:hover{opacity:1;text-decoration:underline;}" +
-      "#home-notice-quad .hnq-list{list-style:none;margin:0;padding:0;flex:1;}" +
-      "#home-notice-quad .hnq-list li{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);}" +
+      "#home-notice-quad .hnq-list{list-style:none;margin:0;padding:0;flex:1;min-width:0;width:100%;overflow:hidden;}" +
+      "#home-notice-quad .hnq-list li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);width:100%;min-width:0;max-width:100%;overflow:hidden;box-sizing:border-box;}" +
       "#home-notice-quad.is-light .hnq-list li{border-bottom-color:#eef2f7;}" +
       "#home-notice-quad .hnq-list li:last-child{border-bottom:0;}" +
-      "#home-notice-quad .hnq-list a{flex:1;min-width:0;color:inherit;text-decoration:none;font-size:14px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}" +
+      "#home-notice-quad .hnq-list a{flex:1 1 0;min-width:0;max-width:100%;width:100%;display:block;color:inherit;text-decoration:none;font-size:14px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       "#home-notice-quad .hnq-list a:hover{color:#4ea1ff;}" +
       "#home-notice-quad.is-light .hnq-list a:hover{color:#0d4a9c;}" +
-      "#home-notice-quad .hnq-new{flex:none;margin-top:2px;font-size:11px;font-weight:700;line-height:1;padding:3px 6px;border-radius:999px;background:#e11d48;color:#fff;}" +
+      "#home-notice-quad .hnq-new{flex:0 0 auto;font-size:11px;font-weight:700;line-height:1;padding:3px 6px;border-radius:999px;background:#e11d48;color:#fff;}" +
       "#home-notice-quad .hnq-empty,#home-notice-quad .hnq-loading{padding:18px 4px;font-size:13px;opacity:.7;}" +
-      "@media (max-width:900px){#home-notice-quad .hnq-grid{grid-template-columns:1fr;}#home-notice-quad{padding:24px 0 4px;}}";
-    document.head.appendChild(style);
+      "@media (max-width:900px){#home-notice-quad .hnq-grid{grid-template-columns:minmax(0,1fr);}#home-notice-quad{padding:24px 0 4px;}}";
   }
 
   function fetchMe() {
@@ -104,7 +106,7 @@
         showLoginToast();
         return;
       }
-      window.location.href = withSiteParam("/notices/" + encodeURIComponent(item.id));
+      window.open(withSiteParam("/notices/" + encodeURIComponent(item.id)), "_blank", "noopener,noreferrer");
     });
   }
 
@@ -118,15 +120,22 @@
         '<ul class="hnq-list">' +
         items
           .map(function (item) {
+            var fullTitle = item.title || "未命名公告";
+            var safeTitle = escapeHtml(fullTitle);
             var badge = isNew(item) ? '<span class="hnq-new">新</span>' : "";
             return (
               "<li>" +
-              badge +
-              '<a href="#" data-id="' +
+              '<a class="hnq-link" href="#" data-id="' +
               escapeHtml(item.id) +
-              '">' +
-              escapeHtml(item.title || "未命名公告") +
-              "</a></li>"
+              '" alt="' +
+              safeTitle +
+              '" title="' +
+              safeTitle +
+              '" style="flex:1 1 0;min-width:0;max-width:100%;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:keep-all;">' +
+              safeTitle +
+              "</a>" +
+              badge +
+              "</li>"
             );
           })
           .join("") +

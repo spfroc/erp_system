@@ -1,5 +1,5 @@
 (function () {
-  var PAGE_SIZE = 10;
+  var PAGE_SIZE = 20;
   var TABS = [
     {
       id: "opportunity",
@@ -23,6 +23,19 @@
       hint: "采购意向公开信息",
     },
   ];
+  var PROGRESS_CHIPS = [
+    { value: "", label: "全部" },
+    { value: "upcoming", label: "将开始" },
+    { value: "ongoing", label: "进行中" },
+    { value: "ended", label: "已结束" },
+  ];
+  var BUDGET_CHIPS = [
+    { value: "", label: "全部" },
+    { value: "0-50000", label: "5万以下" },
+    { value: "50000-100000", label: "5-10万" },
+    { value: "100000-500000", label: "10-50万" },
+    { value: "500000-", label: "50万以上" },
+  ];
 
   var state = {
     tab: "opportunity",
@@ -37,11 +50,13 @@
     publishDateFrom: "",
     publishDateTo: "",
     progress: "",
+    budgetRange: "",
   };
   var me = null;
   var meReady = null;
   var sites = [];
   var noticeKinds = [];
+  var lastTotal = 0;
 
   function qs(name) {
     return new URLSearchParams(window.location.search).get(name) || "";
@@ -75,9 +90,11 @@
   }
 
   function currentTab() {
-    return TABS.find(function (tab) {
-      return tab.id === state.tab;
-    }) || TABS[0];
+    return (
+      TABS.find(function (tab) {
+        return tab.id === state.tab;
+      }) || TABS[0]
+    );
   }
 
   function portalLoginUrl() {
@@ -85,7 +102,12 @@
   }
 
   function fetchMe() {
-    if (window.__portalFetchMe) return window.__portalFetchMe();
+    if (window.__portalFetchMe) {
+      return window.__portalFetchMe().then(function (account) {
+        me = account || null;
+        return me;
+      });
+    }
     if (meReady) return meReady;
     meReady = fetch("/api/portal/me/", { credentials: "include", headers: { Accept: "application/json" } })
       .then(function (res) {
@@ -101,6 +123,87 @@
         return null;
       });
     return meReady;
+  }
+
+  function parseNoticeTime(value) {
+    if (!value) return null;
+    var text = String(value).trim();
+    if (!text) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      var dayStamp = Date.parse(text + "T00:00:00+08:00");
+      return Number.isNaN(dayStamp) ? null : dayStamp;
+    }
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(text) && !/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(text)) {
+      var normalized = text.replace(" ", "T");
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) normalized += ":00";
+      var localStamp = Date.parse(normalized + "+08:00");
+      return Number.isNaN(localStamp) ? null : localStamp;
+    }
+    var stamp = Date.parse(text.indexOf("T") >= 0 ? text : text.replace(" ", "T"));
+    return Number.isNaN(stamp) ? null : stamp;
+  }
+
+  function formatCountdown(ms) {
+    var remain = Math.max(0, Number(ms) || 0);
+    var totalMin = Math.floor(remain / 60000);
+    var days = Math.floor(totalMin / (60 * 24));
+    var hours = Math.floor((totalMin % (60 * 24)) / 60);
+    var mins = totalMin % 60;
+    function pad(n) {
+      return ("0" + n).slice(-2);
+    }
+    return pad(days) + "天 " + pad(hours) + "时 " + pad(mins) + "分";
+  }
+
+  function isClosedNoticeKind(item) {
+    var text = String(item.noticeKind || "") + " " + String(item.title || "");
+    return /验收|合同公告|成交结果|结果公告|终止|废标|失败公告|成交公告/.test(text);
+  }
+
+  function countdownInfo(item) {
+    var now = Date.now();
+    var start = parseNoticeTime(item.startTime);
+    var end = parseNoticeTime(item.endTime);
+    var status = String(item.progressStatus || "").toLowerCase();
+    var label = String(item.progressLabel || "");
+
+    if (isClosedNoticeKind(item) && status !== "ongoing" && status !== "upcoming") {
+      status = "ended";
+      label = "已截止";
+    } else if (!status || status === "unknown") {
+      if (end && end < now) {
+        status = "ended";
+        label = "已截止";
+      } else if (start && start > now) {
+        status = "upcoming";
+        label = "未开始";
+      } else if (end && end >= now) {
+        status = "ongoing";
+        label = "进行中";
+      } else if (start && start <= now) {
+        status = "ongoing";
+        label = "进行中";
+      }
+    }
+
+    if (status === "upcoming" || label === "未开始") {
+      return {
+        label: "未开始",
+        text: start ? "距开始 " + formatCountdown(start - now) : "即将开始",
+        tone: "upcoming",
+      };
+    }
+    if (status === "ongoing" || label === "进行中") {
+      return {
+        label: "进行中",
+        text: end ? "距结束 " + formatCountdown(end - now) : "进行中",
+        tone: "ongoing",
+      };
+    }
+    if (status === "ended" || label === "已截止" || label === "已结束") {
+      return { label: "已截止", text: "", tone: "ended" };
+    }
+    return { label: label || "未知", text: "", tone: "unknown" };
   }
 
   function promptLogin() {
@@ -124,6 +227,8 @@
     if (state.buyerName) params.set("buyerName", state.buyerName);
     if (state.publishDateFrom) params.set("publishDateFrom", state.publishDateFrom);
     if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
+    if (state.progress) params.set("progress", state.progress);
+    if (state.budgetRange) params.set("budgetRange", state.budgetRange);
     var site = qs("site");
     if (site) params.set("site", site);
     var next = params.toString();
@@ -132,7 +237,13 @@
 
   function readStateFromUrl() {
     var tab = qs("tab") || "opportunity";
-    if (!TABS.some(function (item) { return item.id === tab; })) tab = "opportunity";
+    if (
+      !TABS.some(function (item) {
+        return item.id === tab;
+      })
+    ) {
+      tab = "opportunity";
+    }
     state.tab = tab;
     state.page = Math.max(1, Number(qs("page") || 1) || 1);
     state.search = qs("search");
@@ -144,6 +255,17 @@
     state.buyerName = qs("buyerName");
     state.publishDateFrom = qs("publishDateFrom");
     state.publishDateTo = qs("publishDateTo");
+    state.progress = qs("progress");
+    state.budgetRange = qs("budgetRange");
+  }
+
+  function applyBudgetRange(params) {
+    if (!state.budgetRange) return;
+    var parts = String(state.budgetRange).split("-");
+    var min = parts[0];
+    var max = parts[1];
+    if (min) params.set("budgetMin", min);
+    if (max) params.set("budgetMax", max);
   }
 
   function buildQuery() {
@@ -167,6 +289,7 @@
     if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
     if (state.progress) params.set("progress", state.progress);
     else if (tab.progress) params.set("progress", tab.progress);
+    applyBudgetRange(params);
     return params;
   }
 
@@ -176,6 +299,119 @@
     if (loggedIn) return text;
     if (text.length <= 2) return "**";
     return text.slice(0, 1) + "***";
+  }
+
+  function chipRow(label, chips, activeValue, dataKey) {
+    return (
+      '<div class="sourcing-filter-row">' +
+      '<label class="label">' +
+      escapeHtml(label) +
+      "</label>" +
+      '<div class="sourcing-chips">' +
+      chips
+        .map(function (chip) {
+          var value = chip.value == null ? chip : chip.value;
+          var text = chip.label == null ? chip : chip.label;
+          return (
+            '<button type="button" class="sourcing-chip' +
+            (String(activeValue || "") === String(value) ? " active" : "") +
+            '" data-chip="' +
+            escapeHtml(dataKey) +
+            '" data-value="' +
+            escapeHtml(value) +
+            '">' +
+            escapeHtml(text) +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div></div>"
+    );
+  }
+
+  function normalizeDateInput(value) {
+    var text = String(value || "").trim();
+    if (!text) return "";
+    var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    var slash = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    var us = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    var y;
+    var m;
+    var d;
+    if (iso) {
+      y = iso[1];
+      m = iso[2];
+      d = iso[3];
+    } else if (slash) {
+      y = slash[1];
+      m = slash[2];
+      d = slash[3];
+    } else if (us) {
+      y = us[3];
+      m = us[1];
+      d = us[2];
+    } else {
+      return "";
+    }
+    m = ("0" + m).slice(-2);
+    d = ("0" + d).slice(-2);
+    var stamp = Date.parse(y + "-" + m + "-" + d + "T00:00:00");
+    if (Number.isNaN(stamp)) return "";
+    return y + "-" + m + "-" + d;
+  }
+
+  function collectAdvanced(root) {
+    if (!root) return;
+    var region = root.querySelector("[name=regionName]");
+    var projectCode = root.querySelector("[name=projectCode]");
+    var projectName = root.querySelector("[name=projectName]");
+    var buyerName = root.querySelector("[name=buyerName]");
+    var from = root.querySelector("[name=publishDateFrom]");
+    var to = root.querySelector("[name=publishDateTo]");
+    if (region) state.regionName = (region.value || "").trim();
+    if (projectCode) state.projectCode = (projectCode.value || "").trim();
+    if (projectName) state.projectName = (projectName.value || "").trim();
+    if (buyerName) state.buyerName = (buyerName.value || "").trim();
+    if (from) {
+      state.publishDateFrom = normalizeDateInput(from.value);
+      from.value = state.publishDateFrom;
+    }
+    if (to) {
+      state.publishDateTo = normalizeDateInput(to.value);
+      to.value = state.publishDateTo;
+    }
+  }
+
+  function collectSearch() {
+    var bar = document.getElementById("sourcing-searchbar");
+    if (!bar) return;
+    var input = bar.querySelector("[name=search]");
+    if (input) state.search = (input.value || "").trim();
+  }
+
+  function runSearch() {
+    collectSearch();
+    collectAdvanced(document.getElementById("sourcing-filters"));
+    state.page = 1;
+    loadList();
+  }
+
+  function resetFilters() {
+    state.search = "";
+    state.siteId = "";
+    state.noticeKind = "";
+    state.regionName = "";
+    state.projectCode = "";
+    state.projectName = "";
+    state.buyerName = "";
+    state.publishDateFrom = "";
+    state.publishDateTo = "";
+    state.progress = "";
+    state.budgetRange = "";
+    state.page = 1;
+    renderSearchBar();
+    renderFilters();
+    loadList();
   }
 
   function renderTabs() {
@@ -197,6 +433,40 @@
         state.tab = btn.getAttribute("data-tab");
         state.page = 1;
         state.noticeKind = "";
+        state.progress = "";
+        renderFilters();
+        loadList();
+      });
+    });
+  }
+
+  function renderSearchBar() {
+    var root = document.getElementById("sourcing-searchbar");
+    if (!root) return;
+    root.innerHTML =
+      '<input name="search" type="search" placeholder="请输入关键字" value="' +
+      escapeHtml(state.search) +
+      '" />' +
+      '<button class="btn" type="button" data-role="search">搜索</button>' +
+      '<button class="btn ghost" type="button" data-role="reset">重置</button>';
+    root.querySelector("[data-role=search]").onclick = runSearch;
+    root.querySelector("[data-role=reset]").onclick = resetFilters;
+    root.querySelector("[name=search]").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") runSearch();
+    });
+  }
+
+  function bindChips(root) {
+    root.querySelectorAll("[data-chip]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var key = btn.getAttribute("data-chip");
+        var value = btn.getAttribute("data-value") || "";
+        if (key === "siteId") state.siteId = value;
+        if (key === "noticeKind") state.noticeKind = value;
+        if (key === "progress") state.progress = value;
+        if (key === "budgetRange") state.budgetRange = value;
+        state.page = 1;
+        renderFilters();
         loadList();
       });
     });
@@ -206,95 +476,108 @@
     var root = document.getElementById("sourcing-filters");
     if (!root) return;
     var tab = currentTab();
-    root.innerHTML =
-      '<p class="sourcing-hint">' +
-      escapeHtml(tab.hint) +
-      "</p>" +
-      '<input name="search" type="search" placeholder="搜索标题、项目编号、采购单位" value="' +
-      escapeHtml(state.search) +
-      '" />' +
-      '<select name="siteId"><option value="">全部站点</option>' +
-      sites
-        .map(function (site) {
-          return (
-            '<option value="' +
-            escapeHtml(site.id) +
-            '"' +
-            (state.siteId === site.id ? " selected" : "") +
-            ">" +
-            escapeHtml(site.label) +
-            "</option>"
-          );
-        })
-        .join("") +
-      "</select>" +
-      '<select name="noticeKind"><option value="">类型（页签默认）</option>' +
-      noticeKinds
-        .map(function (kind) {
-          return (
-            '<option value="' +
-            escapeHtml(kind) +
-            '"' +
-            (state.noticeKind === kind ? " selected" : "") +
-            ">" +
-            escapeHtml(kind) +
-            "</option>"
-          );
-        })
-        .join("") +
-      "</select>" +
-      '<input name="regionName" type="text" placeholder="区域" value="' +
-      escapeHtml(state.regionName) +
-      '" />' +
-      '<input name="projectCode" type="text" placeholder="项目编号" value="' +
-      escapeHtml(state.projectCode) +
-      '" />' +
-      '<input name="projectName" type="text" placeholder="项目名称" value="' +
-      escapeHtml(state.projectName) +
-      '" />' +
-      '<input name="buyerName" type="text" placeholder="采购单位" value="' +
-      escapeHtml(state.buyerName) +
-      '" />' +
-      '<input name="publishDateFrom" type="date" value="' +
-      escapeHtml(state.publishDateFrom) +
-      '" />' +
-      '<input name="publishDateTo" type="date" value="' +
-      escapeHtml(state.publishDateTo) +
-      '" />' +
-      '<button class="btn" type="button" data-role="search">搜索</button>' +
-      '<button class="btn ghost" type="button" data-role="reset">重置</button>';
-
-    function collect() {
-      state.search = (root.querySelector("[name=search]").value || "").trim();
-      state.siteId = root.querySelector("[name=siteId]").value || "";
-      state.noticeKind = root.querySelector("[name=noticeKind]").value || "";
-      state.regionName = (root.querySelector("[name=regionName]").value || "").trim();
-      state.projectCode = (root.querySelector("[name=projectCode]").value || "").trim();
-      state.projectName = (root.querySelector("[name=projectName]").value || "").trim();
-      state.buyerName = (root.querySelector("[name=buyerName]").value || "").trim();
-      state.publishDateFrom = root.querySelector("[name=publishDateFrom]").value || "";
-      state.publishDateTo = root.querySelector("[name=publishDateTo]").value || "";
-      state.page = 1;
-      loadList();
+    var siteChips = [{ value: "", label: "全部" }].concat(
+      sites.map(function (site) {
+        return { value: site.id, label: site.label };
+      })
+    );
+    var kindChips = [{ value: "", label: "全部" }].concat(
+      noticeKinds.map(function (kind) {
+        return { value: kind, label: kind };
+      })
+    );
+    var html = "";
+    html += chipRow("站点", siteChips, state.siteId, "siteId");
+    html += chipRow("公告类型", kindChips, state.noticeKind, "noticeKind");
+    if (tab.id === "opportunity") {
+      html += chipRow("状态", PROGRESS_CHIPS, state.progress, "progress");
     }
-    root.querySelector("[data-role=search]").onclick = collect;
-    root.querySelector("[data-role=reset]").onclick = function () {
-      state.search = "";
-      state.siteId = "";
-      state.noticeKind = "";
-      state.regionName = "";
-      state.projectCode = "";
-      state.projectName = "";
-      state.buyerName = "";
-      state.publishDateFrom = "";
-      state.publishDateTo = "";
-      state.page = 1;
-      renderFilters();
-      loadList();
-    };
-    root.querySelector("[name=search]").addEventListener("keydown", function (event) {
-      if (event.key === "Enter") collect();
+    html += chipRow("采购预算", BUDGET_CHIPS, state.budgetRange, "budgetRange");
+    html +=
+      '<div class="sourcing-filter-row">' +
+      '<label class="label">更多条件</label>' +
+      '<div class="sourcing-advanced">' +
+      '<label class="field"><span>所属区域</span><input name="regionName" type="text" placeholder="区域" value="' +
+      escapeHtml(state.regionName) +
+      '" /></label>' +
+      '<label class="field"><span>项目编号</span><input name="projectCode" type="text" placeholder="项目编号" value="' +
+      escapeHtml(state.projectCode) +
+      '" /></label>' +
+      '<label class="field"><span>项目名称</span><input name="projectName" type="text" placeholder="项目名称" value="' +
+      escapeHtml(state.projectName) +
+      '" /></label>' +
+      '<label class="field"><span>采购单位</span><input name="buyerName" type="text" placeholder="采购单位" value="' +
+      escapeHtml(state.buyerName) +
+      '" /></label>' +
+      '<label class="field"><span>发布起</span><input name="publishDateFrom" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" value="' +
+      escapeHtml(state.publishDateFrom) +
+      '" /></label>' +
+      '<label class="field"><span>发布止</span><input name="publishDateTo" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" value="' +
+      escapeHtml(state.publishDateTo) +
+      '" /></label>' +
+      "</div></div>";
+    root.innerHTML = html;
+    bindChips(root);
+    root.querySelectorAll("input").forEach(function (input) {
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") runSearch();
+      });
     });
+    if (window.ycDatePicker) {
+      window.ycDatePicker.bindAll(root, "input.date-input", {
+        onChange: function () {
+          /* 选中后保持筛选框值，点搜索再提交 */
+        },
+      });
+    } else {
+      root.querySelectorAll("input.date-input").forEach(function (input) {
+        input.addEventListener("blur", function () {
+          var raw = String(input.value || "").trim();
+          if (!raw) {
+            input.value = "";
+            return;
+          }
+          var next = normalizeDateInput(raw);
+          if (next) input.value = next;
+        });
+      });
+    }
+  }
+
+  function renderResultBar(total, totalPages) {
+    var root = document.getElementById("sourcing-resultbar");
+    if (!root) return;
+    root.innerHTML =
+      "<div>共 <strong>" +
+      total +
+      "</strong> 个结果 · 每页 " +
+      PAGE_SIZE +
+      " 条</div>" +
+      '<div class="pager-mini">' +
+      '<button type="button" data-dir="-1" aria-label="上一页">&lt;</button>' +
+      "<span>" +
+      state.page +
+      " / " +
+      totalPages +
+      "</span>" +
+      '<button type="button" data-dir="1" aria-label="下一页">&gt;</button>' +
+      "</div>";
+    root.querySelectorAll("button").forEach(function (btn) {
+      btn.onclick = function () {
+        var next = state.page + Number(btn.getAttribute("data-dir"));
+        if (next < 1 || next > totalPages) return;
+        state.page = next;
+        loadList();
+      };
+    });
+  }
+
+  function cardTags(item) {
+    var tags = [];
+    if (item.siteLabel) tags.push(item.siteLabel);
+    if (item.noticeKind) tags.push(item.noticeKind);
+    if (item.regionName) tags.push(item.regionName);
+    return tags.slice(0, 3);
   }
 
   function renderList(payload) {
@@ -304,6 +587,10 @@
     if (!list) return;
     var items = payload.items || [];
     var loggedIn = Boolean(me);
+    lastTotal = Number(payload.total || 0);
+    var totalPages = Math.max(1, Math.ceil(lastTotal / PAGE_SIZE));
+    renderResultBar(lastTotal, totalPages);
+
     if (!items.length) {
       list.innerHTML = "";
       if (empty) empty.hidden = false;
@@ -313,43 +600,43 @@
         .map(function (item) {
           var buyer = maskText(item.buyerName, loggedIn);
           var amount = loggedIn ? money(item.budgetAmount || item.dealAmount) : "登录可见";
+          var clock = countdownInfo(item);
+          var tags = cardTags(item);
           return (
             '<article class="notice-card' +
             (loggedIn ? "" : " is-masked") +
             '" data-id="' +
             escapeHtml(item.id) +
             '">' +
-            '<div class="notice-card-main">' +
             "<h3>" +
             escapeHtml(item.title || "未命名公告") +
             "</h3>" +
-            '<div class="notice-card-meta">' +
-            "<span>" +
-            escapeHtml(item.siteLabel || "—") +
-            "</span>" +
-            "<span>" +
-            escapeHtml(item.noticeKind || "公告") +
-            "</span>" +
-            "<span>" +
-            escapeHtml(item.progressLabel || "—") +
-            "</span>" +
-            "<span>" +
-            escapeHtml(item.regionName || "—") +
-            "</span>" +
-            "<span>" +
-            escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
-            "</span>" +
-            "</div>" +
-            '<div class="notice-card-sub">' +
-            "<span>采购单位：" +
-            escapeHtml(buyer) +
-            "</span>" +
-            "<span>金额：" +
+            '<div class="notice-card-status tone-' +
+            escapeHtml(clock.tone) +
+            '"><strong>' +
+            escapeHtml(clock.label) +
+            "</strong><em class='countdown'>" +
+            escapeHtml(clock.text || "") +
+            "</em></div>" +
+            '<div class="notice-card-fields">' +
+            "<div>采购预算：<b>" +
             escapeHtml(amount) +
-            "</span>" +
+            "</b></div>" +
+            "<div>发布时间：" +
+            escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
+            "</div>" +
+            "<div>采购单位：" +
+            escapeHtml(buyer) +
             "</div>" +
             "</div>" +
-            '<button type="button" class="btn">查看详情</button>' +
+            '<div class="notice-card-tags">' +
+            tags
+              .map(function (tag) {
+                return "<span>" + escapeHtml(tag) + "</span>";
+              })
+              .join("") +
+            "</div>" +
+            '<button type="button" class="card-action">查看详情</button>' +
             "</article>"
           );
         })
@@ -361,22 +648,22 @@
             promptLogin();
             return;
           }
-          window.location.href = "/notices/" + encodeURIComponent(id);
+          window.open("/notices/" + encodeURIComponent(id), "_blank", "noopener,noreferrer");
         });
       });
     }
 
-    var total = Number(payload.total || 0);
-    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     if (pager) {
       pager.innerHTML =
         "<span>共 " +
-        total +
+        lastTotal +
         " 条 · 第 " +
         state.page +
         " / " +
         totalPages +
-        " 页</span>" +
+        " 页 · 每页 " +
+        PAGE_SIZE +
+        " 条</span>" +
         "<div>" +
         '<button class="btn ghost" type="button" data-dir="-1">上一页</button>' +
         '<button class="btn ghost" type="button" data-dir="1">下一页</button>' +
@@ -400,9 +687,17 @@
       headers: { Accept: "application/json" },
     })
       .then(function (res) {
-        return res.json().then(function (body) {
-          if (!res.ok) throw new Error((body && body.detail) || "加载失败");
-          return body;
+        return res.text().then(function (text) {
+          var body = null;
+          if (text) {
+            try {
+              body = JSON.parse(text);
+            } catch (error) {
+              throw new Error(res.ok ? "接口返回异常" : "加载失败（" + res.status + "）");
+            }
+          }
+          if (!res.ok) throw new Error((body && body.detail) || "加载失败（" + res.status + "）");
+          return body || {};
         });
       })
       .then(function (body) {
@@ -423,7 +718,10 @@
   function bootList() {
     readStateFromUrl();
     renderTabs();
-    fetchMe().then(function () {
+    renderSearchBar();
+    renderFilters();
+    fetchMe().then(function (account) {
+      me = account || null;
       loadList();
     });
   }
@@ -455,7 +753,11 @@
             escapeHtml(detail.title || "公告详情") +
             "</h2>" +
             '<p class="muted">' +
-            escapeHtml([detail.siteLabel, detail.noticeKind, formatDate(detail.publishTime || detail.publishedAt)].filter(Boolean).join(" · ")) +
+            escapeHtml(
+              [detail.siteLabel, detail.noticeKind, formatDate(detail.publishTime || detail.publishedAt)]
+                .filter(Boolean)
+                .join(" · ")
+            ) +
             "</p>" +
             '<div class="notice-detail-grid">' +
             "<div><span>采购单位</span><strong>" +

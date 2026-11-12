@@ -168,6 +168,10 @@ function proxyApi(req, res, url) {
     "user-agent": req.headers["user-agent"] || "official-web",
     host: process.env.BACKEND_HTTP_HOST || target.host,
   };
+  // 透传浏览器 Host，供后端签发跨子域 portal_session Cookie Domain
+  if (req.headers.host) headers["x-forwarded-host"] = req.headers.host;
+  const proto = req.headers["x-forwarded-proto"] || (req.socket && req.socket.encrypted ? "https" : "http");
+  if (proto) headers["x-forwarded-proto"] = proto;
   if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
   if (req.headers.cookie) headers.cookie = req.headers.cookie;
   if (req.headers["content-length"] && method !== "GET" && method !== "HEAD") {

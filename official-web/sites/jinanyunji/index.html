@@ -317,14 +317,18 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 16px;
+            min-width: 0;
         }
 
         .logo {
             display: flex;
             align-items: center;
+            flex: none;
             font-size: 26px;
             font-weight: bold;
             color: white;
+            white-space: nowrap;
         }
 
         .logo-icon {
@@ -334,18 +338,39 @@
 
         .nav-menu {
             display: flex;
+            flex-wrap: nowrap !important;
+            align-items: center;
+            justify-content: flex-end;
             list-style: none;
+            min-width: 0;
+            gap: 0;
+            overflow: hidden;
         }
 
         .nav-menu li {
-            margin-left: 30px;
+            margin-left: 10px;
             position: relative;
+            flex: 0 0 auto !important;
+            max-width: none;
         }
 
         .nav-menu a {
+            display: inline-block;
             color: white;
             font-weight: 500;
+            font-size: 13px;
             padding: 5px 0;
+            white-space: nowrap !important;
+            word-break: keep-all !important;
+            overflow-wrap: normal !important;
+            max-width: none;
+        }
+
+        .nav-menu a[data-portal-entry] {
+            max-width: 7em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: bottom;
         }
 
         .nav-menu a::after {
@@ -932,6 +957,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/css/home-notice-quad.css?v=20261112d" />
 </head>
 <body>
     <!-- 侧边联系栏 -->
@@ -1532,8 +1558,8 @@
         });
     </script>
     <script src="js/sendMessage.js?v=20260916a"></script>
-    <script src="/js/portal-home.js?v=20261112a"></script>
-    <script src="/js/home-notice-quad.js?v=20261112a"></script>
+    <script src="/js/portal-home.js?v=20261112e"></script>
+    <script src="/js/home-notice-quad.js?v=20261112d"></script>
     <script>
         // 调用封装方法
         handleFormSubmit(

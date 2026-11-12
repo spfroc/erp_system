@@ -253,10 +253,52 @@
     .chart { width: 100%; min-height: 0; }
     .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
     .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, #1f8a56, #d7a441); }
-    .toolbar { flex: none; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
-    .toolbar label { margin: 0; min-width: 160px; flex: 1; }
-    .toolbar .primary, .toolbar .ghost { width: auto; margin: 0; flex: none; }
-    .toolbar input[type="date"] { width: auto; min-width: 146px; }
+    .toolbar {
+      flex: none;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px 12px;
+      align-items: end;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: rgba(255,253,248,.72);
+      border: 1px solid rgba(234,223,206,.9);
+      border-radius: 16px;
+    }
+    .toolbar label { margin: 0; min-width: 0; }
+    .toolbar input,
+    .toolbar select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .toolbar input.date-input,
+    .toolbar input[data-datepicker],
+    .toolbar input[type="date"] {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+    .toolbar-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 2px;
+    }
+    .toolbar .primary, .toolbar .ghost { width: auto; margin: 0; }
+    .stats-custom-range label:has(input.date-input),
+    .stats-custom-range label:has(input[data-datepicker]) {
+      flex: 0 0 160px;
+      min-width: 160px;
+      max-width: 160px;
+    }
+    @media (max-width: 1100px) {
+      .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     .list-card {
       flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px;
       padding: 2px 2px 10px; -webkit-overflow-scrolling: touch;
@@ -340,23 +382,112 @@
       background: #f3faf6; border-color: rgba(31,138,86,.28); color: #0f6b40;
     }
     .message-side .ghost:hover { background: #e7f6ee; border-color: #1f8a56; color: #0f6b40; }
-    .notice-card-list { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 10px; overflow: auto; flex: 1; min-height: 0; }
+    #panel.notice-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .notice-card-list {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-auto-rows: max-content;
+      gap: 14px;
+      padding: 4px 0 12px;
+      overflow: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      align-content: start;
+      align-items: start;
+    }
     .portal-notice-card {
-      display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start;
-      padding: 14px 16px; background: var(--card); border: 1px solid rgba(234,223,206,.95);
-      border-radius: 14px; box-shadow: 0 6px 16px rgba(62,42,16,.05);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      height: max-content;
+      min-height: max-content;
+      align-self: start;
+      padding: 12px;
+      background: var(--card);
+      border: 1px solid rgba(234,223,206,.95);
+      border-radius: 8px;
+      box-shadow: 0 6px 16px rgba(62,42,16,.05);
+      overflow: hidden;
+      box-sizing: border-box;
     }
-    .portal-notice-card h3 { margin: 0 0 8px; font-size: 15px; line-height: 1.45; }
-    .portal-notice-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .portal-notice-card h3 {
+      flex: 0 0 auto;
+      margin: 0; min-height: 40px; font-size: 14px; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      word-break: break-word;
+    }
+    .portal-notice-status {
+      flex: 0 0 auto;
+      display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 10px;
+      background: #f6f0e6; border-radius: 4px; font-size: 12px; color: var(--muted);
+      min-width: 0;
+    }
+    .portal-notice-status strong {
+      flex: none; font-weight: 700; white-space: nowrap;
+    }
+    .portal-notice-status .countdown {
+      min-width: 0; font-style: normal; font-variant-numeric: tabular-nums;
+      font-weight: 700; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .portal-notice-status.tone-upcoming {
+      background: #e8f1fc; border: 1px solid rgba(26,95,180,.18);
+    }
+    .portal-notice-status.tone-upcoming strong,
+    .portal-notice-status.tone-upcoming .countdown { color: #1a5fb4; }
+    .portal-notice-status.tone-ongoing {
+      background: #fff1e6; border: 1px solid rgba(196,90,26,.18);
+    }
+    .portal-notice-status.tone-ongoing strong,
+    .portal-notice-status.tone-ongoing .countdown { color: #c45a1a; }
+    .portal-notice-status.tone-ended {
+      background: #f3f3f3; border: 1px solid rgba(0,0,0,.06);
+    }
+    .portal-notice-status.tone-ended strong,
+    .portal-notice-status.tone-ended .countdown { color: #888; }
+    .portal-notice-status.tone-unknown strong { color: #8a6414; }
+    .portal-notice-fields {
+      flex: 0 0 auto;
+      display: grid; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0;
+    }
+    .portal-notice-fields > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .portal-notice-fields b { color: #c45a1a; font-weight: 700; }
+    .portal-notice-meta {
+      flex: 0 0 auto;
+      display: flex; flex-wrap: wrap; gap: 6px; min-width: 0;
+    }
     .portal-notice-meta span {
-      display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #f6f0e6;
-      color: var(--muted); font-size: 12px;
+      display: inline-flex; max-width: 100%; padding: 3px 8px; border-radius: 2px; background: #f6f0e6;
+      color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .portal-notice-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-    @media (max-width: 960px) {
-      .portal-notice-card { grid-template-columns: 1fr; }
-      .portal-notice-actions { flex-direction: row; justify-content: flex-end; }
+    .portal-notice-actions {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 4px;
     }
+    .portal-notice-actions .ghost {
+      width: 100%;
+      margin: 0;
+      height: 32px;
+      min-height: 32px;
+      padding: 0 8px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    @media (max-width: 1480px) { .notice-card-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 1180px) { .notice-card-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 900px) { .notice-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .notice-card-list { grid-template-columns: 1fr; } }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(36, 28, 20, .42); display: grid; place-items: center; padding: 20px; z-index: 40; }
     .modal { width: min(760px, 100%); max-height: min(86vh, 900px); overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 60px rgba(48, 32, 12, .2); }
     .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
@@ -548,7 +679,18 @@
       .modal-actions { justify-content: stretch; }
       .modal-actions .primary, .modal-actions .ghost { flex: 1; min-height: 40px; }
     }
+    .flatpickr-calendar { font-family: inherit; }
+    .flatpickr-day.selected,
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange,
+    .flatpickr-day.selected:hover,
+    .flatpickr-day.startRange:hover,
+    .flatpickr-day.endRange:hover {
+      background: var(--green);
+      border-color: var(--green);
+    }
   </style>
+  <link rel="stylesheet" href="/css/flatpickr.min.css" />
 </head>
 <body>
   <section id="boot" class="boot">加载中…</section>
@@ -604,6 +746,9 @@
     </div>
   </section>
 
+  <script src="/js/flatpickr.min.js"></script>
+  <script src="/js/flatpickr-zh.js"></script>
+  <script src="/js/yc-datepicker.js?v=20261112a"></script>
   <script>
 
     const menuToggle = document.getElementById("menu-toggle");
@@ -904,6 +1049,7 @@
       const panel = document.getElementById("panel");
       panel.classList.toggle("stats-panel", id === "stats" || id === "home");
       panel.classList.toggle("message-panel", id === "messages");
+      panel.classList.toggle("notice-panel", id === "notices");
       panel.innerHTML = '<p class="empty">加载中…</p>';
       try {
         if (id === "home") await renderHome(panel);
@@ -1427,9 +1573,9 @@
         '<button type="button" data-period="custom">自定义</button>' +
         "</div>" +
         '<div class="stats-custom-range" data-role="custom-range" hidden>' +
-        '<label>发布开始<input type="date" data-role="start-date" /></label>' +
+        '<label>发布开始<input type="text" class="date-input" data-role="start-date" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
         '<span class="range-sep">至</span>' +
-        '<label>发布结束<input type="date" data-role="end-date" /></label>' +
+        '<label>发布结束<input type="text" class="date-input" data-role="end-date" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
         '<button class="ghost" type="button" data-role="apply-custom">查询</button>' +
         "</div>" +
         (showDealKinds ? '<div class="segmented" data-role="deal"></div>' : "") +
@@ -1438,6 +1584,7 @@
             '<label style="min-width:140px;margin:0">采购人<input name="buyer" placeholder="采购人关键词" /></label>'
           : "");
       parent.appendChild(box);
+      if (window.ycDatePicker) window.ycDatePicker.bindAll(box);
 
       const syncActive = () => {
         box.querySelectorAll("[data-period]").forEach((button) => {
@@ -1445,8 +1592,16 @@
         });
         const customRange = box.querySelector("[data-role=custom-range]");
         customRange.hidden = tagQuery.period !== "custom";
-        box.querySelector("[data-role=start-date]").value = tagQuery.startDate;
-        box.querySelector("[data-role=end-date]").value = tagQuery.endDate;
+        const startInput = box.querySelector("[data-role=start-date]");
+        const endInput = box.querySelector("[data-role=end-date]");
+        if (startInput) {
+          startInput.value = tagQuery.startDate || "";
+          if (startInput._flatpickr) startInput._flatpickr.setDate(tagQuery.startDate || "", false);
+        }
+        if (endInput) {
+          endInput.value = tagQuery.endDate || "";
+          if (endInput._flatpickr) endInput._flatpickr.setDate(tagQuery.endDate || "", false);
+        }
         box.querySelectorAll("[data-deal]").forEach((button) => {
           button.classList.toggle("active", (button.dataset.deal || "") === (tagQuery.dealKind || ""));
         });
@@ -1483,8 +1638,8 @@
       const startInput = box.querySelector("[data-role=start-date]");
       const endInput = box.querySelector("[data-role=end-date]");
       const applyCustom = () => {
-        tagQuery.startDate = startInput.value || "";
-        tagQuery.endDate = endInput.value || "";
+        tagQuery.startDate = normalizeYmd(startInput.value) || "";
+        tagQuery.endDate = normalizeYmd(endInput.value) || "";
         tagQuery.period = "custom";
         syncActive();
         if (!tagQuery.startDate || !tagQuery.endDate) {
@@ -1625,6 +1780,106 @@
         return (amount / 10000).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0万";
       }
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0元";
+    }
+
+    function normalizeYmd(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      let y, m, d;
+      let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (match) {
+        y = match[1]; m = match[2]; d = match[3];
+      } else if ((match = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/))) {
+        y = match[1]; m = match[2]; d = match[3];
+      } else if ((match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) {
+        y = match[3]; m = match[1]; d = match[2];
+      } else {
+        return "";
+      }
+      m = String(m).padStart(2, "0");
+      d = String(d).padStart(2, "0");
+      const stamp = Date.parse(y + "-" + m + "-" + d + "T00:00:00");
+      if (Number.isNaN(stamp)) return "";
+      return y + "-" + m + "-" + d;
+    }
+
+    function parseNoticeTime(value) {
+      if (!value) return null;
+      const text = String(value).trim();
+      if (!text) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        const stamp = Date.parse(text + "T00:00:00+08:00");
+        return Number.isNaN(stamp) ? null : stamp;
+      }
+      if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(text) && !/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(text)) {
+        let normalized = text.replace(" ", "T");
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) normalized += ":00";
+        const stamp = Date.parse(normalized + "+08:00");
+        return Number.isNaN(stamp) ? null : stamp;
+      }
+      const stamp = Date.parse(text.includes("T") ? text : text.replace(" ", "T"));
+      return Number.isNaN(stamp) ? null : stamp;
+    }
+
+    function formatCountdown(ms) {
+      const remain = Math.max(0, Number(ms) || 0);
+      const totalMin = Math.floor(remain / 60000);
+      const days = Math.floor(totalMin / (60 * 24));
+      const hours = Math.floor((totalMin % (60 * 24)) / 60);
+      const mins = totalMin % 60;
+      const pad = (n) => String(n).padStart(2, "0");
+      return pad(days) + "天 " + pad(hours) + "时 " + pad(mins) + "分";
+    }
+
+    function isClosedNoticeKind(item) {
+      const text = String(item.noticeKind || "") + " " + String(item.title || "");
+      return /验收|合同公告|成交结果|结果公告|终止|废标|失败公告|成交公告/.test(text);
+    }
+
+    function noticeCountdownInfo(item) {
+      const now = Date.now();
+      const start = parseNoticeTime(item.startTime);
+      const end = parseNoticeTime(item.endTime);
+      let status = String(item.progressStatus || "").toLowerCase();
+      let label = String(item.progressLabel || "");
+
+      if (isClosedNoticeKind(item) && status !== "ongoing" && status !== "upcoming") {
+        status = "ended";
+        label = "已截止";
+      } else if (!status || status === "unknown") {
+        if (end && end < now) {
+          status = "ended";
+          label = "已截止";
+        } else if (start && start > now) {
+          status = "upcoming";
+          label = "未开始";
+        } else if (end && end >= now) {
+          status = "ongoing";
+          label = "进行中";
+        } else if (start && start <= now) {
+          status = "ongoing";
+          label = "进行中";
+        }
+      }
+
+      if (status === "upcoming" || label === "未开始") {
+        return {
+          label: "未开始",
+          text: start ? "距开始 " + formatCountdown(start - now) : "即将开始",
+          tone: "upcoming",
+        };
+      }
+      if (status === "ongoing" || label === "进行中") {
+        return {
+          label: "进行中",
+          text: end ? "距结束 " + formatCountdown(end - now) : "进行中",
+          tone: "ongoing",
+        };
+      }
+      if (status === "ended" || label === "已截止" || label === "已结束") {
+        return { label: "已截止", text: "", tone: "ended" };
+      }
+      return { label: label || "未知", text: "", tone: "unknown" };
     }
 
     /** 统一按 Asia/Shanghai 显示；UTC/带偏移 ISO 会换算，无时区则视为东八区墙钟。 */
@@ -2062,6 +2317,37 @@
       });
     }
 
+    let noticeCountdownTimer = 0;
+
+    function refreshNoticeCountdowns(root) {
+      (root || document).querySelectorAll(".portal-notice-card[data-countdown]").forEach((card) => {
+        const item = {
+          title: card.dataset.title || "",
+          noticeKind: card.dataset.noticeKind || "",
+          progressStatus: card.dataset.progressStatus || "",
+          progressLabel: card.dataset.progressLabel || "",
+          startTime: card.dataset.startTime || "",
+          endTime: card.dataset.endTime || "",
+        };
+        const clock = noticeCountdownInfo(item);
+        const status = card.querySelector(".portal-notice-status");
+        const kind = card.querySelector(".kind");
+        const countdown = card.querySelector(".countdown");
+        if (status) status.className = "portal-notice-status tone-" + clock.tone;
+        if (kind) kind.textContent = clock.label;
+        if (countdown) countdown.textContent = clock.text || "";
+      });
+    }
+
+    function ensureNoticeCountdownTicker() {
+      if (noticeCountdownTimer) return;
+      noticeCountdownTimer = window.setInterval(() => {
+        const list = document.querySelector(".notice-card-list");
+        if (!list) return;
+        refreshNoticeCountdowns(list);
+      }, 30000);
+    }
+
     function fillNoticeList(list, body) {
       list.innerHTML = "";
       if (!body.items.length) {
@@ -2071,35 +2357,50 @@
       body.items.forEach((item) => {
         const article = document.createElement("article");
         article.className = "portal-notice-card";
+        article.dataset.countdown = "1";
+        article.dataset.title = item.title || "";
+        article.dataset.noticeKind = item.noticeKind || "";
+        article.dataset.progressStatus = item.progressStatus || "";
+        article.dataset.progressLabel = item.progressLabel || "";
+        article.dataset.startTime = item.startTime || "";
+        article.dataset.endTime = item.endTime || "";
+        const amount =
+          item.budgetAmount != null && item.budgetAmount !== ""
+            ? "¥" + Number(item.budgetAmount).toLocaleString("zh-CN")
+            : item.dealAmount != null && item.dealAmount !== ""
+              ? "¥" + Number(item.dealAmount).toLocaleString("zh-CN")
+              : "—";
+        const publish = formatDateTimeShanghai(item.publishTime);
+        const clock = noticeCountdownInfo(item);
         article.innerHTML =
-          '<div class="notice-main"><h3></h3><div class="portal-notice-meta"></div></div>' +
+          "<h3></h3>" +
+          '<div class="portal-notice-status tone-' + clock.tone + '"><strong class="kind"></strong><em class="countdown"></em></div>' +
+          '<div class="portal-notice-fields">' +
+          "<div>采购预算：<b></b></div>" +
+          "<div data-role='publish'></div>" +
+          "<div data-role='buyer'></div>" +
+          "</div>" +
+          '<div class="portal-notice-meta"></div>' +
           '<div class="portal-notice-actions">' +
-          '<span class="kind"></span>' +
-          '<button class="ghost" type="button" data-role="detail">详情</button>' +
+          '<button class="ghost" type="button" data-role="detail">查看详情</button>' +
           '<button class="ghost" type="button" data-role="source">原文</button>' +
           "</div>";
         article.querySelector("h3").textContent = item.title || "未命名公告";
+        article.querySelector(".kind").textContent = clock.label;
+        article.querySelector(".portal-notice-status .countdown").textContent = clock.text || "";
+        article.querySelector(".portal-notice-fields b").textContent = amount;
+        article.querySelector("[data-role=publish]").textContent = "发布时间：" + publish;
+        article.querySelector("[data-role=buyer]").textContent = "采购单位：" + (item.buyerName || "—");
         const meta = article.querySelector(".portal-notice-meta");
-        [
-          item.siteLabel,
-          item.regionName,
-          item.progressLabel,
-          item.buyerName,
-          item.projectCode,
-          formatDateTimeShanghai(item.publishTime),
-        ]
+        [item.siteLabel, item.noticeKind, item.regionName]
           .filter((part) => part && part !== "—")
           .forEach((text) => {
             const span = document.createElement("span");
             span.textContent = text;
             meta.appendChild(span);
           });
-        const badge = article.querySelector(".kind");
-        badge.textContent = item.noticeKind || "公告";
-        const tone = kindTone(item.noticeKind);
-        if (tone) badge.classList.add(tone);
         const open = () => void openNoticeDetail(item.id);
-        article.querySelector(".notice-main").onclick = open;
+        article.querySelector("h3").onclick = open;
         article.querySelector("[data-role=detail]").onclick = open;
         const sourceBtn = article.querySelector("[data-role=source]");
         if (!item.sourceUrl) {
@@ -2113,12 +2414,13 @@
         }
         list.appendChild(article);
       });
+      ensureNoticeCountdownTicker();
     }
 
     function fillNoticePager(pager, panel, body) {
-      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 10)));
+      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 20)));
       pager.innerHTML = "<span></span><div><button class='ghost' type='button' data-dir='-1'>上一页</button><button class='ghost' type='button' data-dir='1'>下一页</button></div>";
-      pager.querySelector("span").textContent = "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页";
+      pager.querySelector("span").textContent = "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页 · 每页 " + (body.page_size || 20) + " 条";
       pager.querySelectorAll("button").forEach((button) => {
         button.onclick = () => {
           const next = noticeQuery.page + Number(button.dataset.dir);
@@ -2133,7 +2435,7 @@
       const requestId = ++noticeRequest;
       const params = new URLSearchParams({
         page: String(noticeQuery.page),
-        page_size: "10",
+        page_size: "20",
         search: noticeQuery.search,
         siteId: noticeQuery.siteId,
         noticeKind: noticeQuery.noticeKind,
@@ -2167,10 +2469,12 @@
           '<label>项目编号<input name="projectCode" /></label>' +
           '<label>项目名称<input name="projectName" /></label>' +
           '<label>采购单位<input name="buyerName" /></label>' +
-          '<label>发布开始<input name="publishDateFrom" type="date" /></label>' +
-          '<label>发布结束<input name="publishDateTo" type="date" /></label>' +
+          '<label>发布开始<input name="publishDateFrom" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
+          '<label>发布结束<input name="publishDateTo" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
+          '<div class="toolbar-actions">' +
           '<button class="ghost" type="button" data-role="apply">查询</button>' +
-          '<button class="ghost" type="button" data-role="reset">重置</button>';
+          '<button class="ghost" type="button" data-role="reset">重置</button>' +
+          "</div>";
         const bindText = (name, key, debounce) => {
           const input = toolbar.querySelector("[name=" + name + "]");
           input.value = noticeQuery[key] || "";
@@ -2233,11 +2537,19 @@
         };
         const fromInput = toolbar.querySelector("[name=publishDateFrom]");
         const toInput = toolbar.querySelector("[name=publishDateTo]");
-        fromInput.value = noticeQuery.publishDateFrom;
-        toInput.value = noticeQuery.publishDateTo;
+        fromInput.value = noticeQuery.publishDateFrom || "";
+        toInput.value = noticeQuery.publishDateTo || "";
+        if (window.ycDatePicker) {
+          window.ycDatePicker.bind(fromInput);
+          window.ycDatePicker.bind(toInput);
+        }
         toolbar.querySelector("[data-role=apply]").onclick = () => {
-          noticeQuery.publishDateFrom = fromInput.value || "";
-          noticeQuery.publishDateTo = toInput.value || "";
+          noticeQuery.publishDateFrom = normalizeYmd(fromInput.value) || "";
+          noticeQuery.publishDateTo = normalizeYmd(toInput.value) || "";
+          fromInput.value = noticeQuery.publishDateFrom;
+          toInput.value = noticeQuery.publishDateTo;
+          if (fromInput._flatpickr) fromInput._flatpickr.setDate(noticeQuery.publishDateFrom || "", false);
+          if (toInput._flatpickr) toInput._flatpickr.setDate(noticeQuery.publishDateTo || "", false);
           noticeQuery.regionName = toolbar.querySelector("[name=regionName]").value.trim();
           noticeQuery.projectCode = toolbar.querySelector("[name=projectCode]").value.trim();
           noticeQuery.projectName = toolbar.querySelector("[name=projectName]").value.trim();
