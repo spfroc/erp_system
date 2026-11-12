@@ -293,6 +293,11 @@
     loadHomeNotices();
   }
 
+  window.__portalFetchMe = fetchMe;
+  window.__portalShowLoginToast = function () {
+    promptLogin("登录后查看公告详情", "#notices");
+  };
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
   } else {

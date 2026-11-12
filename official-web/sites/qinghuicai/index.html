@@ -833,17 +833,6 @@
                 <div class="stat-item"><div class="stat-number">30+60天</div><div class="stat-label">账期保障</div></div>
             </div>
             <a href="#contact" class="header-cta">立即申请入驻代办</a>
-            <div id="home-notices" class="home-notices is-on-hero" data-notice-detail="portal" aria-label="最新公告">
-                <div class="home-notices-inner">
-                    <div class="home-notices-label">公告</div>
-                    <div class="home-notices-viewport">
-                        <ul class="home-notices-track" id="home-notices-track">
-                            <li>公告加载中…</li>
-                        </ul>
-                    </div>
-                    <a href="/portal/?from=site#notices" class="home-notices-more" data-notices-more>查看更多</a>
-                </div>
-            </div>
         </div>
     </div>
 </header>
@@ -853,6 +842,7 @@
         <div class="nav-logo">青慧采服务</div>
         <ul class="nav-menu">
             <li class="nav-item"><a href="/" class="nav-link">首页</a></li>
+            <li class="nav-item"><a href="/notices" class="nav-link">壹采寻源</a></li>
 			<li class="nav-item"><a href="#services" class="nav-link"><strong>入驻服务</strong></a></li>
             <li class="nav-item"><a href="#intro" class="nav-link">平台介绍</a></li>
             <li class="nav-item"><a href="#corevalue" class="nav-link">平台价值</a></li>
@@ -867,6 +857,7 @@
 </nav>
 
 <main>
+    <section id="home-notice-quad" class="is-light" aria-label="寻源公告"></section>
     <!-- 平台介绍 -->
     <section id="intro" class="platform-intro">
         <div class="container">
@@ -1047,7 +1038,8 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/sendMessage.js?v=20260916a"></script>
-<script src="/js/portal-home.js?v=20261102a"></script>
+<script src="/js/portal-home.js?v=20261112a"></script>
+<script src="/js/home-notice-quad.js?v=20261112a"></script>
 <script>
     window.addEventListener('load', function() {
         const bar = document.getElementById('loading-bar');

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>壹采寻源 | 青慧采</title>
+  <meta name="description" content="壹采寻源：商机大厅、公告大厅与采购意向，汇聚政企采购公开信息。" />
+  <link rel="stylesheet" href="/css/notices.css" />
+</head>
+<body data-page="notice-list">
+  <header class="site-header">
+    <div class="container header-container">
+      <a class="logo" href="/">青慧采</a>
+      <button class="mobile-menu-btn" type="button" aria-label="菜单">☰</button>
+      <ul class="nav-menu">
+        <li><a href="/">首页</a></li>
+        <li><a class="active" href="/notices">壹采寻源</a></li>
+        <li><a href="/#intro">平台介绍</a></li>
+        <li><a href="/#contact">联系我们</a></li>
+        <li><a href="/portal/?from=site" data-portal-entry>会员登录</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <section class="page-hero">
+    <div class="container">
+      <h1>壹采寻源</h1>
+      <p>商机、结果公告与采购意向一站查看。登录后可查看完整信息。</p>
+    </div>
+  </section>
+
+  <main class="container" id="sourcing-root">
+    <div class="sourcing-tabs" id="sourcing-tabs" role="tablist"></div>
+    <div class="notice-toolbar sourcing-filters" id="sourcing-filters"></div>
+    <div id="notice-loading" class="notice-loading" hidden>加载中...</div>
+    <div id="notice-list" class="notice-card-list"></div>
+    <div id="notice-empty" class="notice-empty" hidden>暂无公告</div>
+    <div id="notice-pager" class="notice-pager"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="copyright">© 青慧采服务 · <a href="/">返回首页</a></div>
+    </div>
+  </footer>
+  <script src="/js/portal-home.js?v=20261112a"></script>
+  <script src="/js/public-notices.js?v=20261112a"></script>
+</body>
+</html>

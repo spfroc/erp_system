@@ -688,11 +688,11 @@ def build_notice_stats(
     return stats
 
 
-PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX = 10
+PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX = 20
 
 
 def _public_crawled_notice_item(item: dict) -> dict:
-    """官网首页滚动条只需要标题与发布时间；详情仍走门户登录。"""
+    """官网公开列表/田字格字段；敏感详情仍需登录后查看。"""
     published = item.get("publishTime") or item.get("publishedAt") or ""
     return {
         "id": item.get("id"),
@@ -702,12 +702,20 @@ def _public_crawled_notice_item(item: dict) -> dict:
         "noticeKind": item.get("noticeKind") or "",
         "siteId": item.get("siteId") or "",
         "siteLabel": item.get("siteLabel") or "",
+        "regionName": item.get("regionName") or "",
+        "buyerName": item.get("buyerName") or "",
+        "projectName": item.get("projectName") or "",
+        "projectCode": item.get("projectCode") or "",
+        "progressStatus": item.get("progressStatus") or "",
+        "progressLabel": item.get("progressLabel") or "",
+        "budgetAmount": item.get("budgetAmount"),
+        "dealAmount": item.get("dealAmount"),
     }
 
 
 @require_http_methods(["GET"])
 def public_crawled_notices(request):
-    """匿名只读：与后台/门户同源的爬虫公告，最多 10 条，供官网首页滚动。"""
+    """匿名只读：爬虫公告列表，供官网首页田字格与壹采寻源。"""
     try:
         page = max(int(request.GET.get("page") or 1), 1)
     except (TypeError, ValueError):
@@ -718,16 +726,26 @@ def public_crawled_notices(request):
             PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX,
         )
     except (TypeError, ValueError):
-        page_size = PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX
+        page_size = 10
     site_id = (request.GET.get("siteId") or "").strip()
     notice_kind = (request.GET.get("noticeKind") or "").strip()
+    notice_kinds = (request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip()
     try:
         payload = query_crawled_notices(
             page=page,
             page_size=page_size,
+            search=(request.GET.get("search") or "").strip(),
             site_id=site_id,
             notice_kind=notice_kind,
+            notice_kinds=notice_kinds,
             site_ids=None,
+            publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
+            publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
+            buyer_name=(request.GET.get("buyerName") or "").strip(),
+            project_code=(request.GET.get("projectCode") or "").strip(),
+            project_name=(request.GET.get("projectName") or "").strip(),
+            region_name=(request.GET.get("regionName") or request.GET.get("region") or "").strip(),
+            progress=(request.GET.get("progress") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
         return JsonResponse(
@@ -746,6 +764,8 @@ def public_crawled_notices(request):
             "total": payload.get("total") or 0,
             "page": payload.get("page") or page,
             "page_size": payload.get("page_size") or page_size,
+            "sites": site_options(None),
+            "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
         }
     )
 
@@ -766,9 +786,15 @@ def portal_notices(request):
             search=(request.GET.get("search") or "").strip(),
             site_id=(request.GET.get("siteId") or "").strip(),
             notice_kind=(request.GET.get("noticeKind") or "").strip(),
+            notice_kinds=(request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip(),
             site_ids=scope,
             publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
             publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
+            buyer_name=(request.GET.get("buyerName") or "").strip(),
+            project_code=(request.GET.get("projectCode") or "").strip(),
+            project_name=(request.GET.get("projectName") or "").strip(),
+            region_name=(request.GET.get("regionName") or request.GET.get("region") or "").strip(),
+            progress=(request.GET.get("progress") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
         # 勿吞成空列表：前端会当成「无数据」，掩盖缺列/索引等真实故障
@@ -783,7 +809,7 @@ def portal_notices(request):
             status=503,
         )
     payload["sites"] = site_options(scope)
-    payload["noticeKinds"] = PORTAL_NOTICE_KINDS
+    payload["noticeKinds"] = PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"]
     return JsonResponse(payload)
 
 

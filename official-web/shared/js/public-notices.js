@@ -1,8 +1,64 @@
 (function () {
   var PAGE_SIZE = 10;
+  var TABS = [
+    {
+      id: "opportunity",
+      label: "商机大厅",
+      progress: "ongoing,upcoming",
+      noticeKinds: "",
+      hint: "进行中 / 将开始的采购机会",
+    },
+    {
+      id: "result",
+      label: "公告大厅",
+      progress: "",
+      noticeKinds: "成交公告,成交结果公告,结果公告,失败公告,终止公告,废标公告",
+      hint: "成交 / 失败 / 终止等结果类公告",
+    },
+    {
+      id: "intent",
+      label: "采购意向",
+      progress: "",
+      noticeKinds: "意向公开",
+      hint: "采购意向公开信息",
+    },
+  ];
+
+  var state = {
+    tab: "opportunity",
+    page: 1,
+    search: "",
+    siteId: "",
+    noticeKind: "",
+    regionName: "",
+    projectCode: "",
+    projectName: "",
+    buyerName: "",
+    publishDateFrom: "",
+    publishDateTo: "",
+    progress: "",
+  };
+  var me = null;
+  var meReady = null;
+  var sites = [];
+  var noticeKinds = [];
 
   function qs(name) {
     return new URLSearchParams(window.location.search).get(name) || "";
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    var text = String(value);
+    return text.length >= 10 ? text.slice(0, 10) : text;
   }
 
   function money(value) {
@@ -18,74 +74,227 @@
     }
   }
 
-  function formatDate(value) {
-    if (!value) return "—";
-    var text = String(value);
-    if (text.length >= 10) return text.slice(0, 10);
-    return text;
+  function currentTab() {
+    return TABS.find(function (tab) {
+      return tab.id === state.tab;
+    }) || TABS[0];
   }
 
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  function portalLoginUrl() {
+    return "/portal/?from=site#notices";
   }
 
-  function listPath(options) {
-    options = options || {};
-    var params = new URLSearchParams();
-    if (options.page && options.page > 1) params.set("page", String(options.page));
-    if (options.kind && options.kind !== "全部") params.set("kind", options.kind);
-    if (options.search) params.set("search", options.search);
-    var qsText = params.toString();
-    return qsText ? "/notices?" + qsText : "/notices";
-  }
-
-  function detailPath(id) {
-    return "/notices/" + encodeURIComponent(id);
-  }
-
-  function fetchJson(url) {
-    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-    var timer = controller
-      ? setTimeout(function () {
-          controller.abort();
-        }, 12000)
-      : null;
-    return fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: controller ? controller.signal : undefined,
-    })
-      .then(function (response) {
-        return response.json().catch(function () { return {}; }).then(function (body) {
-          if (!response.ok) {
-            throw new Error((body && body.detail) || ("HTTP " + response.status));
-          }
-          return body;
-        });
+  function fetchMe() {
+    if (window.__portalFetchMe) return window.__portalFetchMe();
+    if (meReady) return meReady;
+    meReady = fetch("/api/portal/me/", { credentials: "include", headers: { Accept: "application/json" } })
+      .then(function (res) {
+        if (!res.ok) throw new Error("unauthorized");
+        return res.json();
       })
-      .catch(function (error) {
-        if (error && error.name === "AbortError") {
-          throw new Error("请求超时，请刷新重试");
-        }
-        throw error;
+      .then(function (body) {
+        me = body && body.data ? body.data : null;
+        return me;
       })
-      .finally(function () {
-        if (timer) clearTimeout(timer);
+      .catch(function () {
+        me = null;
+        return null;
       });
+    return meReady;
   }
 
-  function renderFilters(kinds, active) {
-    var root = document.getElementById("notice-filters");
+  function promptLogin() {
+    if (typeof window.__portalShowLoginToast === "function") {
+      window.__portalShowLoginToast();
+      return;
+    }
+    window.location.href = portalLoginUrl();
+  }
+
+  function syncUrl() {
+    var params = new URLSearchParams();
+    if (state.tab && state.tab !== "opportunity") params.set("tab", state.tab);
+    if (state.page > 1) params.set("page", String(state.page));
+    if (state.search) params.set("search", state.search);
+    if (state.siteId) params.set("siteId", state.siteId);
+    if (state.noticeKind) params.set("noticeKind", state.noticeKind);
+    if (state.regionName) params.set("regionName", state.regionName);
+    if (state.projectCode) params.set("projectCode", state.projectCode);
+    if (state.projectName) params.set("projectName", state.projectName);
+    if (state.buyerName) params.set("buyerName", state.buyerName);
+    if (state.publishDateFrom) params.set("publishDateFrom", state.publishDateFrom);
+    if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
+    var site = qs("site");
+    if (site) params.set("site", site);
+    var next = params.toString();
+    history.replaceState(null, "", next ? "/notices?" + next : "/notices");
+  }
+
+  function readStateFromUrl() {
+    var tab = qs("tab") || "opportunity";
+    if (!TABS.some(function (item) { return item.id === tab; })) tab = "opportunity";
+    state.tab = tab;
+    state.page = Math.max(1, Number(qs("page") || 1) || 1);
+    state.search = qs("search");
+    state.siteId = qs("siteId");
+    state.noticeKind = qs("noticeKind") || qs("kind");
+    state.regionName = qs("regionName");
+    state.projectCode = qs("projectCode");
+    state.projectName = qs("projectName");
+    state.buyerName = qs("buyerName");
+    state.publishDateFrom = qs("publishDateFrom");
+    state.publishDateTo = qs("publishDateTo");
+  }
+
+  function buildQuery() {
+    var tab = currentTab();
+    var params = new URLSearchParams({
+      page: String(state.page),
+      page_size: String(PAGE_SIZE),
+    });
+    if (state.search) params.set("search", state.search);
+    if (state.siteId) params.set("siteId", state.siteId);
+    if (state.noticeKind) {
+      params.set("noticeKind", state.noticeKind);
+    } else if (tab.noticeKinds) {
+      params.set("noticeKinds", tab.noticeKinds);
+    }
+    if (state.regionName) params.set("regionName", state.regionName);
+    if (state.projectCode) params.set("projectCode", state.projectCode);
+    if (state.projectName) params.set("projectName", state.projectName);
+    if (state.buyerName) params.set("buyerName", state.buyerName);
+    if (state.publishDateFrom) params.set("publishDateFrom", state.publishDateFrom);
+    if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
+    if (state.progress) params.set("progress", state.progress);
+    else if (tab.progress) params.set("progress", tab.progress);
+    return params;
+  }
+
+  function maskText(value, loggedIn) {
+    var text = String(value || "").trim();
+    if (!text) return "—";
+    if (loggedIn) return text;
+    if (text.length <= 2) return "**";
+    return text.slice(0, 1) + "***";
+  }
+
+  function renderTabs() {
+    var root = document.getElementById("sourcing-tabs");
     if (!root) return;
-    var items = ["全部"].concat(kinds || []);
-    root.innerHTML = items.map(function (kind) {
-      var current = active || "全部";
-      var href = listPath({ page: 1, kind: kind, search: state.search });
-      return '<a class="notice-filter ' + (kind === current ? "active" : "") + '" href="' + escapeHtml(href) + '" data-kind="' + escapeHtml(kind) + '">' + escapeHtml(kind) + "</a>";
+    root.innerHTML = TABS.map(function (tab) {
+      return (
+        '<button type="button" class="sourcing-tab' +
+        (tab.id === state.tab ? " active" : "") +
+        '" data-tab="' +
+        escapeHtml(tab.id) +
+        '">' +
+        escapeHtml(tab.label) +
+        "</button>"
+      );
     }).join("");
+    root.querySelectorAll("[data-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.tab = btn.getAttribute("data-tab");
+        state.page = 1;
+        state.noticeKind = "";
+        loadList();
+      });
+    });
+  }
+
+  function renderFilters() {
+    var root = document.getElementById("sourcing-filters");
+    if (!root) return;
+    var tab = currentTab();
+    root.innerHTML =
+      '<p class="sourcing-hint">' +
+      escapeHtml(tab.hint) +
+      "</p>" +
+      '<input name="search" type="search" placeholder="搜索标题、项目编号、采购单位" value="' +
+      escapeHtml(state.search) +
+      '" />' +
+      '<select name="siteId"><option value="">全部站点</option>' +
+      sites
+        .map(function (site) {
+          return (
+            '<option value="' +
+            escapeHtml(site.id) +
+            '"' +
+            (state.siteId === site.id ? " selected" : "") +
+            ">" +
+            escapeHtml(site.label) +
+            "</option>"
+          );
+        })
+        .join("") +
+      "</select>" +
+      '<select name="noticeKind"><option value="">类型（页签默认）</option>' +
+      noticeKinds
+        .map(function (kind) {
+          return (
+            '<option value="' +
+            escapeHtml(kind) +
+            '"' +
+            (state.noticeKind === kind ? " selected" : "") +
+            ">" +
+            escapeHtml(kind) +
+            "</option>"
+          );
+        })
+        .join("") +
+      "</select>" +
+      '<input name="regionName" type="text" placeholder="区域" value="' +
+      escapeHtml(state.regionName) +
+      '" />' +
+      '<input name="projectCode" type="text" placeholder="项目编号" value="' +
+      escapeHtml(state.projectCode) +
+      '" />' +
+      '<input name="projectName" type="text" placeholder="项目名称" value="' +
+      escapeHtml(state.projectName) +
+      '" />' +
+      '<input name="buyerName" type="text" placeholder="采购单位" value="' +
+      escapeHtml(state.buyerName) +
+      '" />' +
+      '<input name="publishDateFrom" type="date" value="' +
+      escapeHtml(state.publishDateFrom) +
+      '" />' +
+      '<input name="publishDateTo" type="date" value="' +
+      escapeHtml(state.publishDateTo) +
+      '" />' +
+      '<button class="btn" type="button" data-role="search">搜索</button>' +
+      '<button class="btn ghost" type="button" data-role="reset">重置</button>';
+
+    function collect() {
+      state.search = (root.querySelector("[name=search]").value || "").trim();
+      state.siteId = root.querySelector("[name=siteId]").value || "";
+      state.noticeKind = root.querySelector("[name=noticeKind]").value || "";
+      state.regionName = (root.querySelector("[name=regionName]").value || "").trim();
+      state.projectCode = (root.querySelector("[name=projectCode]").value || "").trim();
+      state.projectName = (root.querySelector("[name=projectName]").value || "").trim();
+      state.buyerName = (root.querySelector("[name=buyerName]").value || "").trim();
+      state.publishDateFrom = root.querySelector("[name=publishDateFrom]").value || "";
+      state.publishDateTo = root.querySelector("[name=publishDateTo]").value || "";
+      state.page = 1;
+      loadList();
+    }
+    root.querySelector("[data-role=search]").onclick = collect;
+    root.querySelector("[data-role=reset]").onclick = function () {
+      state.search = "";
+      state.siteId = "";
+      state.noticeKind = "";
+      state.regionName = "";
+      state.projectCode = "";
+      state.projectName = "";
+      state.buyerName = "";
+      state.publishDateFrom = "";
+      state.publishDateTo = "";
+      state.page = 1;
+      renderFilters();
+      loadList();
+    };
+    root.querySelector("[name=search]").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") collect();
+    });
   }
 
   function renderList(payload) {
@@ -94,166 +303,206 @@
     var pager = document.getElementById("notice-pager");
     if (!list) return;
     var items = payload.items || [];
+    var loggedIn = Boolean(me);
     if (!items.length) {
       list.innerHTML = "";
-      if (empty) {
-        empty.hidden = false;
-        empty.textContent = "暂无公开公告";
-      }
-      if (pager) pager.innerHTML = "";
-      return;
-    }
-    if (empty) empty.hidden = true;
-    list.innerHTML = items.map(function (item) {
-      return (
-        '<a class="notice-item" href="' + detailPath(item.id) + '">' +
-          "<div>" +
-            "<h2>" + escapeHtml(item.title) + "</h2>" +
-            '<div class="meta">' +
-              "<span>项目编号 " + escapeHtml(item.projectNumber || "—") + "</span>" +
-              "<span>" + escapeHtml(item.department || "—") + "</span>" +
-              "<span>" + escapeHtml(formatDate(item.publishedAt)) + "</span>" +
-              "<span>" + escapeHtml(money(item.amount)) + "</span>" +
+      if (empty) empty.hidden = false;
+    } else {
+      if (empty) empty.hidden = true;
+      list.innerHTML = items
+        .map(function (item) {
+          var buyer = maskText(item.buyerName, loggedIn);
+          var amount = loggedIn ? money(item.budgetAmount || item.dealAmount) : "登录可见";
+          return (
+            '<article class="notice-card' +
+            (loggedIn ? "" : " is-masked") +
+            '" data-id="' +
+            escapeHtml(item.id) +
+            '">' +
+            '<div class="notice-card-main">' +
+            "<h3>" +
+            escapeHtml(item.title || "未命名公告") +
+            "</h3>" +
+            '<div class="notice-card-meta">' +
+            "<span>" +
+            escapeHtml(item.siteLabel || "—") +
+            "</span>" +
+            "<span>" +
+            escapeHtml(item.noticeKind || "公告") +
+            "</span>" +
+            "<span>" +
+            escapeHtml(item.progressLabel || "—") +
+            "</span>" +
+            "<span>" +
+            escapeHtml(item.regionName || "—") +
+            "</span>" +
+            "<span>" +
+            escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
+            "</span>" +
             "</div>" +
-          "</div>" +
-          '<span class="kind">' + escapeHtml(item.noticeKind || "公告") + "</span>" +
-        "</a>"
-      );
-    }).join("");
+            '<div class="notice-card-sub">' +
+            "<span>采购单位：" +
+            escapeHtml(buyer) +
+            "</span>" +
+            "<span>金额：" +
+            escapeHtml(amount) +
+            "</span>" +
+            "</div>" +
+            "</div>" +
+            '<button type="button" class="btn">查看详情</button>' +
+            "</article>"
+          );
+        })
+        .join("");
+      list.querySelectorAll(".notice-card").forEach(function (card) {
+        card.addEventListener("click", function () {
+          var id = card.getAttribute("data-id");
+          if (!me) {
+            promptLogin();
+            return;
+          }
+          window.location.href = "/notices/" + encodeURIComponent(id);
+        });
+      });
+    }
 
-    if (!pager) return;
-    var page = payload.page || 1;
-    var totalPages = Math.max(1, Math.ceil((payload.total || 0) / (payload.page_size || PAGE_SIZE)));
-    var prevHref = page > 1 ? listPath({ page: page - 1, kind: state.kind, search: state.search }) : "";
-    var nextHref = page < totalPages ? listPath({ page: page + 1, kind: state.kind, search: state.search }) : "";
-    pager.innerHTML =
-      (prevHref ? '<a class="pager-link" href="' + escapeHtml(prevHref) + '" rel="prev">上一页</a>' : '<span class="pager-link disabled">上一页</span>') +
-      "<strong>" + page + " / " + totalPages + "（共 " + (payload.total || 0) + " 条）</strong>" +
-      (nextHref ? '<a class="pager-link" href="' + escapeHtml(nextHref) + '" rel="next">下一页</a>' : '<span class="pager-link disabled">下一页</span>');
+    var total = Number(payload.total || 0);
+    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (pager) {
+      pager.innerHTML =
+        "<span>共 " +
+        total +
+        " 条 · 第 " +
+        state.page +
+        " / " +
+        totalPages +
+        " 页</span>" +
+        "<div>" +
+        '<button class="btn ghost" type="button" data-dir="-1">上一页</button>' +
+        '<button class="btn ghost" type="button" data-dir="1">下一页</button>' +
+        "</div>";
+      pager.querySelectorAll("button").forEach(function (btn) {
+        btn.onclick = function () {
+          var next = state.page + Number(btn.getAttribute("data-dir"));
+          if (next < 1 || next > totalPages) return;
+          state.page = next;
+          loadList();
+        };
+      });
+    }
   }
 
-  var state = {
-    page: Math.max(1, Number(qs("page") || "1") || 1),
-    kind: qs("kind") || qs("noticeKind") || "全部",
-    search: qs("search") || "",
-  };
-
-  function loadList(options) {
-    options = options || {};
-    state.page = options.page || state.page || 1;
-    state.kind = options.kind || state.kind || "全部";
-    if (typeof options.search === "string") state.search = options.search;
+  function loadList() {
     var loading = document.getElementById("notice-loading");
-    var list = document.getElementById("notice-list");
-    var empty = document.getElementById("notice-empty");
     if (loading) loading.hidden = false;
-    if (list) list.innerHTML = "";
-    if (empty) empty.hidden = true;
-
-    var url = new URL("/api/public/notices/", window.location.origin);
-    url.searchParams.set("page", String(state.page));
-    url.searchParams.set("page_size", String(PAGE_SIZE));
-    if (state.search) url.searchParams.set("search", state.search);
-    if (state.kind && state.kind !== "全部") url.searchParams.set("noticeKind", state.kind);
-
-    return fetchJson(url.toString())
-      .then(function (payload) {
-        renderFilters(payload.kinds, state.kind);
-        renderList(payload);
-        if (options.pushState !== false && window.history && window.history.replaceState) {
-          window.history.replaceState({}, "", listPath(state));
-        }
+    syncUrl();
+    fetch("/api/public/crawled-notices/?" + buildQuery().toString(), {
+      headers: { Accept: "application/json" },
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          if (!res.ok) throw new Error((body && body.detail) || "加载失败");
+          return body;
+        });
+      })
+      .then(function (body) {
+        if (Array.isArray(body.sites) && body.sites.length) sites = body.sites;
+        if (Array.isArray(body.noticeKinds) && body.noticeKinds.length) noticeKinds = body.noticeKinds;
+        renderFilters();
+        renderList(body);
       })
       .catch(function (error) {
-        if (empty) {
-          empty.hidden = false;
-          empty.textContent = "公告加载失败：" + (error.message || "请稍后重试");
-        }
+        var list = document.getElementById("notice-list");
+        if (list) list.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";
       })
       .finally(function () {
         if (loading) loading.hidden = true;
       });
   }
 
-  function bindListPage() {
-    var searchInput = document.getElementById("notice-search");
-    var searchBtn = document.getElementById("notice-search-btn");
-    var ssr = document.body.getAttribute("data-ssr") === "1";
-
-    if (searchInput && !searchInput.value && state.search) {
-      searchInput.value = state.search;
-    }
-
-    if (searchBtn && searchInput) {
-      searchBtn.addEventListener("click", function () {
-        window.location.href = listPath({ page: 1, kind: state.kind, search: searchInput.value.trim() });
-      });
-      searchInput.addEventListener("keydown", function (event) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          window.location.href = listPath({ page: 1, kind: state.kind, search: searchInput.value.trim() });
-        }
-      });
-    }
-
-    // SSR 页面已有可抓取内容；筛选/分页走真实链接整页刷新，利于 SEO。
-    // 仅在非 SSR 兜底时用客户端拉取。
-    if (!ssr) {
-      loadList({ page: state.page, kind: state.kind, search: state.search, pushState: false });
-    }
+  function bootList() {
+    readStateFromUrl();
+    renderTabs();
+    fetchMe().then(function () {
+      loadList();
+    });
   }
 
-  function bindDetailPage() {
-    if (document.body.getAttribute("data-ssr") === "1") return;
-    var id = qs("id");
-    if (!id) {
-      var parts = window.location.pathname.split("/").filter(Boolean);
-      if (parts[0] === "notices" && parts[1]) id = decodeURIComponent(parts[1]);
-    }
+  function bootDetail() {
     var root = document.getElementById("notice-detail");
     if (!root) return;
-    if (!id) {
-      root.innerHTML = "<p>未指定公告。</p>";
-      return;
-    }
-    root.innerHTML = "<p>加载中...</p>";
-    fetchJson("/api/public/notices/" + encodeURIComponent(id) + "/")
-      .then(function (body) {
-        var item = body.data || {};
-        document.title = (item.title || "公告详情") + " | 壹采";
+    var parts = location.pathname.split("/").filter(Boolean);
+    var id = parts[parts.length - 1];
+    fetchMe().then(function (account) {
+      if (!account) {
         root.innerHTML =
-          "<h1>" + escapeHtml(item.title || "未命名公告") + "</h1>" +
-          '<div class="detail-grid">' +
-            "<div><span>公告类型</span><strong>" + escapeHtml(item.noticeKind || "—") + "</strong></div>" +
-            "<div><span>项目编号</span><strong>" + escapeHtml(item.projectNumber || "—") + "</strong></div>" +
-            "<div><span>采购单位</span><strong>" + escapeHtml(item.department || "—") + "</strong></div>" +
-            "<div><span>供应商</span><strong>" + escapeHtml(item.supplierName || "—") + "</strong></div>" +
-            "<div><span>状态</span><strong>" + escapeHtml(item.bidStatus || "—") + "</strong></div>" +
-            "<div><span>金额</span><strong>" + escapeHtml(money(item.amount)) + "</strong></div>" +
-            "<div><span>发布时间</span><strong>" + escapeHtml(formatDate(item.publishedAt)) + "</strong></div>" +
-            "<div><span>联系人</span><strong>" + escapeHtml([item.contactName, item.contactPhone].filter(Boolean).join(" ") || "—") + "</strong></div>" +
-          "</div>" +
-          (item.content ? '<div class="detail-content">' + escapeHtml(item.content) + "</div>" : "") +
-          '<div class="detail-actions">' +
-            '<a class="btn secondary" href="/notices">返回公告列表</a>' +
-            (item.detailUrl ? '<a class="btn" href="' + escapeHtml(item.detailUrl) + '" target="_blank" rel="noreferrer">查看原始详情</a>' : "") +
-            '<a class="btn" href="/index.html#contact">咨询入驻</a>' +
-          "</div>";
-      })
-      .catch(function (error) {
-        root.innerHTML = "<p>公告加载失败：" + escapeHtml(error.message || "请稍后重试") + "</p>";
-      });
+          '<div class="notice-empty">请先登录后查看公告详情。<p style="margin-top:12px"><a class="btn" href="' +
+          portalLoginUrl() +
+          '">会员登录</a></p></div>';
+        promptLogin();
+        return;
+      }
+      fetch("/api/public/notices/" + encodeURIComponent(id) + "/", { headers: { Accept: "application/json" } })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            if (!res.ok) throw new Error((body && body.detail) || "加载失败");
+            return body.data || body;
+          });
+        })
+        .then(function (detail) {
+          root.innerHTML =
+            "<h2>" +
+            escapeHtml(detail.title || "公告详情") +
+            "</h2>" +
+            '<p class="muted">' +
+            escapeHtml([detail.siteLabel, detail.noticeKind, formatDate(detail.publishTime || detail.publishedAt)].filter(Boolean).join(" · ")) +
+            "</p>" +
+            '<div class="notice-detail-grid">' +
+            "<div><span>采购单位</span><strong>" +
+            escapeHtml(detail.buyerName || detail.department || "—") +
+            "</strong></div>" +
+            "<div><span>项目编号</span><strong>" +
+            escapeHtml(detail.projectCode || detail.projectNumber || "—") +
+            "</strong></div>" +
+            "<div><span>区域</span><strong>" +
+            escapeHtml(detail.regionName || "—") +
+            "</strong></div>" +
+            "<div><span>进度</span><strong>" +
+            escapeHtml(detail.progressLabel || detail.bidStatus || "—") +
+            "</strong></div>" +
+            "</div>" +
+            (detail.sourceUrl
+              ? '<p style="margin-top:16px"><a class="btn" href="' +
+                escapeHtml(detail.sourceUrl) +
+                '" target="_blank" rel="noopener">打开原文</a></p>'
+              : "");
+        })
+        .catch(function (error) {
+          root.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";
+        });
+    });
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function boot() {
+    var page = document.body.getAttribute("data-page");
     var menuBtn = document.querySelector(".mobile-menu-btn");
-    var menu = document.querySelector(".nav-menu");
-    if (menuBtn && menu) {
+    if (menuBtn) {
       menuBtn.addEventListener("click", function () {
-        menu.classList.toggle("active");
+        var menu = document.querySelector(".nav-menu");
+        if (menu) menu.classList.toggle("active");
       });
     }
-    if (document.body.getAttribute("data-page") === "notice-list") bindListPage();
-    if (document.body.getAttribute("data-page") === "notice-detail") bindDetailPage();
-  });
+    if (page === "notice-list" || document.getElementById("sourcing-tabs") || document.getElementById("notice-list")) {
+      bootList();
+    }
+    if (page === "notice-detail" || document.getElementById("notice-detail")) {
+      bootDetail();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();

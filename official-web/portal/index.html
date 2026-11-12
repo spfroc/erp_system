@@ -340,6 +340,23 @@
       background: #f3faf6; border-color: rgba(31,138,86,.28); color: #0f6b40;
     }
     .message-side .ghost:hover { background: #e7f6ee; border-color: #1f8a56; color: #0f6b40; }
+    .notice-card-list { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 10px; overflow: auto; flex: 1; min-height: 0; }
+    .portal-notice-card {
+      display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start;
+      padding: 14px 16px; background: var(--card); border: 1px solid rgba(234,223,206,.95);
+      border-radius: 14px; box-shadow: 0 6px 16px rgba(62,42,16,.05);
+    }
+    .portal-notice-card h3 { margin: 0 0 8px; font-size: 15px; line-height: 1.45; }
+    .portal-notice-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .portal-notice-meta span {
+      display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #f6f0e6;
+      color: var(--muted); font-size: 12px;
+    }
+    .portal-notice-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    @media (max-width: 960px) {
+      .portal-notice-card { grid-template-columns: 1fr; }
+      .portal-notice-actions { flex-direction: row; justify-content: flex-end; }
+    }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(36, 28, 20, .42); display: grid; place-items: center; padding: 20px; z-index: 40; }
     .modal { width: min(760px, 100%); max-height: min(86vh, 900px); overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 60px rgba(48, 32, 12, .2); }
     .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
@@ -604,7 +621,19 @@
     const dropdown = document.getElementById("dropdown");
     let me = null;
     let tab = "home";
-    let noticeQuery = { page: 1, search: "", siteId: "", noticeKind: "", publishDateFrom: "", publishDateTo: "" };
+    let noticeQuery = {
+      page: 1,
+      search: "",
+      siteId: "",
+      noticeKind: "",
+      progress: "",
+      regionName: "",
+      projectCode: "",
+      projectName: "",
+      buyerName: "",
+      publishDateFrom: "",
+      publishDateTo: "",
+    };
     function formatYmd(date) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -2041,22 +2070,37 @@
       }
       body.items.forEach((item) => {
         const article = document.createElement("article");
-        article.className = "notice";
+        article.className = "portal-notice-card";
         article.innerHTML =
-          '<div class="notice-main"><h3></h3><p></p></div>' +
-          '<div class="notice-actions">' +
-          '<button class="copy-link" type="button" data-role="detail">详情</button>' +
-          '<button class="copy-link" type="button" data-role="source">原文</button>' +
-          "</div>" +
-          '<span class="kind"></span>';
+          '<div class="notice-main"><h3></h3><div class="portal-notice-meta"></div></div>' +
+          '<div class="portal-notice-actions">' +
+          '<span class="kind"></span>' +
+          '<button class="ghost" type="button" data-role="detail">详情</button>' +
+          '<button class="ghost" type="button" data-role="source">原文</button>' +
+          "</div>";
         article.querySelector("h3").textContent = item.title || "未命名公告";
-        article.querySelector("p").textContent = [item.siteLabel, item.regionName, item.progressLabel, formatDateTimeShanghai(item.publishTime)].filter((part) => part && part !== "—").join(" · ");
+        const meta = article.querySelector(".portal-notice-meta");
+        [
+          item.siteLabel,
+          item.regionName,
+          item.progressLabel,
+          item.buyerName,
+          item.projectCode,
+          formatDateTimeShanghai(item.publishTime),
+        ]
+          .filter((part) => part && part !== "—")
+          .forEach((text) => {
+            const span = document.createElement("span");
+            span.textContent = text;
+            meta.appendChild(span);
+          });
         const badge = article.querySelector(".kind");
         badge.textContent = item.noticeKind || "公告";
         const tone = kindTone(item.noticeKind);
         if (tone) badge.classList.add(tone);
-        article.querySelector(".notice-main").onclick = () => void openNoticeDetail(item.id);
-        article.querySelector("[data-role=detail]").onclick = () => void openNoticeDetail(item.id);
+        const open = () => void openNoticeDetail(item.id);
+        article.querySelector(".notice-main").onclick = open;
+        article.querySelector("[data-role=detail]").onclick = open;
         const sourceBtn = article.querySelector("[data-role=source]");
         if (!item.sourceUrl) {
           sourceBtn.disabled = true;
@@ -2093,17 +2137,22 @@
         search: noticeQuery.search,
         siteId: noticeQuery.siteId,
         noticeKind: noticeQuery.noticeKind,
+        progress: noticeQuery.progress,
+        regionName: noticeQuery.regionName,
+        projectCode: noticeQuery.projectCode,
+        projectName: noticeQuery.projectName,
+        buyerName: noticeQuery.buyerName,
       });
       if (noticeQuery.publishDateFrom) params.set("publishDateFrom", noticeQuery.publishDateFrom);
       if (noticeQuery.publishDateTo) params.set("publishDateTo", noticeQuery.publishDateTo);
-      if (!panel.querySelector(".list-card")) {
+      if (!panel.querySelector(".notice-card-list")) {
         panel.innerHTML = '<p class="panel-loading">正在加载公告列表…</p>';
       }
       const body = await api("/api/portal/notices/?" + params.toString());
       if (requestId !== noticeRequest) return;
 
       let toolbar = panel.querySelector(".toolbar");
-      let list = panel.querySelector(".list-card");
+      let list = panel.querySelector(".notice-card-list");
       let pager = panel.querySelector(".pager");
       if (!toolbar || !list || !pager) {
         panel.innerHTML = "";
@@ -2113,22 +2162,42 @@
           '<label>搜索<input name="search" placeholder="标题、项目、采购人" /></label>' +
           '<label>平台<select name="siteId"><option value="">全部</option></select></label>' +
           '<label>类型<select name="noticeKind"><option value="">全部</option></select></label>' +
+          '<label>进度<select name="progress"><option value="">全部</option><option value="ongoing">进行中</option><option value="upcoming">未开始</option><option value="ended">已截止</option></select></label>' +
+          '<label>区域<input name="regionName" placeholder="如：济南" /></label>' +
+          '<label>项目编号<input name="projectCode" /></label>' +
+          '<label>项目名称<input name="projectName" /></label>' +
+          '<label>采购单位<input name="buyerName" /></label>' +
           '<label>发布开始<input name="publishDateFrom" type="date" /></label>' +
           '<label>发布结束<input name="publishDateTo" type="date" /></label>' +
-          '<button class="ghost" type="button" data-role="apply-dates">查询</button>' +
-          '<button class="ghost" type="button" data-role="clear-dates">清空日期</button>';
-        const searchInput = toolbar.querySelector("[name=search]");
-        searchInput.value = noticeQuery.search;
-        searchInput.oninput = (event) => {
-          window.clearTimeout(noticeSearchTimer);
-          const value = event.target.value.trim();
-          noticeSearchTimer = window.setTimeout(() => {
-            if (noticeQuery.search === value) return;
-            noticeQuery.search = value;
-            noticeQuery.page = 1;
-            renderNotices(panel);
-          }, 300);
+          '<button class="ghost" type="button" data-role="apply">查询</button>' +
+          '<button class="ghost" type="button" data-role="reset">重置</button>';
+        const bindText = (name, key, debounce) => {
+          const input = toolbar.querySelector("[name=" + name + "]");
+          input.value = noticeQuery[key] || "";
+          if (!debounce) {
+            input.onchange = () => {
+              noticeQuery[key] = input.value.trim();
+              noticeQuery.page = 1;
+              renderNotices(panel);
+            };
+            return;
+          }
+          input.oninput = (event) => {
+            window.clearTimeout(noticeSearchTimer);
+            const value = event.target.value.trim();
+            noticeSearchTimer = window.setTimeout(() => {
+              if (noticeQuery[key] === value) return;
+              noticeQuery[key] = value;
+              noticeQuery.page = 1;
+              renderNotices(panel);
+            }, 300);
+          };
         };
+        bindText("search", "search", true);
+        bindText("regionName", "regionName", true);
+        bindText("projectCode", "projectCode", true);
+        bindText("projectName", "projectName", true);
+        bindText("buyerName", "buyerName", true);
         const siteSelect = toolbar.querySelector("[name=siteId]");
         (body.sites || []).forEach((site) => {
           const option = document.createElement("option");
@@ -2155,26 +2224,45 @@
           noticeQuery.page = 1;
           renderNotices(panel);
         };
+        const progressSelect = toolbar.querySelector("[name=progress]");
+        progressSelect.value = noticeQuery.progress;
+        progressSelect.onchange = () => {
+          noticeQuery.progress = progressSelect.value;
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
         const fromInput = toolbar.querySelector("[name=publishDateFrom]");
         const toInput = toolbar.querySelector("[name=publishDateTo]");
         fromInput.value = noticeQuery.publishDateFrom;
         toInput.value = noticeQuery.publishDateTo;
-        toolbar.querySelector("[data-role=apply-dates]").onclick = () => {
+        toolbar.querySelector("[data-role=apply]").onclick = () => {
           noticeQuery.publishDateFrom = fromInput.value || "";
           noticeQuery.publishDateTo = toInput.value || "";
+          noticeQuery.regionName = toolbar.querySelector("[name=regionName]").value.trim();
+          noticeQuery.projectCode = toolbar.querySelector("[name=projectCode]").value.trim();
+          noticeQuery.projectName = toolbar.querySelector("[name=projectName]").value.trim();
+          noticeQuery.buyerName = toolbar.querySelector("[name=buyerName]").value.trim();
           noticeQuery.page = 1;
           renderNotices(panel);
         };
-        toolbar.querySelector("[data-role=clear-dates]").onclick = () => {
-          fromInput.value = "";
-          toInput.value = "";
-          noticeQuery.publishDateFrom = "";
-          noticeQuery.publishDateTo = "";
-          noticeQuery.page = 1;
+        toolbar.querySelector("[data-role=reset]").onclick = () => {
+          noticeQuery = {
+            page: 1,
+            search: "",
+            siteId: "",
+            noticeKind: "",
+            progress: "",
+            regionName: "",
+            projectCode: "",
+            projectName: "",
+            buyerName: "",
+            publishDateFrom: "",
+            publishDateTo: "",
+          };
           renderNotices(panel);
         };
         list = document.createElement("div");
-        list.className = "card list-card";
+        list.className = "notice-card-list";
         pager = document.createElement("div");
         pager.className = "pager";
         panel.appendChild(toolbar);
@@ -2183,6 +2271,7 @@
       } else {
         toolbar.querySelector("[name=publishDateFrom]").value = noticeQuery.publishDateFrom;
         toolbar.querySelector("[name=publishDateTo]").value = noticeQuery.publishDateTo;
+        toolbar.querySelector("[name=progress]").value = noticeQuery.progress;
       }
       fillNoticeList(list, body);
       fillNoticePager(pager, panel, body);

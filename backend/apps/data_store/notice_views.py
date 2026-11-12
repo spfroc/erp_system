@@ -1560,6 +1560,31 @@ def _load_parsed_map(raw_ids: list[int]) -> dict[int, NoticeParsed]:
     }
 
 
+def _normalize_progress_targets(progress: str) -> list[str]:
+    """支持 ongoing / upcoming,ongoing / 进行中 等。"""
+    mapping = {
+        "ongoing": "ongoing",
+        "in_progress": "ongoing",
+        "进行中": "ongoing",
+        "upcoming": "upcoming",
+        "未开始": "upcoming",
+        "将开始": "upcoming",
+        "ended": "ended",
+        "已截止": "ended",
+        "unknown": "unknown",
+        "未知": "unknown",
+    }
+    targets: list[str] = []
+    seen: set[str] = set()
+    for part in str(progress or "").replace("，", ",").split(","):
+        key = part.strip().lower() if part.strip().isascii() else part.strip()
+        mapped = mapping.get(key) or mapping.get(part.strip())
+        if mapped and mapped not in seen:
+            seen.add(mapped)
+            targets.append(mapped)
+    return targets
+
+
 def query_crawled_notices(
     *,
     page: int = 1,
@@ -1567,11 +1592,15 @@ def query_crawled_notices(
     search: str = "",
     site_id: str = "",
     notice_kind: str = "",
+    notice_kinds: list[str] | str | None = None,
     site_ids: list[str] | None = None,
     publish_date_from: str = "",
     publish_date_to: str = "",
     buyer_name: str = "",
     project_code: str = "",
+    project_name: str = "",
+    region_name: str = "",
+    progress: str = "",
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1591,38 +1620,65 @@ def query_crawled_notices(
         qs = qs.filter(site_id__in=site_ids)
     if site_id:
         qs = qs.filter(site_id=site_id)
-    kinds = _parse_notice_kinds(notice_kind)
+    if isinstance(notice_kinds, list):
+        kinds = _parse_notice_kinds(notice_kind, *notice_kinds)
+    else:
+        kinds = _parse_notice_kinds(notice_kind, notice_kinds or "")
     if kinds:
         qs = qs.filter(_raw_ids_for_kinds(kinds, site_id))
+    region = (region_name or "").strip()
+    if region:
+        qs = qs.filter(_region_filter_q(region))
     day_q = _notice_day_filter_q(publish_from=publish_date_from, publish_to=publish_date_to)
     if day_q is not None:
         qs = qs.filter(day_q)
     buyer = (buyer_name or "").strip()
     code = (project_code or "").strip()
+    pname = (project_name or "").strip()
     if not code:
         embedded = extract_gov_project_codes(search)
         if embedded:
             code = embedded[0]
-    if buyer or code:
+    if buyer or code or pname:
         field_q = _notice_field_filter_q(
             project_code=code,
-            project_name="",
+            project_name=pname,
             buyer_name=buyer,
             supplier_name="",
             goods_name="",
         )
         if field_q is not None:
             qs = qs.filter(field_q)
+    progress_targets = _normalize_progress_targets(progress)
+    if progress_targets:
+        now = timezone.now()
+        progress_q = Q()
+        for target in progress_targets:
+            progress_q |= _progress_filter_q(target, now=now)
+        qs = qs.filter(progress_q)
     keyword = (search or "").strip()
     # 已按项目编号精确过滤时，不再把整句中文残片拿去模糊 AND，避免 0 命中或误扫全表
     if keyword and not code:
         qs = qs.filter(_keyword_search_q(keyword))
     elif keyword and code and not extract_gov_project_codes(keyword):
         qs = qs.filter(_keyword_search_q(keyword))
-    has_filter = bool(site_id or kinds or day_q is not None or buyer or keyword or code or (site_ids is not None))
+    has_filter = bool(
+        site_id
+        or kinds
+        or region
+        or day_q is not None
+        or buyer
+        or pname
+        or keyword
+        or code
+        or progress_targets
+        or (site_ids is not None)
+    )
     if not has_filter:
         total = _cached_raw_total()
-    elif day_q is not None and not (site_id or kinds or buyer or keyword or code or (site_ids is not None)):
+    elif day_q is not None and not (
+        site_id or kinds or region or buyer or pname or keyword or code or progress_targets or (site_ids is not None)
+    ):
         total = _cached_filtered_total(
             f"console_pub:{publish_date_from}:{publish_date_to}:sites:{','.join(site_ids or [])}",
             qs.count,
