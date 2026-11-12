@@ -145,6 +145,10 @@ CORS_ALLOWED_ORIGINS = [
         "http://www.qinghuicai.cn",
         "https://qinghuicai.cn",
         "https://www.qinghuicai.cn",
+        "https://preview.qinghuicai.cn",
+        "https://portal.qlyc.co",
+        "https://preview.qlyc.co",
+        "https://yizhichan.qlyc.co",
         *os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(","),
     ]
     if origin.strip()

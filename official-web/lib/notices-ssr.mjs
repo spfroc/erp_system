@@ -10,6 +10,7 @@ import {
   jsonLdScript,
   money,
   requestOrigin,
+  splitSeoKeywords,
   truncateText,
 } from "./seo.mjs";
 
@@ -147,27 +148,44 @@ function renderPager({ page, total, pageSize, kind, search }) {
   );
 }
 
-function renderDetailArticle(item) {
-  const contact = [item.contactName, item.contactPhone].filter(Boolean).join(" ") || "—";
+function maskSensitive(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text || text === "—") return "—";
+  if (text.length <= 2) return "**";
+  return `${text.slice(0, 1)}***`;
+}
+
+function renderDetailArticle(item, { masked = true } = {}) {
+  // SSR 默认按未登录遮蔽关键字段，避免闪出明文后再被客户端打码
+  const buyer = masked ? maskSensitive(item.department || item.buyerName || "—") : item.department || item.buyerName || "—";
+  const project = masked
+    ? maskSensitive(item.projectNumber || item.projectCode || "—")
+    : item.projectNumber || item.projectCode || "—";
+  const amount = masked ? "登录可见" : money(item.amount || item.budgetAmount || item.dealAmount);
+  const contact = masked ? "登录可见" : [item.contactName, item.contactPhone].filter(Boolean).join(" ") || "—";
   return (
     `<h1>${escapeHtml(item.title || "未命名公告")}</h1>` +
-    '<div class="detail-grid">' +
-    `<div><span>公告类型</span><strong>${escapeHtml(item.noticeKind || "—")}</strong></div>` +
-    `<div><span>项目编号</span><strong>${escapeHtml(item.projectNumber || "—")}</strong></div>` +
-    `<div><span>采购单位</span><strong>${escapeHtml(item.department || "—")}</strong></div>` +
-    `<div><span>供应商</span><strong>${escapeHtml(item.supplierName || "—")}</strong></div>` +
-    `<div><span>状态</span><strong>${escapeHtml(item.bidStatus || "—")}</strong></div>` +
-    `<div><span>金额</span><strong>${escapeHtml(money(item.amount))}</strong></div>` +
-    `<div><span>发布时间</span><strong>${escapeHtml(formatDate(item.publishedAt) || "—")}</strong></div>` +
+    `<p class="muted">${escapeHtml([item.siteLabel, item.noticeKind, formatDate(item.publishedAt)].filter(Boolean).join(" · "))}</p>` +
+    '<div class="notice-detail-grid">' +
+    `<div><span>采购单位</span><strong>${escapeHtml(buyer)}</strong></div>` +
+    `<div><span>项目编号</span><strong>${escapeHtml(project)}</strong></div>` +
+    `<div><span>区域</span><strong>${escapeHtml(item.regionName || "—")}</strong></div>` +
+    `<div><span>金额</span><strong>${escapeHtml(amount)}</strong></div>` +
+    `<div><span>进度</span><strong>${escapeHtml(item.progressLabel || item.bidStatus || "—")}</strong></div>` +
     `<div><span>联系人</span><strong>${escapeHtml(contact)}</strong></div>` +
     "</div>" +
-    (item.content ? `<div class="detail-content">${escapeHtml(item.content)}</div>` : "") +
+    (masked
+      ? '<div class="detail-content is-masked"><p>正文与关键信息已隐藏，登录后可查看完整公告。</p><p><a class="btn" href="/portal/?from=site">会员登录</a></p></div>'
+      : item.content
+        ? `<div class="detail-content">${escapeHtml(item.content)}</div>`
+        : "") +
     '<div class="detail-actions">' +
-    '<a class="btn secondary" href="/notices">返回公告列表</a>' +
-    (item.detailUrl
-      ? `<a class="btn" href="${escapeAttr(item.detailUrl)}" target="_blank" rel="noreferrer">查看原始详情</a>`
-      : "") +
-    '<a class="btn" href="/index.html#contact">咨询入驻</a>' +
+    '<a class="btn secondary" href="/notices">返回壹采寻源</a>' +
+    (masked
+      ? '<a class="btn" href="/portal/?from=site">登录后查看原文</a>'
+      : item.detailUrl || item.sourceUrl
+        ? `<a class="btn" href="${escapeAttr(item.detailUrl || item.sourceUrl)}" target="_blank" rel="noreferrer">打开原文</a>`
+        : "") +
     "</div>"
   );
 }
@@ -228,27 +246,41 @@ export async function renderNoticeListPage({ req, siteKey, shellHtml, query }) {
   const items = payload.items || [];
   const title =
     kind && kind !== "全部"
-      ? `${kind}公告 | ${seo.siteName}`
+      ? `${kind} | 壹采寻源 | ${seo.siteName}`
       : search
-        ? `搜索「${search}」| 采购公告 | ${seo.siteName}`
-        : `采购公告 | ${seo.siteName}`;
+        ? `搜索「${search}」| 壹采寻源 | ${seo.siteName}`
+        : `壹采寻源 | 商机大厅 公告大厅 采购意向 | ${seo.siteName}`;
   const description = truncateText(
     search
-      ? `${seo.brand}采购公告搜索：${search}`
+      ? `${seo.brand}壹采寻源搜索：${search}`
       : items.length
         ? `${seo.description} 最新：${items.map((item) => item.title).filter(Boolean).slice(0, 3).join("；")}`
-        : seo.description,
+        : `${seo.description} 壹采寻源汇聚商机大厅、公告大厅与采购意向。`,
   );
   const canonical = absoluteUrl(origin, listUrl({ page, kind, search }));
+  const keywords = splitSeoKeywords(
+    "壹采寻源",
+    "商机大厅",
+    "公告大厅",
+    "采购意向",
+    kind && kind !== "全部" ? kind : "",
+    search,
+    seo.keywords || "",
+    seo.brand,
+    seo.geoPlacename,
+  );
   const meta = buildMetaTags({
     title,
     description,
     canonical,
     ogType: "website",
-    keywords: seo.keywords || "",
+    keywords,
     ogImageUrl: seo.ogImageUrl || "",
     baiduSiteVerification: seo.baiduSiteVerification || "",
     googleSiteVerification: seo.googleSiteVerification || "",
+    geoRegion: seo.geoRegion || "",
+    geoPlacename: seo.geoPlacename || "",
+    geoPosition: seo.geoPosition || "",
   });
   const listJsonLd = {
     "@context": "https://schema.org",
@@ -274,30 +306,39 @@ export async function renderNoticeListPage({ req, siteKey, shellHtml, query }) {
   html = replaceHeadMeta(html, meta, jsonLd);
   html = setBodyAttr(html, "data-page", "notice-list");
   html = setBodyAttr(html, "data-ssr", "1");
-  html = replaceInnerById(html, "notice-filters", renderFilters(payload.kinds || [], kind, { search }));
-  html = replaceInnerById(html, "notice-loading", "", { hidden: true });
-  if (errorMessage) {
+  const isSourcingShell = /id=["']sourcing-root["']|id=["']sourcing-tabs["']/i.test(shellHtml);
+  // 壹采寻源壳页由前端渲染卡片列表，SSR 只注入 SEO，避免旧列表闪一下被覆盖
+  if (isSourcingShell) {
+    html = replaceInnerById(html, "notice-loading", "加载中...", { hidden: false });
     html = replaceInnerById(html, "notice-list", "");
-    html = replaceInnerById(html, "notice-empty", `公告加载失败：${escapeHtml(errorMessage)}`, { hidden: false });
-    html = replaceInnerById(html, "notice-pager", "");
-  } else if (!items.length) {
-    html = replaceInnerById(html, "notice-list", "");
-    html = replaceInnerById(html, "notice-empty", "暂无公开公告", { hidden: false });
+    html = replaceInnerById(html, "notice-empty", "暂无公告", { hidden: true });
     html = replaceInnerById(html, "notice-pager", "");
   } else {
-    html = replaceInnerById(html, "notice-list", renderListItems(items));
-    html = replaceInnerById(html, "notice-empty", "暂无公开公告", { hidden: true });
-    html = replaceInnerById(
-      html,
-      "notice-pager",
-      renderPager({
-        page: payload.page || page,
-        total: payload.total || 0,
-        pageSize: payload.page_size || PAGE_SIZE,
-        kind,
-        search,
-      }),
-    );
+    html = replaceInnerById(html, "notice-filters", renderFilters(payload.kinds || [], kind, { search }));
+    html = replaceInnerById(html, "notice-loading", "", { hidden: true });
+    if (errorMessage) {
+      html = replaceInnerById(html, "notice-list", "");
+      html = replaceInnerById(html, "notice-empty", `公告加载失败：${escapeHtml(errorMessage)}`, { hidden: false });
+      html = replaceInnerById(html, "notice-pager", "");
+    } else if (!items.length) {
+      html = replaceInnerById(html, "notice-list", "");
+      html = replaceInnerById(html, "notice-empty", "暂无公开公告", { hidden: false });
+      html = replaceInnerById(html, "notice-pager", "");
+    } else {
+      html = replaceInnerById(html, "notice-list", renderListItems(items));
+      html = replaceInnerById(html, "notice-empty", "暂无公开公告", { hidden: true });
+      html = replaceInnerById(
+        html,
+        "notice-pager",
+        renderPager({
+          page: payload.page || page,
+          total: payload.total || 0,
+          pageSize: payload.page_size || PAGE_SIZE,
+          kind,
+          search,
+        }),
+      );
+    }
   }
 
   if (search) {
@@ -341,19 +382,36 @@ export async function renderNoticeDetailPage({ req, siteKey, shellHtml, id }) {
     return { status: 404, html, canonical };
   }
 
-  const title = `${item.title || "公告详情"} | ${seo.brand}`;
-  const description = truncateText(item.content || `${item.noticeKind || "采购公告"} ${item.department || ""} ${item.projectNumber || ""}`.trim() || seo.description);
+  const title = `${item.title || "公告详情"} | 壹采寻源 | ${seo.brand}`;
+  const description = truncateText(
+    `${item.noticeKind || "采购公告"} ${item.regionName || ""} ${item.title || ""}`.trim() || seo.description,
+  );
   const canonical = absoluteUrl(origin, detailUrl(item.id));
+  const place = item.regionName || seo.geoPlacename || "";
+  const keywords = splitSeoKeywords(
+    item.title,
+    item.noticeKind,
+    item.procurementMode,
+    item.regionName,
+    item.projectNumber || item.projectCode,
+    "壹采寻源",
+    seo.brand,
+    seo.keywords || "",
+    place,
+  );
   const meta = buildMetaTags({
     title,
     description,
     canonical,
     ogType: "article",
     publishedTime: item.publishedAt || "",
-    keywords: seo.keywords || "",
+    keywords,
     ogImageUrl: seo.ogImageUrl || "",
     baiduSiteVerification: seo.baiduSiteVerification || "",
     googleSiteVerification: seo.googleSiteVerification || "",
+    geoRegion: seo.geoRegion || "",
+    geoPlacename: place || seo.geoPlacename || "",
+    geoPosition: seo.geoPosition || "",
   });
   const articleJsonLd = {
     "@context": "https://schema.org",
@@ -375,7 +433,11 @@ export async function renderNoticeDetailPage({ req, siteKey, shellHtml, id }) {
   html = html.replace(/<section class="page-hero">[\s\S]*?<\/section>/i, (block) =>
     block.replace(/<h1>\s*公告详情\s*<\/h1>/i, "<p class=\"hero-kicker\">公告详情</p>"),
   );
-  html = replaceInnerById(html, "notice-detail", renderDetailArticle(item));
+  html = replaceInnerById(html, "notice-detail", renderDetailArticle(item, { masked: true }));
+  html = html.replace(
+    /(<article[^>]*\bid=["']notice-detail["'][^>]*)(>)/i,
+    (_, open, gt) => `${open}${/\bdata-ssr-ready=/.test(open) ? "" : ' data-ssr-ready="1"'}${gt}`,
+  );
   return { status: 200, html, canonical };
 }
 

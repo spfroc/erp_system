@@ -44,11 +44,22 @@
     return bare + sep + "site=" + encodeURIComponent(site) + hash;
   }
 
+  function normalizePortalHash(hash) {
+    var text = String(hash || "");
+    if (!text) return "";
+    return text.charAt(0) === "#" ? text : "#" + text;
+  }
+
   function portalUrl(hash) {
+    var hashPart = normalizePortalHash(hash);
     var params = new URLSearchParams();
     params.set("from", "site");
-    var q = params.toString();
-    return PORTAL_BASE + (q ? "?" + q : "") + (hash || "");
+    // 非 .qlyc.co 官网不能共享 portal_session，统一跳中央门户并带回跳地址
+    if (!sharesPortalCookieWithCentral()) {
+      params.set("return_to", location.origin + "/");
+      return "https://portal.qlyc.co/?" + params.toString() + hashPart;
+    }
+    return PORTAL_BASE + "?" + params.toString() + hashPart;
   }
 
   function ensureStyles() {
@@ -84,6 +95,11 @@
     document.head.appendChild(style);
   }
 
+  function resetMeCache() {
+    me = null;
+    meReady = null;
+  }
+
   function fetchMe() {
     if (meReady) return meReady;
     meReady = fetch("/api/portal/me/", {
@@ -110,31 +126,79 @@
     return account.customerName || account.name || account.phone || "客户";
   }
 
-  function bindPortalEntries() {
+  function currentHost() {
+    return String((location && location.hostname) || "").toLowerCase();
+  }
+
+  function sharesPortalCookieWithCentral() {
+    var host = currentHost();
+    return host === "qlyc.co" || host.endsWith(".qlyc.co");
+  }
+
+  function stripHandoffParam() {
+    try {
+      var url = new URL(location.href);
+      if (!url.searchParams.has("portal_handoff")) return;
+      url.searchParams.delete("portal_handoff");
+      history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
+    } catch (_) {}
+  }
+
+  function claimHandoffFromUrl() {
+    var params = new URLSearchParams(location.search || "");
+    var code = params.get("portal_handoff");
+    if (!code) return Promise.resolve(false);
+    return fetch("/api/portal/handoff/claim/", {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (response) {
+        return response.json().catch(function () {
+          return {};
+        }).then(function (body) {
+          if (!response.ok) throw new Error((body && body.detail) || "claim failed");
+          return body;
+        });
+      })
+      .then(function () {
+        stripHandoffParam();
+        resetMeCache();
+        return true;
+      })
+      .catch(function () {
+        stripHandoffParam();
+        return false;
+      });
+  }
+
+  function applyPortalEntryState(account) {
     var nodes = document.querySelectorAll("[data-portal-entry]");
     if (!nodes.length) return;
     nodes.forEach(function (el) {
-      if (!el.getAttribute("href") || /portal\.qlyc\.co/i.test(el.getAttribute("href"))) {
-        el.setAttribute("href", portalUrl());
+      el.setAttribute("href", portalUrl());
+      if (account) {
+        var name = displayName(account);
+        el.textContent = "会员中心";
+        el.setAttribute("title", (name ? name + " · " : "") + "进入会员中心");
+        el.setAttribute("alt", name || "会员中心");
+        el.setAttribute("data-portal-authed", "1");
+        el.removeAttribute("data-portal-label");
+      } else {
+        el.textContent = "会员登录";
+        el.setAttribute("title", "会员登录");
+        el.setAttribute("data-portal-label", "会员登录");
+        el.removeAttribute("data-portal-authed");
       }
     });
-    fetchMe().then(function (account) {
-      nodes.forEach(function (el) {
-        el.setAttribute("href", portalUrl());
-        if (account) {
-          var name = displayName(account);
-          el.textContent = "会员中心";
-          el.setAttribute("title", (name ? name + " · " : "") + "进入会员中心");
-          el.setAttribute("alt", name || "会员中心");
-          el.setAttribute("data-portal-authed", "1");
-          el.removeAttribute("data-portal-label");
-        } else {
-          el.textContent = "会员登录";
-          el.setAttribute("title", "会员登录");
-          el.setAttribute("data-portal-label", "会员登录");
-          el.removeAttribute("data-portal-authed");
-        }
-      });
+  }
+
+  /** 尽早改写入口，避免用户点到本域 /portal/ 后无 return_to、无法跨域带回登录态 */
+  function syncPortalEntryHrefs() {
+    var nodes = document.querySelectorAll("[data-portal-entry]");
+    nodes.forEach(function (el) {
+      el.setAttribute("href", portalUrl());
     });
   }
 
@@ -293,8 +357,21 @@
 
   function boot() {
     ensureStyles();
-    bindPortalEntries();
-    loadHomeNotices();
+    // 不自动跳中央门户 sync：未登录时会「闪一下」再跳回，且仍是未登录
+    // 跨主域登录态只靠：点「会员登录」→ portal + return_to → handoff → 本页 claim
+    syncPortalEntryHrefs();
+    claimHandoffFromUrl()
+      .then(function () {
+        return fetchMe();
+      })
+      .then(function (account) {
+        applyPortalEntryState(account);
+        loadHomeNotices();
+      })
+      .catch(function () {
+        applyPortalEntryState(null);
+        loadHomeNotices();
+      });
   }
 
   window.__portalFetchMe = fetchMe;

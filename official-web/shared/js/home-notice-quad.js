@@ -33,7 +33,17 @@
   }
 
   function portalUrl(hash) {
-    return "/portal/?from=site" + (hash || "");
+    var hashPart = hash || "";
+    if (hashPart && hashPart.charAt(0) !== "#") hashPart = "#" + hashPart;
+    var host = String((location && location.hostname) || "").toLowerCase();
+    if (host === "qlyc.co" || host.slice(-8) === ".qlyc.co") {
+      return "/portal/?from=site" + hashPart;
+    }
+    return (
+      "https://portal.qlyc.co/?from=site&return_to=" +
+      encodeURIComponent(location.origin + "/") +
+      hashPart
+    );
   }
 
   function ensureStyles() {

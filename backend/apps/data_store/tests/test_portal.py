@@ -1,11 +1,13 @@
 from unittest.mock import patch
 
 from django.contrib.auth.hashers import make_password
-from django.test import Client, SimpleTestCase, TestCase
+from django.core import signing
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from apps.data_store.models import CustomerAccountRecord, NoticeRecord
 from apps.data_store.portal import (
     PORTAL_COOKIE,
+    PORTAL_WECHAT_LOGIN_SALT,
     _force_index_clause,
     _parsed_force_index_clause,
     _raw_force_index_clause,
@@ -94,6 +96,46 @@ class PortalAccountTests(TestCase):
         self.assertIsNotNone(cookie)
         self.assertEqual(cookie.get("domain"), ".qlyc.co")
 
+    def test_handoff_can_issue_qinghuicai_cookie(self):
+        origin = Client()
+        login = origin.post(
+            "/api/portal/login/",
+            data={"phone": "13900001111", "password": "Portal123456"},
+            content_type="application/json",
+            HTTP_X_FORWARDED_HOST="portal.qlyc.co",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(login.status_code, 200)
+        create = origin.post(
+            "/api/portal/handoff/create/",
+            data="{}",
+            content_type="application/json",
+            HTTP_X_FORWARDED_HOST="portal.qlyc.co",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(create.status_code, 200)
+        code = create.json().get("code")
+        self.assertTrue(code)
+
+        target = Client()
+        claim = target.post(
+            "/api/portal/handoff/claim/",
+            data={"code": code},
+            content_type="application/json",
+            HTTP_X_FORWARDED_HOST="preview.qinghuicai.cn",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(claim.status_code, 200)
+        cookie = claim.cookies.get(PORTAL_COOKIE)
+        self.assertIsNotNone(cookie)
+        self.assertEqual(cookie.get("domain"), ".qinghuicai.cn")
+        me = target.get(
+            "/api/portal/me/",
+            HTTP_X_FORWARDED_HOST="preview.qinghuicai.cn",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(me.status_code, 200)
+
     def test_login_cookie_can_read_notices_and_blocks_subscription(self):
         client = Client()
         denied = client.get("/api/portal/notices/")
@@ -128,3 +170,81 @@ class PortalAccountTests(TestCase):
         session.save()
         response = client.get("/api/portal/me/")
         self.assertEqual(response.status_code, 401)
+
+
+@override_settings(
+    WECHAT_MP_APP_ID="wx-test-app",
+    WECHAT_MP_APP_SECRET="wx-test-secret",
+    WECHAT_MP_OAUTH_REDIRECT_URI="https://example.com/api/wechat/mp/oauth/callback/",
+    WECHAT_MP_PORTAL_NOTICE_URL="https://example.com/portal/",
+)
+class PortalWechatSilentLoginTests(TestCase):
+    def setUp(self):
+        CustomerAccountRecord.objects.create(
+            id="portal-user-wx",
+            name="微信客户",
+            phone="13900002222",
+            customer_name="微信客户",
+            status="启用",
+            data={
+                "id": "portal-user-wx",
+                "name": "微信客户",
+                "phone": "13900002222",
+                "password": make_password("Portal123456"),
+                "customerName": "微信客户",
+                "status": "启用",
+                "permissions": ["portal.notice.view"],
+                "wechat": {"openid": "oid-bound-demo", "followStatus": "subscribed"},
+            },
+        )
+
+    def test_silent_login_redirects_to_wechat_oauth(self):
+        client = Client()
+        response = client.get("/api/portal/wechat/silent-login/?next=messages")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("open.weixin.qq.com/connect/oauth2/authorize", html)
+        self.assertIn("snsapi_base", html)
+        self.assertIn("state=", html)
+        self.assertIn("location.replace(", html)
+
+    def test_oauth_callback_issues_cookie_for_bound_openid(self):
+        client = Client()
+        state = signing.dumps(
+            {"purpose": "login", "next": "messages", "ts": 1},
+            salt=PORTAL_WECHAT_LOGIN_SALT,
+        )
+        with patch(
+            "apps.data_store.portal.wechat_mp.exchange_oauth_code",
+            return_value={"openid": "oid-bound-demo"},
+        ):
+            response = client.get(
+                "/api/wechat/mp/oauth/callback/",
+                {"code": "mock-code", "state": state},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(PORTAL_COOKIE, response.cookies)
+        self.assertIn("#messages", response.content.decode("utf-8"))
+        me = client.get("/api/portal/me/")
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["data"]["id"], "portal-user-wx")
+
+    def test_oauth_callback_unbound_openid_goes_login(self):
+        client = Client()
+        state = signing.dumps(
+            {"purpose": "login", "next": "messages", "ts": 1},
+            salt=PORTAL_WECHAT_LOGIN_SALT,
+        )
+        with patch(
+            "apps.data_store.portal.wechat_mp.exchange_oauth_code",
+            return_value={"openid": "oid-unknown"},
+        ):
+            response = client.get(
+                "/api/wechat/mp/oauth/callback/",
+                {"code": "mock-code", "state": state},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(PORTAL_COOKIE, response.cookies)
+        html = response.content.decode("utf-8")
+        self.assertIn("wechat=unbound", html)
+        self.assertIn("#login", html)

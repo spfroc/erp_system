@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import ProgrammingError
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -1639,6 +1639,62 @@ def _parse_budget_bound(value: str | int | float | None) -> float | None:
     return amount
 
 
+PROCUREMENT_MODE_ALIASES: dict[str, tuple[str, ...]] = {
+    "竞价": ("竞价",),
+    "反拍": ("反拍", "电子反拍"),
+    "询比": ("询比",),
+    "招标": ("招标", "公开招标", "邀请招标"),
+}
+
+
+def _procurement_mode_filter_q(mode: str) -> Q:
+    """按采购方式过滤：匹配 notice_kind / procurement_mode / 标题。"""
+    key = str(mode or "").strip()
+    if not key or key == "全部":
+        return Q()
+    aliases = PROCUREMENT_MODE_ALIASES.get(key) or (key,)
+    combined = Q()
+    for alias in aliases:
+        combined |= Q(
+            Exists(
+                NoticeParsed.objects.filter(
+                    notice_raw_id=OuterRef("pk"),
+                    notice_kind__icontains=alias,
+                )
+            )
+        )
+        combined |= Q(
+            Exists(
+                NoticeParsed.objects.filter(
+                    notice_raw_id=OuterRef("pk"),
+                    procurement_mode__icontains=alias,
+                )
+            )
+        )
+        combined |= Q(title__icontains=alias)
+    return combined
+
+
+def _apply_notice_sort(qs, sort: str):
+    """sort 字段：publishTime|endTime|startTime；前缀 '-' 表示倒序，无参为默认发布时间倒序。"""
+    key = str(sort or "").strip()
+    end_sq = NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).values("end_time")[:1]
+    start_sq = NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).values("start_time")[:1]
+    if key in {"publishTime", "publish_time", "publishAsc"}:
+        return qs.order_by(F("publish_time").asc(nulls_last=True), "id")
+    if key in {"-publishTime", "-publish_time", "publishDesc"}:
+        return qs.order_by(F("publish_time").desc(nulls_last=True), "-id")
+    if key in {"endTime", "end_time", "endAsc"}:
+        return qs.annotate(_sort_end=Subquery(end_sq)).order_by(F("_sort_end").asc(nulls_last=True), "-id")
+    if key in {"-endTime", "-end_time", "endDesc"}:
+        return qs.annotate(_sort_end=Subquery(end_sq)).order_by(F("_sort_end").desc(nulls_last=True), "-id")
+    if key in {"startTime", "start_time", "startAsc"}:
+        return qs.annotate(_sort_start=Subquery(start_sq)).order_by(F("_sort_start").asc(nulls_last=True), "-id")
+    if key in {"-startTime", "-start_time", "startDesc"}:
+        return qs.annotate(_sort_start=Subquery(start_sq)).order_by(F("_sort_start").desc(nulls_last=True), "-id")
+    return qs.order_by("-publish_time", "-id")
+
+
 def query_crawled_notices(
     *,
     page: int = 1,
@@ -1657,6 +1713,9 @@ def query_crawled_notices(
     progress: str = "",
     budget_min: str | int | float | None = None,
     budget_max: str | int | float | None = None,
+    procurement_mode: str = "",
+    sort: str = "",
+    exclude_notice_kinds: list[str] | str | None = None,
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1671,7 +1730,7 @@ def query_crawled_notices(
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
     if site_ids is not None and site_id and site_id not in site_ids:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
-    qs = _list_raw_qs().order_by("-publish_time", "-id")
+    qs = _list_raw_qs()
     if site_ids is not None:
         qs = qs.filter(site_id__in=site_ids)
     if site_id:
@@ -1682,6 +1741,15 @@ def query_crawled_notices(
         kinds = _parse_notice_kinds(notice_kind, notice_kinds or "")
     if kinds:
         qs = qs.filter(_raw_ids_for_kinds(kinds, site_id))
+    if isinstance(exclude_notice_kinds, list):
+        excluded = _parse_notice_kinds(*exclude_notice_kinds)
+    else:
+        excluded = _parse_notice_kinds(exclude_notice_kinds or "")
+    if excluded:
+        qs = qs.exclude(_raw_ids_for_kinds(excluded, site_id))
+    mode = (procurement_mode or "").strip()
+    if mode:
+        qs = qs.filter(_procurement_mode_filter_q(mode))
     region = (region_name or "").strip()
     if region:
         qs = qs.filter(_region_filter_q(region))
@@ -1727,10 +1795,13 @@ def query_crawled_notices(
         qs = qs.filter(_keyword_search_q(keyword))
     elif keyword and code and not extract_gov_project_codes(keyword):
         qs = qs.filter(_keyword_search_q(keyword))
+    qs = _apply_notice_sort(qs, sort)
     has_budget = budget_lo is not None or budget_hi is not None
     has_filter = bool(
         site_id
         or kinds
+        or excluded
+        or mode
         or region
         or day_q is not None
         or buyer

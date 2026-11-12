@@ -1,24 +1,28 @@
 ---
-description: 后台基础列表页统一样式、布局与功能（搜索/筛选/分页/快捷复制）
+description: 后台基础列表页统一样式、布局与功能（搜索、筛选、服务端分页、快捷复制）及浏览器视觉验收；新增或修改 CRUD/台账/管理列表时适用
 alwaysApply: true
 ---
 
 # 后台列表 UI 统一约定
 
-以后做**基础后台列表**（增删改查台账、管理页）时，样式、布局、功能默认与当前项目一致；有特殊需求用户会另行说明。
+以后开发或修改**基础后台列表**（CRUD、台账、管理页）时，样式、布局、功能默认与当前项目一致；有特殊需求时以用户明确要求为准。
 
-## 参考实现
+**核心原则**：复用既有页面与组件，保持视觉一致；实现功能后必须验证真实渲染效果。不得为追求美观破坏业务逻辑或信息可用性。
 
-优先对齐这些页面，不要另起一套 UI：
+## 1. 参考实现与组件复用
+
+优先查看结构最接近的现有页面及其实际 CSS，不要另起一套 UI：
 
 - 商标注册证：`TrademarkCertificates`（`App.tsx`）
 - 商机管理：`WebsiteLeads`（`App.tsx`）
 - 平台账号：`PlatformAccounts`（`App.tsx`）
 - 公告管理：`Notices.tsx`
 
-共享组件一律从 `frontend/src/listUi.tsx` 引入：`SearchField`、`CopyableLine`、`QuickCopyButton`、`Pagination`、`PanelTitle`、`writeClipboardText`。不要在业务文件里再造一套复制/搜索/分页。
+共享组件一律从 `frontend/src/listUi.tsx` 引入：`SearchField`、`CopyableLine`、`QuickCopyButton`、`Pagination`、`PanelTitle`、`writeClipboardText`。业务文件不得另造复制、搜索或分页组件。
 
-## 标准骨架
+修改前先确认项目已有布局组件、主题变量、CSS 定义和可复用实现。若多个参考页面存在差异，优先沿用当前模块的既有模式；仍不明确时选择结构与需求最接近者，不要混搭出新的样式体系。
+
+## 2. 标准骨架
 
 ```tsx
 <div className="stack">
@@ -41,7 +45,11 @@ alwaysApply: true
     {/* 少量枚举筛选用 segmented；过多选项才用 select */}
     <div className="segmented">
       {filters.map((item) => (
-        <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>
+        <button
+          key={item}
+          className={active === item ? "active" : ""}
+          onClick={() => setActive(item)}
+        >
           {item}
         </button>
       ))}
@@ -67,28 +75,38 @@ alwaysApply: true
 </div>
 ```
 
-## 必须具备的功能
+> 示例只展示布局结构；实际页面须接入权限、加载、错误、服务端查询及业务交互。搜索与筛选没有对应选项时，不要为了套用骨架强行渲染空区域。
 
-1. **服务端分页/搜索**：用 `queryCollection` 的 `page` / `page_size` / `search`（及业务 filters），禁止一次拉全量再在浏览器切片。详见 `admin-list-server-query` skill。
-2. **主名称快捷复制**：主名称列用 `CopyableLine`。详见 `admin-list-quick-copy` skill。
-3. **统一搜索框**：`SearchField` + `platform-account-toolbar`（或标题右侧放搜索，与商机页一致）。
-4. **筛选**：枚举用 `.segmented` 按钮；不要用自定义杂乱 toolbar label 堆砌。
-5. **分页（硬性）**：后续所有新模块/改动凡涉及分页，必须遵循当前标准——只用 `listUi` 的 `Pagination`，具备：**首页、尾页、上一页、下一页、跳转到指定页、每页条数（10/20/50/100）**。优先 `useServerPagedList`（自带 `setPageSize`）或显式传 `onPageSizeChange`。禁止自研 `.pager`、禁止只做上一页/下一页、禁止写死不可改的 `PAGE_SIZE`。详见 skill `admin-list-pagination`。
-6. **空态/加载**：`table-empty`；错误用现有 `form-error` / `onNotice`。
-7. **操作列**：`option-actions` + `copy-link` 文字按钮；危险操作用 `danger-action`。
-8. **权限**：读 `*.view`、写 `*.manage`；新权限点同步权限目录（见 `permission-catalog` 规则）。
+## 3. 必须具备的功能
 
-## 分页接入示例
+1. **服务端分页/搜索**：使用 `queryCollection` 的 `page`、`page_size`、`search` 及业务 filters，禁止一次拉取全部数据后在浏览器切片。详见 `admin-list-server-query` skill。
+2. **主名称快捷复制**：主名称列使用 `CopyableLine`；需要独立复制按钮时复用 `QuickCopyButton` / `writeClipboardText`。详见 `admin-list-quick-copy` skill。
+3. **统一搜索框**：使用 `SearchField` + `platform-account-toolbar`，或与商机页一致放在标题右侧。搜索布局按参考页面选定，不能同时创造多套样式。
+4. **筛选**：少量互斥枚举使用 `.segmented`；选项较多时使用现有 `select`。不得用杂乱的自定义 toolbar label 堆砌筛选项。
+5. **分页（硬性）**：所有涉及分页的新模块或改动，仅使用 `listUi` 的 `Pagination`，完整提供**首页、尾页、上一页、下一页、指定页跳转、每页条数（10/20/50/100）**。优先使用 `useServerPagedList`（含 `setPageSize`），否则显式传入 `onPageSizeChange`。禁止自研 `.pager`、只做前后翻页或写死不可更改的 `PAGE_SIZE`。详见 `admin-list-pagination` skill。
+6. **空态/加载/错误**：使用既有 `table-empty`、加载模式及 `form-error` / `onNotice`；区分无数据和搜索无结果，避免将请求失败误显示为“暂无数据”。
+7. **操作列**：使用 `option-actions` + `copy-link` 文字按钮；危险操作使用 `danger-action` 并遵守既有确认流程。
+8. **权限**：读取权限 `*.view`、管理权限 `*.manage`；新增权限点同步权限目录（见 `permission-catalog` 规则）。前端隐藏按钮不能替代后端权限校验。
+
+## 4. 分页接入示例
 
 ```tsx
 // collection 列表
-const list = useServerPagedList<Item>({ collection: "xxx", search, pageSize: 20, refreshKey: data.xxx });
-<Pagination {...list} onPageChange={list.setPage} />
+const list = useServerPagedList<Item>({
+  collection: "xxx",
+  search,
+  pageSize: 20,
+  refreshKey: data.xxx,
+});
+<Pagination {...list} onPageChange={list.setPage} />;
 
 // 自定义 API 列表
 const [page, setPage] = useState(1);
 const [pageSize, setPageSizeState] = useState(20);
-const setPageSize = (next: number) => { setPageSizeState(next); setPage(1); };
+const setPageSize = (next: number) => {
+  setPageSizeState(next);
+  setPage(1);
+};
 <Pagination
   page={page}
   totalPages={totalPages}
@@ -96,31 +114,101 @@ const setPageSize = (next: number) => { setPageSizeState(next); setPage(1); };
   pageSize={pageSize}
   onPageChange={setPage}
   onPageSizeChange={setPageSize}
-/>
+/>;
 ```
 
-## 样式
+以上代码为接口接入示意，实际应遵循项目现有 Hook 的真实签名及状态管理方式。
 
-- 表格列宽：为该列表定义 `.table-row.xxx-table { grid-template-columns: …; align-items: start; }`。
-- 多行主信息：`.xxx-main-cell`（参考 `.trademark-main-cell` / `.notice-main-cell`），副信息用 `<em>`。
-- 表头：同一行用 `table-row xxx-table head`，不要混用已废弃的 `table-head` 单独结构（除非页面本就如此）。
-- 弹窗：`modal-backdrop` / `modal` / `modal-head` / `form-grid` / `modal-actions`；关闭用 `icon-button` + `X` 图标。
-- 不要引入卡片墙、新设计系统色板、或与现有绿主色（`.segmented button.active` / `.primary`）冲突的样式。
+### 分页与请求状态校验
 
-## 反例
+- 搜索、筛选或每页条数变化后，应重置到第 1 页并重新查询服务端。
+- 删除当前页最后一条记录后，要正确处理页码越界（回退到有效页并重新查询）。
+- 快速连续搜索或切换筛选时，旧请求不得覆盖新结果；复用项目已有防抖、取消请求或请求序号机制。
+- 页面显示的总条数、总页数和列表数据必须来自同一套服务端查询条件。
+- 保留现有加载与失败反馈，不得通过前端切片伪装服务端分页。
+
+## 5. 样式与布局规范
+
+- **表格列宽**：定义 `.table-row.xxx-table { grid-template-columns: …; align-items: start; }`，并与表头使用同一列定义。
+- **多行主信息**：使用 `.xxx-main-cell`（参考 `.trademark-main-cell` / `.notice-main-cell`），副信息用 `<em>`。
+- **表头**：同一行使用 `table-row xxx-table head`，不要混用已废弃的 `table-head` 独立结构（除非现有页面如此）。
+- **弹窗**：复用 `modal-backdrop` / `modal` / `modal-head` / `form-grid` / `modal-actions`；关闭使用 `icon-button` + `X` 图标。
+- **主题**：不得引入卡片墙、新设计系统色板，或与现有绿主色（`.segmented button.active` / `.primary`）冲突的样式。
+- **对齐与间距**：优先复用现有间距、字体、控件高度、圆角与颜色变量，不自行设立第二套尺寸规范。
+
+### 列宽决策与溢出处理
+
+- 不要无依据地平均分配所有列；编号、状态、日期和操作列优先稳定宽度，名称、标题及描述列优先分配弹性空间。
+- 对 CSS Grid 弹性列合理使用 `minmax(0, 1fr)`；必要时对子元素设 `min-width: 0`，防止长文本撑破布局。
+- 长名称、URL、说明、空字段、长数字必须有明确的换行/省略与查看完整内容方案；不得仅为截图整洁而隐藏必要信息。
+- 操作按钮不得无意换行、重叠、被裁剪；表头与每行单元格必须严格对齐。
+- 宽表格可以在**表格容器内部**横向滚动，但不得使整个页面产生非预期水平滚动。
+- 不得依赖大量绝对定位、负 margin、`!important` 或重复覆盖 CSS 勉强拼出布局；先检查容器、Grid/Flex 约束和现有选择器。
+
+### 搜索、筛选与工具栏
+
+- 搜索区、工具栏、表格和分页应层级清晰、边缘对齐，不出现突兀的大面积留白。
+- 搜索框宽度根据现有参考页面与可用空间决定；相同用途的按钮统一高度和视觉层级。
+- 控件较多时允许合理换行或按项目现有方案折叠，不得为保持单行而挤压到不可用。
+- 不因某一个分辨率的显示问题随意修改全局样式；优先局部修复，并检查共享样式影响面。
+
+## 6. 必查页面状态与交互
+
+视觉验收不能只检查列表首次加载的理想状态。按本次改动涉及的功能覆盖：
+
+1. 正常数据（多条、多页）与空列表。
+2. 搜索无结果、加载中、服务端请求失败。
+3. 长名称、长描述、长链接、缺失字段、副信息换行。
+4. 筛选切换、第一页、最后一页、页码跳转和每页条数切换。
+5. 新增、编辑、删除确认、弹窗打开和关闭（如有）。
+6. 无管理权限时的只读展示和操作按钮隐藏（如有）。
+
+测试环境缺少边界数据时，可使用隔离测试数据或 Mock，不得擅自修改生产数据。
+
+## 7. Cursor Browser 视觉验收（UI 变更必做）
+
+凡新增或修改页面结构、布局、组件尺寸、CSS，代码改完**不等于任务完成**。
+
+1. 启动或连接真实开发页面，优先使用 Cursor Browser 打开受影响页面；如需登录，使用已有安全的测试方式。
+2. 分别在 **1440px、1280px、768px** 宽度检查；若明确仅支持桌面或有项目规定断点，应说明适用范围并按实际要求验证。无需为不支持的窄屏强改整体设计。
+3. 查看真实渲染截图，检查主内容区利用率、标题/搜索/筛选/表格/分页对齐、列宽、行高、文字截断、溢出、按钮换行、异常留白、弹窗边界。
+4. 检查关键交互、控制台错误；有条件时结合 Playwright 做固定视口截图和相关回归测试。
+5. 发现布局问题后定位根因，修改并复测；共享 CSS 或共享组件变更时，抽查受影响的其他参考页面。
+6. 无法启动服务、登录、使用浏览器或取得截图时，应明确标记**未完成视觉验收**及阻断原因，不能声称视觉验收通过。
+
+**原则**：视觉检查应与变更范围相称。微调一个局部按钮无需遍历全站；新增列表或改动共享布局时必须做充分回归。
+
+## 8. 反例
 
 ```tsx
-// ❌ 自研搜索/分页/复制
+// ❌ 自研搜索 / 分页 / 复制
 <label className="search-field">…</label>
 <button onClick={() => navigator.clipboard.writeText(name)}>复制</button>
-<div className="my-pager">…
+<div className="my-pager">…</div>
 
 // ✅ 复用 listUi
-<SearchField … />
-<CopyableLine text={name} label="名称"><strong>{name}</strong></CopyableLine>
-<Pagination … />
+<SearchField value={search} onChange={setSearch} />
+<CopyableLine text={name} label="名称">
+  <strong>{name}</strong>
+</CopyableLine>
+<Pagination {...paginationProps} />
 ```
 
-## 例外
+其他反例：为了消除宽表格滚动而压缩到文字重叠；使用 `!important` 叠加覆盖；仅看源代码便宣布“布局已经调整好”；没测分页查询状态就声称功能通过。
 
-用户明确说「特殊布局 / 看板 / 统计图 / 向导」时，可偏离本约定；其余基础列表默认遵守。
+## 9. 完成与交付标准
+
+完成前逐项确认：
+
+- 复用了现有组件、页面结构和项目设计变量，无重复造轮子。
+- 服务端查询、分页、搜索、筛选、复制、权限与操作保持正确。
+- 相关类型检查、构建或测试已运行并如实记录结果。
+- 根据本次改动检查关键数据状态、交互和目标视口。
+- 已使用浏览器查看实际渲染结果，或明确披露无法验收。
+- 没有明显的重叠、非预期截断、异常留白和布局溢出。
+
+交付时说明修改文件、关键变化、实际测试/视口、代表性截图（若可获取）及遗留问题。**不得将未执行的检查描述为已通过。**
+
+## 10. 例外
+
+用户明确要求“特殊布局 / 看板 / 统计图 / 向导”时，可偏离本约定；其余基础列表默认遵守。专项规则或 Skill 与本文件冲突时，优先遵循用户本次明确要求及现有业务接口契约，并在交付中说明必要偏离。

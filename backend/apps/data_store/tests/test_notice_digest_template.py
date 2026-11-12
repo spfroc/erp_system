@@ -19,8 +19,20 @@ class NoticeDigestTemplateTests(SimpleTestCase):
         self.assertEqual(data["thing3"]["value"], "点击查看消息列表")
         self.assertEqual(data["character_string5"]["value"], "3")
 
-    def test_portal_messages_url_appends_hash(self):
-        with self.settings(WECHAT_MP_PORTAL_NOTICE_URL="https://example.com/portal/"):
-            self.assertEqual(portal_messages_url(), "https://example.com/portal/#messages")
-        with self.settings(WECHAT_MP_PORTAL_NOTICE_URL="https://example.com/portal/#notices"):
-            self.assertEqual(portal_messages_url(), "https://example.com/portal/#messages")
+    def test_portal_messages_url_uses_silent_login(self):
+        with self.settings(
+            WECHAT_MP_PORTAL_NOTICE_URL="https://example.com/portal/",
+            WECHAT_MP_OAUTH_REDIRECT_URI="https://example.com/api/wechat/mp/oauth/callback/",
+        ):
+            self.assertEqual(
+                portal_messages_url(),
+                "https://example.com/api/portal/wechat/silent-login/?next=messages",
+            )
+        with self.settings(
+            WECHAT_MP_PORTAL_NOTICE_URL="https://example.com/portal/#notices",
+            WECHAT_MP_OAUTH_REDIRECT_URI="https://example.com/api/wechat/mp/oauth/callback/",
+        ):
+            self.assertEqual(
+                portal_messages_url(),
+                "https://example.com/api/portal/wechat/silent-login/?next=messages",
+            )

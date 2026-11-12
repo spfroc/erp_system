@@ -61,12 +61,38 @@ def portal_base_url() -> str:
     return ""
 
 
+def _portal_api_origin() -> str:
+    """用于生成门户同域 /api/ 绝对地址（模板消息、静默登录入口）。"""
+    redirect = oauth_redirect_uri()
+    if redirect and "/api/" in redirect:
+        return redirect.split("/api/", 1)[0].rstrip("/")
+    base = portal_base_url().rstrip("/")
+    if not base:
+        return ""
+    if "/portal" in base:
+        return base[: base.index("/portal")].rstrip("/")
+    return base
+
+
+def portal_wechat_silent_login_url(*, next_tab: str = "messages") -> str:
+    """微信内打开：snsapi_base 取 openid → 签发 portal_session → 进入门户 hash。"""
+    origin = _portal_api_origin()
+    if not origin:
+        return ""
+    tab = str(next_tab or "messages").strip() or "messages"
+    return f"{origin}/api/portal/wechat/silent-login/?{urlencode({'next': tab})}"
+
+
 def portal_notice_url() -> str:
-    """兼容旧调用：默认跳门户消息列表。"""
+    """兼容旧调用：默认跳门户消息列表（经微信静默登录）。"""
     return portal_messages_url()
 
 
 def portal_messages_url() -> str:
+    """模板消息点击地址：优先静默登录入口，失败时回退到门户 #messages。"""
+    silent = portal_wechat_silent_login_url(next_tab="messages")
+    if silent:
+        return silent
     base = portal_base_url()
     if not base:
         return ""

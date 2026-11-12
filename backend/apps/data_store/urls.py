@@ -55,6 +55,8 @@ from .views import (
     website_leads,
 )
 from .portal import (
+    portal_handoff_claim,
+    portal_handoff_create,
     portal_login,
     portal_logout,
     portal_me,
@@ -66,6 +68,7 @@ from .portal import (
     portal_subscription,
     portal_subscription_options,
     portal_wechat_bind_url,
+    portal_wechat_silent_login,
     portal_wechat_unbind,
     public_crawled_notices,
     wechat_mp_callback,
@@ -90,6 +93,8 @@ urlpatterns = [
     path("portal/login/", portal_login, name="portal-login"),
     path("portal/logout/", portal_logout, name="portal-logout"),
     path("portal/me/", portal_me, name="portal-me"),
+    path("portal/handoff/create/", portal_handoff_create, name="portal-handoff-create"),
+    path("portal/handoff/claim/", portal_handoff_claim, name="portal-handoff-claim"),
     path("portal/notices/", portal_notices, name="portal-notices"),
     path("portal/notices/<int:notice_id>/", portal_notice_detail, name="portal-notice-detail"),
     path("portal/messages/", portal_messages, name="portal-messages"),
@@ -99,6 +104,7 @@ urlpatterns = [
     path("portal/subscription/options/", portal_subscription_options, name="portal-subscription-options"),
     path("portal/wechat/bind-url/", portal_wechat_bind_url, name="portal-wechat-bind-url"),
     path("portal/wechat/unbind/", portal_wechat_unbind, name="portal-wechat-unbind"),
+    path("portal/wechat/silent-login/", portal_wechat_silent_login, name="portal-wechat-silent-login"),
     path("wechat/mp/callback/", wechat_mp_callback, name="wechat-mp-callback"),
     path("wechat/mp/oauth/callback/", wechat_mp_oauth_callback, name="wechat-mp-oauth-callback"),
     path("portal/orders/", portal_orders, name="portal-orders"),

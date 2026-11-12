@@ -6,24 +6,36 @@ const SITE_SEO = {
     siteName: "壹采政企采购电商服务平台",
     description: "壹采公开采购公告、意向公开、竞价项目与结果公告，了解山东省政府采购相关信息。",
     canonicalOrigin: "https://www.qlyc.co",
+    geoRegion: "CN-SD",
+    geoPlacename: "山东省济南市",
+    geoPosition: "36.6512;117.12",
   },
   yizhichan: {
     brand: "壹采",
     siteName: "壹采政企采购电商服务平台",
     description: "壹采公开采购公告、意向公开、竞价项目与结果公告，了解山东省政府采购相关信息。",
     canonicalOrigin: "https://www.yizhichan.co",
+    geoRegion: "CN-SD",
+    geoPlacename: "山东省济南市",
+    geoPosition: "36.6512;117.12",
   },
   jinanyunji: {
     brand: "济南云济",
     siteName: "济南云济政企采购服务平台",
     description: "济南云济公开采购公告、意向公开、竞价项目与结果公告。",
     canonicalOrigin: "https://www.jinanyunji.com",
+    geoRegion: "CN-SD",
+    geoPlacename: "济南市",
+    geoPosition: "36.6512;117.12",
   },
   qinghuicai: {
     brand: "青慧采",
     siteName: "青慧采政企采购服务平台",
     description: "青慧采公开采购公告与政企采购服务信息。",
     canonicalOrigin: "https://www.qinghuicai.cn",
+    geoRegion: "CN-SD",
+    geoPlacename: "青岛市",
+    geoPosition: "36.0671;120.3826",
   },
 };
 
@@ -151,6 +163,23 @@ export function money(value) {
   }
 }
 
+export function splitSeoKeywords(...parts) {
+  const bag = [];
+  const seen = new Set();
+  for (const part of parts) {
+    String(part || "")
+      .split(/[|,，、；;/\s]+/)
+      .map((item) => item.trim())
+      .filter((item) => item && item.length >= 2 && item.length <= 40)
+      .forEach((item) => {
+        if (seen.has(item)) return;
+        seen.add(item);
+        bag.push(item);
+      });
+  }
+  return bag.slice(0, 24).join(",");
+}
+
 export function buildMetaTags({
   title,
   description,
@@ -161,6 +190,9 @@ export function buildMetaTags({
   ogImageUrl = "",
   baiduSiteVerification = "",
   googleSiteVerification = "",
+  geoRegion = "",
+  geoPlacename = "",
+  geoPosition = "",
 }) {
   const lines = [
     `<title>${escapeHtml(title)}</title>`,
@@ -177,6 +209,10 @@ export function buildMetaTags({
     `<meta name="twitter:title" content="${escapeAttr(title)}" />`,
     `<meta name="twitter:description" content="${escapeAttr(description)}" />`,
     `<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large" />`,
+    geoRegion ? `<meta name="geo.region" content="${escapeAttr(geoRegion)}" />` : "",
+    geoPlacename ? `<meta name="geo.placename" content="${escapeAttr(geoPlacename)}" />` : "",
+    geoPosition ? `<meta name="geo.position" content="${escapeAttr(geoPosition)}" />` : "",
+    geoPosition ? `<meta name="ICBM" content="${escapeAttr(String(geoPosition).replace(";", ","))}" />` : "",
     baiduSiteVerification ? `<meta name="baidu-site-verification" content="${escapeAttr(baiduSiteVerification)}" />` : "",
     googleSiteVerification ? `<meta name="google-site-verification" content="${escapeAttr(googleSiteVerification)}" />` : "",
   ].filter(Boolean);

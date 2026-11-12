@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>同步登录态</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f3eee4;
+      color: #241c14;
+    }
+    p { margin: 0; color: #74685a; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <p id="msg">正在同步登录状态…</p>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search || "");
+      var returnTo = params.get("return_to") || "";
+      var msg = document.getElementById("msg");
+      var ALLOWED_SUFFIXES = [".qlyc.co", ".qinghuicai.cn", ".yizhichan.co", ".jinanyunji.com"];
+
+      function go(url) {
+        location.replace(url || "/");
+      }
+
+      function fail(text) {
+        if (msg) msg.textContent = text || "同步失败，正在返回…";
+        window.setTimeout(function () {
+          go(isAllowedReturn(returnTo) ? returnTo : "/");
+        }, 400);
+      }
+
+      function isAllowedReturn(url) {
+        try {
+          var parsed = new URL(url, location.origin);
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+          var host = String(parsed.hostname || "").toLowerCase();
+          if (!host) return false;
+          if (host === "localhost" || host === "127.0.0.1") return true;
+          return ALLOWED_SUFFIXES.some(function (suffix) {
+            var root = suffix.slice(1);
+            return host === root || host.slice(-suffix.length) === suffix;
+          });
+        } catch (_) {
+          return false;
+        }
+      }
+
+      if (!returnTo || !isAllowedReturn(returnTo)) {
+        fail("返回地址无效");
+        return;
+      }
+
+      fetch("/api/portal/me/", { credentials: "include", headers: { Accept: "application/json" } })
+        .then(function (res) {
+          if (!res.ok) throw new Error("unauthorized");
+          return fetch("/api/portal/handoff/create/", {
+            method: "POST",
+            credentials: "include",
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            body: "{}",
+          });
+        })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            if (!res.ok) throw new Error((body && body.detail) || "handoff failed");
+            return body;
+          });
+        })
+        .then(function (body) {
+          if (!body || !body.code) throw new Error("handoff missing code");
+          var target = new URL(returnTo, location.origin);
+          target.searchParams.set("portal_handoff", body.code);
+          go(target.toString());
+        })
+        .catch(function () {
+          fail("未登录或同步失败");
+        });
+    })();
+  </script>
+</body>
+</html>

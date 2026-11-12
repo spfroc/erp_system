@@ -949,6 +949,44 @@
       }
     }
 
+    function readReturnTo() {
+      try {
+        return new URLSearchParams(location.search || "").get("return_to") || "";
+      } catch (_) {
+        return "";
+      }
+    }
+
+    function isAllowedReturnTo(url) {
+      try {
+        const parsed = new URL(url, location.origin);
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+        const host = String(parsed.hostname || "").toLowerCase();
+        if (!host) return false;
+        if (host === "localhost" || host === "127.0.0.1") return true;
+        const suffixes = [".qlyc.co", ".qinghuicai.cn", ".yizhichan.co", ".jinanyunji.com"];
+        return suffixes.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function redirectWithHandoffIfNeeded() {
+      const returnTo = readReturnTo();
+      if (!returnTo || !isAllowedReturnTo(returnTo)) return false;
+      try {
+        const body = await api("/api/portal/handoff/create/", { method: "POST", body: "{}" });
+        if (!body || !body.code) return false;
+        const target = new URL(returnTo);
+        target.searchParams.set("portal_handoff", body.code);
+        location.replace(target.toString());
+        return true;
+      } catch (_) {
+        // 签发失败时留在门户，避免裸跳回目标站仍显示未登录（闪一下）
+        return false;
+      }
+    }
+
     async function api(path, options) {
       const response = await fetch(path, {
         credentials: "include",
@@ -2807,6 +2845,7 @@
           method: "POST",
           body: JSON.stringify({ phone: form.phone.value.trim(), password: form.password.value }),
         });
+        if (await redirectWithHandoffIfNeeded()) return;
         showApp(body.data);
       } catch (err) {
         error.textContent = err.message;
@@ -2848,9 +2887,36 @@
       if (next !== tab) openTab(next);
     });
 
+    function isWeChatBrowser() {
+      return /MicroMessenger/i.test(navigator.userAgent || "");
+    }
+
+    function wechatSilentLoginUrl(nextTab) {
+      const next = encodeURIComponent(nextTab || "messages");
+      return `/api/portal/wechat/silent-login/?next=${next}`;
+    }
+
+    function shouldWechatSilentLogin() {
+      if (!isWeChatBrowser()) return false;
+      // 已从静默登录失败回落时不要死循环
+      const flag = new URLSearchParams(location.search || "").get("wechat") || "";
+      if (flag && flag !== "ok") return false;
+      const hash = String(location.hash || "").replace(/^#/, "").split("?")[0];
+      return hash === "messages" || hash.startsWith("messages/");
+    }
+
     api("/api/portal/me/")
-      .then((body) => showApp(body.data))
-      .catch(() => showLogin());
+      .then(async (body) => {
+        if (await redirectWithHandoffIfNeeded()) return;
+        showApp(body.data);
+      })
+      .catch(() => {
+        if (shouldWechatSilentLogin()) {
+          location.replace(wechatSilentLoginUrl("messages"));
+          return;
+        }
+        showLogin();
+      });
   </script>
 </body>
 </html>

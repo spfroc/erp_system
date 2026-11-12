@@ -31,6 +31,8 @@ from . import wechat_mp
 PORTAL_COOKIE = "portal_session"
 PORTAL_SALT = "portal-account"
 PORTAL_MAX_AGE = 60 * 60 * 12
+PORTAL_HANDOFF_SALT = "portal-handoff"
+PORTAL_HANDOFF_MAX_AGE = 120
 PORTAL_PERMISSIONS = (
     "portal.notice.view",
     "portal.notice.subscribe",
@@ -196,6 +198,49 @@ def portal_cookie_domain(request=None) -> str | None:
         if host == root or host.endswith(parent):
             return parent
     return None
+
+
+def portal_return_to_allowed(url: str) -> bool:
+    """仅允许跳回已知官网主域，防止 open redirect。"""
+    text = str(url or "").strip()
+    if not text:
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(text)
+    except Exception:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if host in {"localhost", "127.0.0.1"} or host.endswith(".local"):
+        return True
+    for parent in PORTAL_COOKIE_PARENT_DOMAINS:
+        root = parent[1:]
+        if host == root or host.endswith(parent):
+            return True
+    return False
+
+
+def create_portal_handoff_code(account_id: str) -> str:
+    return signing.dumps({"aid": str(account_id)}, salt=PORTAL_HANDOFF_SALT)
+
+
+def consume_portal_handoff_code(code: str) -> str | None:
+    raw = str(code or "").strip()
+    if not raw:
+        return None
+    try:
+        payload = signing.loads(raw, salt=PORTAL_HANDOFF_SALT, max_age=PORTAL_HANDOFF_MAX_AGE)
+    except signing.BadSignature:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    account_id = str(payload.get("aid") or "").strip()
+    return account_id or None
 
 
 def _portal_cookie_secure(request=None) -> bool:
@@ -806,6 +851,11 @@ def public_crawled_notices(request):
             progress=(request.GET.get("progress") or "").strip(),
             budget_min=(request.GET.get("budgetMin") or request.GET.get("budget_min") or "").strip(),
             budget_max=(request.GET.get("budgetMax") or request.GET.get("budget_max") or "").strip(),
+            procurement_mode=(request.GET.get("procurementMode") or request.GET.get("procurement_mode") or "").strip(),
+            sort=(request.GET.get("sort") or request.GET.get("orderBy") or "").strip(),
+            exclude_notice_kinds=(
+                request.GET.get("excludeNoticeKinds") or request.GET.get("exclude_notice_kinds") or ""
+            ).strip(),
         )
     except (ProgrammingError, OperationalError):
         return JsonResponse(
@@ -855,6 +905,8 @@ def portal_notices(request):
             project_name=(request.GET.get("projectName") or "").strip(),
             region_name=(request.GET.get("regionName") or request.GET.get("region") or "").strip(),
             progress=(request.GET.get("progress") or "").strip(),
+            procurement_mode=(request.GET.get("procurementMode") or request.GET.get("procurement_mode") or "").strip(),
+            sort=(request.GET.get("sort") or request.GET.get("orderBy") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
         # 勿吞成空列表：前端会当成「无数据」，掩盖缺列/索引等真实故障
@@ -1017,6 +1069,38 @@ def portal_me(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def portal_handoff_create(request):
+    """在已登录域签发短时移交码，供其它官网主域兑换本地 portal_session。"""
+    record, error = require_portal(request)
+    if error:
+        return error
+    return JsonResponse(
+        {
+            "code": create_portal_handoff_code(record.id),
+            "expiresIn": PORTAL_HANDOFF_MAX_AGE,
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def portal_handoff_claim(request):
+    """用移交码在当前请求 Host 对应主域写入 portal_session。"""
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    account_id = consume_portal_handoff_code(payload.get("code") or request.GET.get("code") or "")
+    if not account_id:
+        return JsonResponse({"detail": "登录移交已失效，请重新登录。"}, status=400)
+    record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
+    if not record or (record.status or "") != "启用":
+        return JsonResponse({"detail": "账号不可用。"}, status=403)
+    return issue_portal_cookie(JsonResponse({"data": public_account(record)}), record.id, request=request)
+
+
+@csrf_exempt
 @require_http_methods(["PUT"])
 def portal_subscription(request):
     record, error = require_portal(request, "portal.notice.subscribe")
@@ -1156,20 +1240,33 @@ def portal_wechat_unbind(request):
     return JsonResponse({"data": public_account(record), "ok": True})
 
 
-def _portal_bind_result_page(*, status: str) -> HttpResponse:
-    """微信内 302 Location 带 #hash 常被代理剥掉，导致白页；改用结果页 + JS 跳转。"""
-    status = (status or "fail").strip() or "fail"
-    if status not in {"ok", "fail", "conflict"}:
-        status = "fail"
-    messages = {
-        "ok": "微信绑定成功",
-        "fail": "微信绑定失败，请重试",
-        "conflict": "该微信已绑定其他账号",
-    }
-    title = messages[status]
-    portal_home = (wechat_mp.portal_notice_url() or "/").rstrip("/") + "/"
-    target = f"{portal_home}?{urlencode({'wechat': status})}#subscription"
+PORTAL_WECHAT_LOGIN_SALT = "portal-wechat-login"
+PORTAL_WECHAT_NEXT_TABS = {"messages", "subscription", "notices", "home", "account"}
+
+
+def _portal_home_base() -> str:
+    base = (wechat_mp.portal_base_url() or "/").rstrip("/") + "/"
+    return base
+
+
+def _normalize_portal_next(next_tab: str) -> str:
+    tab = str(next_tab or "messages").strip().lstrip("#") or "messages"
+    if tab not in PORTAL_WECHAT_NEXT_TABS:
+        return "messages"
+    return tab
+
+
+def _portal_js_redirect_page(
+    *,
+    title: str,
+    hint: str,
+    target: str,
+    request=None,
+    account_id: str | None = None,
+) -> HttpResponse:
+    """微信内 302 Location 带 #hash 常被剥掉；用中间页 + JS 跳转，并可附带 portal_session。"""
     safe_title = html.escape(title)
+    safe_hint = html.escape(hint)
     safe_href = html.escape(target, quote=True)
     js_target = json.dumps(target, ensure_ascii=False)
     page = f"""<!DOCTYPE html>
@@ -1192,13 +1289,88 @@ def _portal_bind_result_page(*, status: str) -> HttpResponse:
 <body>
   <div class="box">
     <h1>{safe_title}</h1>
-    <p>正在返回订阅页面…</p>
+    <p>{safe_hint}</p>
     <p style="margin-top:12px"><a href="{safe_href}">如未自动跳转请点这里</a></p>
   </div>
   <script>location.replace({js_target});</script>
 </body>
 </html>"""
-    return HttpResponse(page, content_type="text/html; charset=utf-8")
+    response = HttpResponse(page, content_type="text/html; charset=utf-8")
+    if account_id:
+        issue_portal_cookie(response, account_id, request=request)
+    return response
+
+
+def _portal_bind_result_page(*, status: str) -> HttpResponse:
+    """微信绑定结果中间页。"""
+    status = (status or "fail").strip() or "fail"
+    if status not in {"ok", "fail", "conflict"}:
+        status = "fail"
+    messages = {
+        "ok": "微信绑定成功",
+        "fail": "微信绑定失败，请重试",
+        "conflict": "该微信已绑定其他账号",
+    }
+    title = messages[status]
+    target = f"{_portal_home_base()}?{urlencode({'wechat': status})}#subscription"
+    return _portal_js_redirect_page(
+        title=title,
+        hint="正在返回订阅页面…",
+        target=target,
+    )
+
+
+def _portal_login_result_page(*, status: str, next_tab: str = "messages", request=None, account_id: str | None = None) -> HttpResponse:
+    """微信静默登录结果中间页。"""
+    status = (status or "fail").strip() or "fail"
+    tab = _normalize_portal_next(next_tab)
+    if status == "ok" and account_id:
+        target = f"{_portal_home_base()}#{tab}"
+        return _portal_js_redirect_page(
+            title="登录成功",
+            hint="正在进入消息中心…",
+            target=target,
+            request=request,
+            account_id=account_id,
+        )
+    messages = {
+        "fail": "微信登录失败，请重试或使用手机号登录",
+        "unbound": "当前微信尚未绑定会员账号，请先登录后绑定",
+        "disabled": "账号不可用，请联系管理员",
+    }
+    if status not in messages:
+        status = "fail"
+    target = f"{_portal_home_base()}?{urlencode({'wechat': status})}#login"
+    return _portal_js_redirect_page(
+        title=messages[status],
+        hint="正在返回登录页…",
+        target=target,
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def portal_wechat_silent_login(request):
+    """微信通知深链入口：已登录直接进目标页；否则 snsapi_base 静默取 openid 后登录。"""
+    next_tab = _normalize_portal_next(request.GET.get("next") or "messages")
+    existing = current_portal_account(request)
+    if existing:
+        return _portal_login_result_page(status="ok", next_tab=next_tab, request=request, account_id=existing.id)
+    if not wechat_mp.mp_configured():
+        return _portal_login_result_page(status="fail", next_tab=next_tab, request=request)
+    state = signing.dumps(
+        {"purpose": "login", "next": next_tab, "ts": timezone.now().timestamp()},
+        salt=PORTAL_WECHAT_LOGIN_SALT,
+    )
+    url = wechat_mp.build_oauth_url(state=state, scope="snsapi_base")
+    if not url:
+        return _portal_login_result_page(status="fail", next_tab=next_tab, request=request)
+    # 勿用 302 Location：URL 含 #wechat_redirect，部分代理会剥掉整个 Location
+    return _portal_js_redirect_page(
+        title="微信授权中",
+        hint="正在打开微信授权…",
+        target=url,
+    )
 
 
 @csrf_exempt
@@ -1209,17 +1381,49 @@ def wechat_mp_oauth_callback(request):
         state = (request.GET.get("state") or "").strip()
         if not code or not state:
             return _portal_bind_result_page(status="fail")
+
+        login_payload = None
+        bind_payload = None
         try:
-            payload = signing.loads(state, salt="portal-wechat-bind", max_age=600)
+            login_payload = signing.loads(state, salt=PORTAL_WECHAT_LOGIN_SALT, max_age=600)
         except signing.BadSignature:
-            return _portal_bind_result_page(status="fail")
-        account_id = str((payload or {}).get("aid") or "").strip()
-        record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
-        if not record or (record.status or "") != "启用":
-            return _portal_bind_result_page(status="fail")
+            login_payload = None
+        if login_payload is None:
+            try:
+                bind_payload = signing.loads(state, salt="portal-wechat-bind", max_age=600)
+            except signing.BadSignature:
+                return _portal_bind_result_page(status="fail")
+
         exchanged = wechat_mp.exchange_oauth_code(code)
         openid = exchanged.get("openid") or ""
         if not openid:
+            if login_payload is not None:
+                return _portal_login_result_page(
+                    status="fail",
+                    next_tab=(login_payload or {}).get("next") or "messages",
+                    request=request,
+                )
+            return _portal_bind_result_page(status="fail")
+
+        # —— 静默登录：openid → portal_session ——
+        if login_payload is not None:
+            next_tab = _normalize_portal_next((login_payload or {}).get("next") or "messages")
+            record = _find_account_by_openid(openid)
+            if not record:
+                return _portal_login_result_page(status="unbound", next_tab=next_tab, request=request)
+            if (record.status or "") != "启用":
+                return _portal_login_result_page(status="disabled", next_tab=next_tab, request=request)
+            return _portal_login_result_page(
+                status="ok",
+                next_tab=next_tab,
+                request=request,
+                account_id=record.id,
+            )
+
+        # —— 绑定微信（需 state 内账号） ——
+        account_id = str((bind_payload or {}).get("aid") or "").strip()
+        record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
+        if not record or (record.status or "") != "启用":
             return _portal_bind_result_page(status="fail")
         existing = _find_account_by_openid(openid)
         if existing and existing.id != record.id:

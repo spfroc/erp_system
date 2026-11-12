@@ -1,11 +1,27 @@
 (function () {
-  var PAGE_SIZE = 20;
+  var PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+  var DEFAULT_PAGE_SIZE = 20;
+  var RESULT_KIND_MAP = {
+    成交: "成交公告,成交结果公告,结果公告",
+    失败: "失败公告,终止公告,废标公告",
+  };
   var TABS = [
     {
       id: "opportunity",
       label: "商机大厅",
       progress: "ongoing,upcoming",
       noticeKinds: "",
+      excludeNoticeKinds:
+        "意向公开,成交公告,成交结果公告,结果公告,失败公告,终止公告,废标公告,验收公告,合同公告",
+      kindLabel: "采购方式",
+      kindChips: [
+        { value: "", label: "全部" },
+        { value: "竞价", label: "竞价" },
+        { value: "反拍", label: "反拍" },
+        { value: "询比", label: "询比" },
+        { value: "招标", label: "招标" },
+      ],
+      kindMode: "procurementMode",
       hint: "进行中 / 将开始的采购机会",
     },
     {
@@ -13,13 +29,23 @@
       label: "公告大厅",
       progress: "",
       noticeKinds: "成交公告,成交结果公告,结果公告,失败公告,终止公告,废标公告",
-      hint: "成交 / 失败 / 终止等结果类公告",
+      kindLabel: "公告类型",
+      kindChips: [
+        { value: "", label: "全部" },
+        { value: "成交", label: "成交" },
+        { value: "失败", label: "失败" },
+      ],
+      kindMode: "resultKind",
+      hint: "成交 / 失败等结果类公告",
     },
     {
       id: "intent",
       label: "采购意向",
       progress: "",
       noticeKinds: "意向公开",
+      kindLabel: "",
+      kindChips: null,
+      kindMode: "",
       hint: "采购意向公开信息",
     },
   ];
@@ -36,27 +62,42 @@
     { value: "100000-500000", label: "10-50万" },
     { value: "500000-", label: "50万以上" },
   ];
+  var SORT_FIELDS_BASE = [
+    { field: "publishTime", label: "发布时间" },
+    { field: "endTime", label: "结束时间" },
+  ];
+  var SORT_FIELDS_WITH_START = SORT_FIELDS_BASE.concat([{ field: "startTime", label: "开始时间" }]);
+  var ALLOWED_SORTS = {
+    "": 1,
+    publishTime: 1,
+    "-publishTime": 1,
+    endTime: 1,
+    "-endTime": 1,
+    startTime: 1,
+    "-startTime": 1,
+  };
+  var DEFAULT_SORT = "";
 
   var state = {
     tab: "opportunity",
     page: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
     search: "",
     siteId: "",
     noticeKind: "",
+    resultKind: "",
+    procurementMode: "",
     regionName: "",
-    projectCode: "",
-    projectName: "",
     buyerName: "",
-    publishDateFrom: "",
-    publishDateTo: "",
     progress: "",
     budgetRange: "",
+    sort: DEFAULT_SORT,
   };
   var me = null;
   var meReady = null;
   var sites = [];
-  var noticeKinds = [];
   var lastTotal = 0;
+  var listRequestSeq = 0;
 
   function qs(name) {
     return new URLSearchParams(window.location.search).get(name) || "";
@@ -98,7 +139,15 @@
   }
 
   function portalLoginUrl() {
-    return "/portal/?from=site#notices";
+    var host = String((location && location.hostname) || "").toLowerCase();
+    if (host === "qlyc.co" || host.slice(-8) === ".qlyc.co") {
+      return "/portal/?from=site#notices";
+    }
+    return (
+      "https://portal.qlyc.co/?from=site&return_to=" +
+      encodeURIComponent(location.href) +
+      "#notices"
+    );
   }
 
   function fetchMe() {
@@ -214,21 +263,28 @@
     window.location.href = portalLoginUrl();
   }
 
+  function maskSensitive(value, loggedIn) {
+    var text = String(value == null ? "" : value).trim();
+    if (!text || text === "—") return "—";
+    if (loggedIn) return text;
+    if (text.length <= 2) return "**";
+    return text.slice(0, 1) + "***";
+  }
+
   function syncUrl() {
     var params = new URLSearchParams();
     if (state.tab && state.tab !== "opportunity") params.set("tab", state.tab);
     if (state.page > 1) params.set("page", String(state.page));
+    if (state.pageSize !== DEFAULT_PAGE_SIZE) params.set("page_size", String(state.pageSize));
     if (state.search) params.set("search", state.search);
     if (state.siteId) params.set("siteId", state.siteId);
-    if (state.noticeKind) params.set("noticeKind", state.noticeKind);
+    if (state.procurementMode) params.set("procurementMode", state.procurementMode);
+    if (state.resultKind) params.set("resultKind", state.resultKind);
     if (state.regionName) params.set("regionName", state.regionName);
-    if (state.projectCode) params.set("projectCode", state.projectCode);
-    if (state.projectName) params.set("projectName", state.projectName);
     if (state.buyerName) params.set("buyerName", state.buyerName);
-    if (state.publishDateFrom) params.set("publishDateFrom", state.publishDateFrom);
-    if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
     if (state.progress) params.set("progress", state.progress);
     if (state.budgetRange) params.set("budgetRange", state.budgetRange);
+    if (state.sort) params.set("sort", state.sort);
     var site = qs("site");
     if (site) params.set("site", site);
     var next = params.toString();
@@ -246,17 +302,106 @@
     }
     state.tab = tab;
     state.page = Math.max(1, Number(qs("page") || 1) || 1);
+    var size = Number(qs("page_size") || qs("pageSize") || DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE;
+    state.pageSize = PAGE_SIZE_OPTIONS.indexOf(size) >= 0 ? size : DEFAULT_PAGE_SIZE;
     state.search = qs("search");
     state.siteId = qs("siteId");
-    state.noticeKind = qs("noticeKind") || qs("kind");
+    state.procurementMode = qs("procurementMode");
+    state.resultKind = qs("resultKind");
     state.regionName = qs("regionName");
-    state.projectCode = qs("projectCode");
-    state.projectName = qs("projectName");
     state.buyerName = qs("buyerName");
-    state.publishDateFrom = qs("publishDateFrom");
-    state.publishDateTo = qs("publishDateTo");
     state.progress = qs("progress");
     state.budgetRange = qs("budgetRange");
+    state.sort = qs("sort") || DEFAULT_SORT;
+    if (!ALLOWED_SORTS[state.sort]) state.sort = DEFAULT_SORT;
+  }
+
+  function canSortByStartTime() {
+    var tab = currentTab();
+    if (!tab || tab.id !== "opportunity") return false;
+    return state.progress === "upcoming" || state.progress === "ongoing";
+  }
+
+  function currentSortFields() {
+    return canSortByStartTime() ? SORT_FIELDS_WITH_START : SORT_FIELDS_BASE;
+  }
+
+  function sortFieldOf(sortValue) {
+    var text = String(sortValue || "");
+    return text.charAt(0) === "-" ? text.slice(1) : text;
+  }
+
+  function sortDirOf(sortValue) {
+    var text = String(sortValue || "");
+    if (!text) return "";
+    return text.charAt(0) === "-" ? "desc" : "asc";
+  }
+
+  function sortArrow(field) {
+    if (sortFieldOf(state.sort) !== field) return "";
+    var dir = sortDirOf(state.sort);
+    if (dir === "asc") return "↓"; // 正序
+    if (dir === "desc") return "↑"; // 倒序
+    return "";
+  }
+
+  function cycleSortField(field) {
+    var currentField = sortFieldOf(state.sort);
+    var currentDir = sortDirOf(state.sort);
+    if (currentField !== field) {
+      // 新字段：先正序
+      state.sort = field;
+      return;
+    }
+    if (currentDir === "asc") {
+      // 正序 → 倒序
+      state.sort = "-" + field;
+      return;
+    }
+    // 倒序 → 关闭，回默认
+    state.sort = DEFAULT_SORT;
+  }
+
+  function normalizeSortForProgress() {
+    if (!canSortByStartTime() && sortFieldOf(state.sort) === "startTime") {
+      state.sort = DEFAULT_SORT;
+    }
+  }
+
+  function renderSortRow() {
+    var fields = currentSortFields();
+    return (
+      '<div class="sourcing-filter-row">' +
+      '<label class="label">排序</label>' +
+      '<div class="sourcing-chips">' +
+      fields
+        .map(function (item) {
+          var active = sortFieldOf(state.sort) === item.field;
+          var arrow = sortArrow(item.field);
+          var title =
+            !active
+              ? "点击按" + item.label + "正序"
+              : sortDirOf(state.sort) === "asc"
+                ? "当前正序，点击改为倒序"
+                : "当前倒序，点击关闭排序";
+          return (
+            '<button type="button" class="sourcing-chip sourcing-sort-chip' +
+            (active ? " active" : "") +
+            '" data-sort-field="' +
+            escapeHtml(item.field) +
+            '" title="' +
+            escapeHtml(title) +
+            '" aria-label="' +
+            escapeHtml(title) +
+            '">' +
+            escapeHtml(item.label) +
+            (arrow ? '<span class="sort-arrow" aria-hidden="true">' + arrow + "</span>" : "") +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div></div>"
+    );
   }
 
   function applyBudgetRange(params) {
@@ -272,33 +417,28 @@
     var tab = currentTab();
     var params = new URLSearchParams({
       page: String(state.page),
-      page_size: String(PAGE_SIZE),
+      page_size: String(state.pageSize),
     });
     if (state.search) params.set("search", state.search);
     if (state.siteId) params.set("siteId", state.siteId);
-    if (state.noticeKind) {
-      params.set("noticeKind", state.noticeKind);
+    if (tab.kindMode === "procurementMode" && state.procurementMode) {
+      params.set("procurementMode", state.procurementMode);
+    }
+    if (tab.kindMode === "resultKind" && state.resultKind && RESULT_KIND_MAP[state.resultKind]) {
+      params.set("noticeKinds", RESULT_KIND_MAP[state.resultKind]);
     } else if (tab.noticeKinds) {
       params.set("noticeKinds", tab.noticeKinds);
     }
+    if (tab.excludeNoticeKinds) {
+      params.set("excludeNoticeKinds", tab.excludeNoticeKinds);
+    }
     if (state.regionName) params.set("regionName", state.regionName);
-    if (state.projectCode) params.set("projectCode", state.projectCode);
-    if (state.projectName) params.set("projectName", state.projectName);
     if (state.buyerName) params.set("buyerName", state.buyerName);
-    if (state.publishDateFrom) params.set("publishDateFrom", state.publishDateFrom);
-    if (state.publishDateTo) params.set("publishDateTo", state.publishDateTo);
     if (state.progress) params.set("progress", state.progress);
     else if (tab.progress) params.set("progress", tab.progress);
     applyBudgetRange(params);
+    if (state.sort) params.set("sort", state.sort);
     return params;
-  }
-
-  function maskText(value, loggedIn) {
-    var text = String(value || "").trim();
-    if (!text) return "—";
-    if (loggedIn) return text;
-    if (text.length <= 2) return "**";
-    return text.slice(0, 1) + "***";
   }
 
   function chipRow(label, chips, activeValue, dataKey) {
@@ -329,57 +469,12 @@
     );
   }
 
-  function normalizeDateInput(value) {
-    var text = String(value || "").trim();
-    if (!text) return "";
-    var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    var slash = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-    var us = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    var y;
-    var m;
-    var d;
-    if (iso) {
-      y = iso[1];
-      m = iso[2];
-      d = iso[3];
-    } else if (slash) {
-      y = slash[1];
-      m = slash[2];
-      d = slash[3];
-    } else if (us) {
-      y = us[3];
-      m = us[1];
-      d = us[2];
-    } else {
-      return "";
-    }
-    m = ("0" + m).slice(-2);
-    d = ("0" + d).slice(-2);
-    var stamp = Date.parse(y + "-" + m + "-" + d + "T00:00:00");
-    if (Number.isNaN(stamp)) return "";
-    return y + "-" + m + "-" + d;
-  }
-
   function collectAdvanced(root) {
     if (!root) return;
     var region = root.querySelector("[name=regionName]");
-    var projectCode = root.querySelector("[name=projectCode]");
-    var projectName = root.querySelector("[name=projectName]");
     var buyerName = root.querySelector("[name=buyerName]");
-    var from = root.querySelector("[name=publishDateFrom]");
-    var to = root.querySelector("[name=publishDateTo]");
     if (region) state.regionName = (region.value || "").trim();
-    if (projectCode) state.projectCode = (projectCode.value || "").trim();
-    if (projectName) state.projectName = (projectName.value || "").trim();
     if (buyerName) state.buyerName = (buyerName.value || "").trim();
-    if (from) {
-      state.publishDateFrom = normalizeDateInput(from.value);
-      from.value = state.publishDateFrom;
-    }
-    if (to) {
-      state.publishDateTo = normalizeDateInput(to.value);
-      to.value = state.publishDateTo;
-    }
   }
 
   function collectSearch() {
@@ -400,16 +495,47 @@
     state.search = "";
     state.siteId = "";
     state.noticeKind = "";
+    state.resultKind = "";
+    state.procurementMode = "";
     state.regionName = "";
-    state.projectCode = "";
-    state.projectName = "";
     state.buyerName = "";
-    state.publishDateFrom = "";
-    state.publishDateTo = "";
     state.progress = "";
     state.budgetRange = "";
+    state.sort = DEFAULT_SORT;
     state.page = 1;
     renderSearchBar();
+    renderFilters();
+    loadList();
+  }
+
+  function clearListPending() {
+    var list = document.getElementById("notice-list");
+    var empty = document.getElementById("notice-empty");
+    var pager = document.getElementById("notice-pager");
+    var resultBar = document.getElementById("sourcing-resultbar");
+    var loading = document.getElementById("notice-loading");
+    if (list) list.innerHTML = "";
+    if (empty) empty.hidden = true;
+    if (pager) pager.innerHTML = "";
+    if (resultBar) resultBar.innerHTML = "";
+    if (loading) loading.hidden = false;
+  }
+
+  function switchTab(tabId) {
+    if (!tabId || tabId === state.tab) {
+      renderTabs();
+      return;
+    }
+    state.tab = tabId;
+    state.page = 1;
+    state.noticeKind = "";
+    state.resultKind = "";
+    state.procurementMode = "";
+    state.progress = "";
+    // 先清旧列表，避免异步返回前仍显示上一页签数据
+    listRequestSeq += 1;
+    clearListPending();
+    renderTabs();
     renderFilters();
     loadList();
   }
@@ -419,7 +545,9 @@
     if (!root) return;
     root.innerHTML = TABS.map(function (tab) {
       return (
-        '<button type="button" class="sourcing-tab' +
+        '<button type="button" role="tab" aria-selected="' +
+        (tab.id === state.tab ? "true" : "false") +
+        '" class="sourcing-tab' +
         (tab.id === state.tab ? " active" : "") +
         '" data-tab="' +
         escapeHtml(tab.id) +
@@ -430,12 +558,7 @@
     }).join("");
     root.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        state.tab = btn.getAttribute("data-tab");
-        state.page = 1;
-        state.noticeKind = "";
-        state.progress = "";
-        renderFilters();
-        loadList();
+        switchTab(btn.getAttribute("data-tab"));
       });
     });
   }
@@ -462,9 +585,21 @@
         var key = btn.getAttribute("data-chip");
         var value = btn.getAttribute("data-value") || "";
         if (key === "siteId") state.siteId = value;
-        if (key === "noticeKind") state.noticeKind = value;
-        if (key === "progress") state.progress = value;
+        if (key === "procurementMode") state.procurementMode = value;
+        if (key === "resultKind") state.resultKind = value;
+        if (key === "progress") {
+          state.progress = value;
+          normalizeSortForProgress();
+        }
         if (key === "budgetRange") state.budgetRange = value;
+        state.page = 1;
+        renderFilters();
+        loadList();
+      });
+    });
+    root.querySelectorAll("[data-sort-field]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        cycleSortField(btn.getAttribute("data-sort-field") || "");
         state.page = 1;
         renderFilters();
         loadList();
@@ -476,23 +611,23 @@
     var root = document.getElementById("sourcing-filters");
     if (!root) return;
     var tab = currentTab();
+    normalizeSortForProgress();
     var siteChips = [{ value: "", label: "全部" }].concat(
       sites.map(function (site) {
         return { value: site.id, label: site.label };
       })
     );
-    var kindChips = [{ value: "", label: "全部" }].concat(
-      noticeKinds.map(function (kind) {
-        return { value: kind, label: kind };
-      })
-    );
     var html = "";
     html += chipRow("站点", siteChips, state.siteId, "siteId");
-    html += chipRow("公告类型", kindChips, state.noticeKind, "noticeKind");
+    if (tab.kindChips && tab.kindChips.length) {
+      var activeKind = tab.kindMode === "procurementMode" ? state.procurementMode : state.resultKind;
+      html += chipRow(tab.kindLabel || "公告类型", tab.kindChips, activeKind, tab.kindMode);
+    }
     if (tab.id === "opportunity") {
       html += chipRow("状态", PROGRESS_CHIPS, state.progress, "progress");
     }
     html += chipRow("采购预算", BUDGET_CHIPS, state.budgetRange, "budgetRange");
+    html += renderSortRow();
     html +=
       '<div class="sourcing-filter-row">' +
       '<label class="label">更多条件</label>' +
@@ -500,20 +635,8 @@
       '<label class="field"><span>所属区域</span><input name="regionName" type="text" placeholder="区域" value="' +
       escapeHtml(state.regionName) +
       '" /></label>' +
-      '<label class="field"><span>项目编号</span><input name="projectCode" type="text" placeholder="项目编号" value="' +
-      escapeHtml(state.projectCode) +
-      '" /></label>' +
-      '<label class="field"><span>项目名称</span><input name="projectName" type="text" placeholder="项目名称" value="' +
-      escapeHtml(state.projectName) +
-      '" /></label>' +
       '<label class="field"><span>采购单位</span><input name="buyerName" type="text" placeholder="采购单位" value="' +
       escapeHtml(state.buyerName) +
-      '" /></label>' +
-      '<label class="field"><span>发布起</span><input name="publishDateFrom" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" value="' +
-      escapeHtml(state.publishDateFrom) +
-      '" /></label>' +
-      '<label class="field"><span>发布止</span><input name="publishDateTo" class="date-input" type="text" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" value="' +
-      escapeHtml(state.publishDateTo) +
       '" /></label>' +
       "</div></div>";
     root.innerHTML = html;
@@ -523,166 +646,201 @@
         if (event.key === "Enter") runSearch();
       });
     });
-    if (window.ycDatePicker) {
-      window.ycDatePicker.bindAll(root, "input.date-input", {
-        onChange: function () {
-          /* 选中后保持筛选框值，点搜索再提交 */
-        },
-      });
-    } else {
-      root.querySelectorAll("input.date-input").forEach(function (input) {
-        input.addEventListener("blur", function () {
-          var raw = String(input.value || "").trim();
-          if (!raw) {
-            input.value = "";
-            return;
-          }
-          var next = normalizeDateInput(raw);
-          if (next) input.value = next;
-        });
-      });
-    }
   }
 
-  function renderResultBar(total, totalPages) {
-    var root = document.getElementById("sourcing-resultbar");
-    if (!root) return;
-    root.innerHTML =
-      "<div>共 <strong>" +
+  function goPage(next, totalPages) {
+    var page = Math.max(1, Math.min(totalPages, Number(next) || 1));
+    if (page === state.page) return;
+    state.page = page;
+    loadList();
+    var top = document.getElementById("sourcing-root");
+    if (top && top.scrollIntoView) top.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderPagination(total, totalPages) {
+    var pager = document.getElementById("notice-pager");
+    var resultBar = document.getElementById("sourcing-resultbar");
+    var summary =
+      "共 <strong>" +
       total +
-      "</strong> 个结果 · 每页 " +
-      PAGE_SIZE +
-      " 条</div>" +
-      '<div class="pager-mini">' +
-      '<button type="button" data-dir="-1" aria-label="上一页">&lt;</button>' +
-      "<span>" +
+      "</strong> 条 · 第 " +
       state.page +
       " / " +
       totalPages +
-      "</span>" +
-      '<button type="button" data-dir="1" aria-label="下一页">&gt;</button>' +
+      " 页";
+    if (resultBar) {
+      resultBar.innerHTML = "<div>" + summary + "</div>";
+    }
+    if (!pager) return;
+    if (total <= 0) {
+      pager.innerHTML = "";
+      return;
+    }
+    pager.innerHTML =
+      '<div class="notice-pagination">' +
+      '<div class="pagination-summary">' +
+      summary +
+      "</div>" +
+      '<label class="pagination-size">每页' +
+      '<select data-role="page-size">' +
+      PAGE_SIZE_OPTIONS.map(function (size) {
+        return (
+          '<option value="' +
+          size +
+          '"' +
+          (size === state.pageSize ? " selected" : "") +
+          ">" +
+          size +
+          "</option>"
+        );
+      }).join("") +
+      "</select></label>" +
+      '<div class="pagination-actions">' +
+      '<button type="button" class="btn ghost" data-page="1"' +
+      (state.page <= 1 ? " disabled" : "") +
+      ">首页</button>" +
+      '<button type="button" class="btn ghost" data-page="' +
+      (state.page - 1) +
+      '"' +
+      (state.page <= 1 ? " disabled" : "") +
+      ">上一页</button>" +
+      "<strong>" +
+      state.page +
+      " / " +
+      totalPages +
+      "</strong>" +
+      '<button type="button" class="btn ghost" data-page="' +
+      (state.page + 1) +
+      '"' +
+      (state.page >= totalPages ? " disabled" : "") +
+      ">下一页</button>" +
+      '<button type="button" class="btn ghost" data-page="' +
+      totalPages +
+      '"' +
+      (state.page >= totalPages ? " disabled" : "") +
+      ">末页</button>" +
+      "</div>" +
+      '<label class="pagination-jump">跳至' +
+      '<input type="number" min="1" max="' +
+      totalPages +
+      '" value="' +
+      state.page +
+      '" data-role="jump-page" />页' +
+      '<button type="button" class="btn ghost" data-role="jump-go">跳转</button></label>' +
       "</div>";
-    root.querySelectorAll("button").forEach(function (btn) {
+
+    pager.querySelectorAll("button[data-page]").forEach(function (btn) {
       btn.onclick = function () {
-        var next = state.page + Number(btn.getAttribute("data-dir"));
-        if (next < 1 || next > totalPages) return;
-        state.page = next;
-        loadList();
+        if (btn.disabled) return;
+        goPage(btn.getAttribute("data-page"), totalPages);
       };
     });
+    var sizeSelect = pager.querySelector("[data-role=page-size]");
+    if (sizeSelect) {
+      sizeSelect.onchange = function () {
+        state.pageSize = Number(sizeSelect.value) || DEFAULT_PAGE_SIZE;
+        state.page = 1;
+        loadList();
+      };
+    }
+    var jumpInput = pager.querySelector("[data-role=jump-page]");
+    var jumpGo = pager.querySelector("[data-role=jump-go]");
+    function doJump() {
+      goPage(jumpInput && jumpInput.value, totalPages);
+    }
+    if (jumpGo) jumpGo.onclick = doJump;
+    if (jumpInput) {
+      jumpInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          doJump();
+        }
+      });
+    }
   }
 
   function cardTags(item) {
     var tags = [];
     if (item.siteLabel) tags.push(item.siteLabel);
     if (item.noticeKind) tags.push(item.noticeKind);
+    if (item.procurementMode) tags.push(item.procurementMode);
     if (item.regionName) tags.push(item.regionName);
-    return tags.slice(0, 3);
+    return tags.slice(0, 4);
   }
 
   function renderList(payload) {
     var list = document.getElementById("notice-list");
     var empty = document.getElementById("notice-empty");
-    var pager = document.getElementById("notice-pager");
     if (!list) return;
     var items = payload.items || [];
-    var loggedIn = Boolean(me);
     lastTotal = Number(payload.total || 0);
-    var totalPages = Math.max(1, Math.ceil(lastTotal / PAGE_SIZE));
-    renderResultBar(lastTotal, totalPages);
+    var totalPages = Math.max(1, Math.ceil(lastTotal / state.pageSize) || 1);
+    if (state.page > totalPages) {
+      state.page = totalPages;
+    }
+    renderPagination(lastTotal, totalPages);
 
     if (!items.length) {
       list.innerHTML = "";
       if (empty) empty.hidden = false;
-    } else {
-      if (empty) empty.hidden = true;
-      list.innerHTML = items
-        .map(function (item) {
-          var buyer = maskText(item.buyerName, loggedIn);
-          var amount = loggedIn ? money(item.budgetAmount || item.dealAmount) : "登录可见";
-          var clock = countdownInfo(item);
-          var tags = cardTags(item);
-          return (
-            '<article class="notice-card' +
-            (loggedIn ? "" : " is-masked") +
-            '" data-id="' +
-            escapeHtml(item.id) +
-            '">' +
-            "<h3>" +
-            escapeHtml(item.title || "未命名公告") +
-            "</h3>" +
-            '<div class="notice-card-status tone-' +
-            escapeHtml(clock.tone) +
-            '"><strong>' +
-            escapeHtml(clock.label) +
-            "</strong><em class='countdown'>" +
-            escapeHtml(clock.text || "") +
-            "</em></div>" +
-            '<div class="notice-card-fields">' +
-            "<div>采购预算：<b>" +
-            escapeHtml(amount) +
-            "</b></div>" +
-            "<div>发布时间：" +
-            escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
-            "</div>" +
-            "<div>采购单位：" +
-            escapeHtml(buyer) +
-            "</div>" +
-            "</div>" +
-            '<div class="notice-card-tags">' +
-            tags
-              .map(function (tag) {
-                return "<span>" + escapeHtml(tag) + "</span>";
-              })
-              .join("") +
-            "</div>" +
-            '<button type="button" class="card-action">查看详情</button>' +
-            "</article>"
-          );
-        })
-        .join("");
-      list.querySelectorAll(".notice-card").forEach(function (card) {
-        card.addEventListener("click", function () {
-          var id = card.getAttribute("data-id");
-          if (!me) {
-            promptLogin();
-            return;
-          }
-          window.open("/notices/" + encodeURIComponent(id), "_blank", "noopener,noreferrer");
-        });
-      });
+      return;
     }
-
-    if (pager) {
-      pager.innerHTML =
-        "<span>共 " +
-        lastTotal +
-        " 条 · 第 " +
-        state.page +
-        " / " +
-        totalPages +
-        " 页 · 每页 " +
-        PAGE_SIZE +
-        " 条</span>" +
-        "<div>" +
-        '<button class="btn ghost" type="button" data-dir="-1">上一页</button>' +
-        '<button class="btn ghost" type="button" data-dir="1">下一页</button>' +
-        "</div>";
-      pager.querySelectorAll("button").forEach(function (btn) {
-        btn.onclick = function () {
-          var next = state.page + Number(btn.getAttribute("data-dir"));
-          if (next < 1 || next > totalPages) return;
-          state.page = next;
-          loadList();
-        };
-      });
-    }
+    if (empty) empty.hidden = true;
+    list.innerHTML = items
+      .map(function (item) {
+        var amount = money(item.budgetAmount || item.dealAmount);
+        var clock = countdownInfo(item);
+        var tags = cardTags(item);
+        var href = "/notices/" + encodeURIComponent(item.id);
+        return (
+          '<a class="notice-card" href="' +
+          escapeHtml(href) +
+          '" data-id="' +
+          escapeHtml(item.id) +
+          '">' +
+          "<h3>" +
+          escapeHtml(item.title || "未命名公告") +
+          "</h3>" +
+          '<div class="notice-card-status tone-' +
+          escapeHtml(clock.tone) +
+          '"><strong>' +
+          escapeHtml(clock.label) +
+          "</strong><em class='countdown'>" +
+          escapeHtml(clock.text || "") +
+          "</em></div>" +
+          '<div class="notice-card-fields">' +
+          "<div>采购预算：<b>" +
+          escapeHtml(amount) +
+          "</b></div>" +
+          "<div>发布时间：" +
+          escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
+          "</div>" +
+          "<div>结束时间：" +
+          escapeHtml(formatDate(item.endTime)) +
+          "</div>" +
+          "<div>采购单位：" +
+          escapeHtml(item.buyerName || "—") +
+          "</div>" +
+          "</div>" +
+          '<div class="notice-card-tags">' +
+          tags
+            .map(function (tag) {
+              return "<span>" + escapeHtml(tag) + "</span>";
+            })
+            .join("") +
+          "</div>" +
+          '<span class="card-action">查看详情</span>' +
+          "</a>"
+        );
+      })
+      .join("");
   }
 
   function loadList() {
     var loading = document.getElementById("notice-loading");
     if (loading) loading.hidden = false;
     syncUrl();
+    var seq = ++listRequestSeq;
     fetch("/api/public/crawled-notices/?" + buildQuery().toString(), {
       headers: { Accept: "application/json" },
     })
@@ -701,22 +859,31 @@
         });
       })
       .then(function (body) {
+        if (seq !== listRequestSeq) return;
         if (Array.isArray(body.sites) && body.sites.length) sites = body.sites;
-        if (Array.isArray(body.noticeKinds) && body.noticeKinds.length) noticeKinds = body.noticeKinds;
         renderFilters();
         renderList(body);
       })
       .catch(function (error) {
+        if (seq !== listRequestSeq) return;
         var list = document.getElementById("notice-list");
         if (list) list.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";
       })
       .finally(function () {
+        if (seq !== listRequestSeq) return;
         if (loading) loading.hidden = true;
       });
   }
 
   function bootList() {
     readStateFromUrl();
+    // 避免 SSR 旧列表残留造成闪烁
+    var list = document.getElementById("notice-list");
+    if (list) list.innerHTML = "";
+    var empty = document.getElementById("notice-empty");
+    if (empty) empty.hidden = true;
+    var pager = document.getElementById("notice-pager");
+    if (pager) pager.innerHTML = "";
     renderTabs();
     renderSearchBar();
     renderFilters();
@@ -726,63 +893,106 @@
     });
   }
 
+  function renderDetailHtml(detail, loggedIn) {
+    var buyer = maskSensitive(detail.buyerName || detail.department || "—", loggedIn);
+    var amount = loggedIn ? money(detail.budgetAmount || detail.dealAmount || detail.amount) : "登录可见";
+    var contact = loggedIn
+      ? [detail.contactName, detail.contactPhone].filter(Boolean).join(" ") || "—"
+      : "登录可见";
+    var projectCode = maskSensitive(detail.projectCode || detail.projectNumber || "—", loggedIn);
+    var content = "";
+    if (detail.content) {
+      content = loggedIn
+        ? '<div class="detail-content">' + escapeHtml(detail.content) + "</div>"
+        : '<div class="detail-content is-masked"><p>正文已隐藏，登录后可查看完整公告内容。</p><p><a class="btn" href="' +
+          escapeHtml(portalLoginUrl()) +
+          '">会员登录</a></p></div>';
+    } else if (!loggedIn) {
+      content =
+        '<div class="detail-content is-masked"><p>关键信息已隐藏，登录后可查看完整公告。</p><p><a class="btn" href="' +
+        escapeHtml(portalLoginUrl()) +
+        '">会员登录</a></p></div>';
+    }
+    return (
+      "<h1>" +
+      escapeHtml(detail.title || "公告详情") +
+      "</h1>" +
+      '<p class="muted">' +
+      escapeHtml(
+        [detail.siteLabel, detail.noticeKind, formatDate(detail.publishTime || detail.publishedAt)]
+          .filter(Boolean)
+          .join(" · ")
+      ) +
+      "</p>" +
+      '<div class="notice-detail-grid">' +
+      "<div><span>采购单位</span><strong>" +
+      escapeHtml(buyer) +
+      "</strong></div>" +
+      "<div><span>项目编号</span><strong>" +
+      escapeHtml(projectCode) +
+      "</strong></div>" +
+      "<div><span>区域</span><strong>" +
+      escapeHtml(detail.regionName || "—") +
+      "</strong></div>" +
+      "<div><span>金额</span><strong>" +
+      escapeHtml(amount) +
+      "</strong></div>" +
+      "<div><span>进度</span><strong>" +
+      escapeHtml(detail.progressLabel || detail.bidStatus || "—") +
+      "</strong></div>" +
+      "<div><span>联系人</span><strong>" +
+      escapeHtml(contact) +
+      "</strong></div>" +
+      "</div>" +
+      content +
+      '<div class="detail-actions">' +
+      '<a class="btn secondary" href="/notices">返回壹采寻源</a>' +
+      (detail.sourceUrl || detail.detailUrl
+        ? '<a class="btn' +
+          (loggedIn ? "" : " ghost") +
+          '" href="' +
+          (loggedIn ? escapeHtml(detail.sourceUrl || detail.detailUrl) : escapeHtml(portalLoginUrl())) +
+          '"' +
+          (loggedIn ? ' target="_blank" rel="noopener"' : "") +
+          ">" +
+          (loggedIn ? "打开原文" : "登录后查看原文") +
+          "</a>"
+        : "") +
+      "</div>"
+    );
+  }
+
   function bootDetail() {
     var root = document.getElementById("notice-detail");
     if (!root) return;
     var parts = location.pathname.split("/").filter(Boolean);
     var id = parts[parts.length - 1];
-    fetchMe().then(function (account) {
-      if (!account) {
-        root.innerHTML =
-          '<div class="notice-empty">请先登录后查看公告详情。<p style="margin-top:12px"><a class="btn" href="' +
-          portalLoginUrl() +
-          '">会员登录</a></p></div>';
-        promptLogin();
-        return;
-      }
-      fetch("/api/public/notices/" + encodeURIComponent(id) + "/", { headers: { Accept: "application/json" } })
-        .then(function (res) {
+    // 有 SSR 内容时先保留标题骨架，避免整页闪白；登录态判定后再统一套打码/全文
+    var hadSsr = Boolean(root.getAttribute("data-ssr-ready") || root.querySelector("h1"));
+    if (!hadSsr) {
+      root.innerHTML = '<p class="notice-loading">公告加载中…</p>';
+    }
+    Promise.all([
+      fetchMe(),
+      fetch("/api/public/notices/" + encodeURIComponent(id) + "/", { headers: { Accept: "application/json" } }).then(
+        function (res) {
           return res.json().then(function (body) {
             if (!res.ok) throw new Error((body && body.detail) || "加载失败");
             return body.data || body;
           });
-        })
-        .then(function (detail) {
-          root.innerHTML =
-            "<h2>" +
-            escapeHtml(detail.title || "公告详情") +
-            "</h2>" +
-            '<p class="muted">' +
-            escapeHtml(
-              [detail.siteLabel, detail.noticeKind, formatDate(detail.publishTime || detail.publishedAt)]
-                .filter(Boolean)
-                .join(" · ")
-            ) +
-            "</p>" +
-            '<div class="notice-detail-grid">' +
-            "<div><span>采购单位</span><strong>" +
-            escapeHtml(detail.buyerName || detail.department || "—") +
-            "</strong></div>" +
-            "<div><span>项目编号</span><strong>" +
-            escapeHtml(detail.projectCode || detail.projectNumber || "—") +
-            "</strong></div>" +
-            "<div><span>区域</span><strong>" +
-            escapeHtml(detail.regionName || "—") +
-            "</strong></div>" +
-            "<div><span>进度</span><strong>" +
-            escapeHtml(detail.progressLabel || detail.bidStatus || "—") +
-            "</strong></div>" +
-            "</div>" +
-            (detail.sourceUrl
-              ? '<p style="margin-top:16px"><a class="btn" href="' +
-                escapeHtml(detail.sourceUrl) +
-                '" target="_blank" rel="noopener">打开原文</a></p>'
-              : "");
-        })
-        .catch(function (error) {
-          root.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";
-        });
-    });
+        }
+      ),
+    ])
+      .then(function (pair) {
+        var account = pair[0];
+        var detail = pair[1];
+        me = account || null;
+        root.innerHTML = renderDetailHtml(detail, Boolean(me));
+        root.setAttribute("data-hydrated", "1");
+      })
+      .catch(function (error) {
+        root.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";
+      });
   }
 
   function boot() {
