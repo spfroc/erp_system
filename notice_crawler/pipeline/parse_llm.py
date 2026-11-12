@@ -1281,7 +1281,8 @@ def replace_goods(
     parsed_row: NoticeParsed,
     goods: list,
 ) -> None:
-    """按公告重写产品明细行。"""
+    """按公告重写产品明细行。先锁公告行，同一条公告的写入按同一顺序排队。"""
+    session.execute(select(NoticeRaw.id).where(NoticeRaw.id == raw.id).with_for_update())
     session.execute(delete(NoticeGoods).where(NoticeGoods.notice_raw_id == raw.id))
     for i, item in enumerate(goods, start=1):
         session.add(

@@ -12,7 +12,15 @@ from tqdm import tqdm
 from clients.http_session import proxy_url
 from clients.jd_quan import JdQuanClient, is_jd_site
 from config import settings
-from db import NoticeAttachment, NoticeGoods, NoticeParsed, NoticeRaw, dumps, get_session
+from db import (
+    NoticeAttachment,
+    NoticeGoods,
+    NoticeParsed,
+    NoticeRaw,
+    dumps,
+    get_session,
+    is_lock_conflict,
+)
 from pipeline.extractors.jd_attachment import (
     goods_are_placeholder,
     should_replace_goods_with_attachment,
@@ -438,21 +446,32 @@ def parse_attachments(*, limit: int = 50, site_id: Optional[str] = None, use_llm
         ).limit(limit)
         rows = session.execute(stmt).scalars().all()
         for att in tqdm(rows, desc="parse-att"):
-            try:
-                if parse_attachment_row(session, att, use_llm=use_llm):
-                    ok += 1
-                session.commit()
-            except Exception as exc:  # noqa: BLE001
-                # 刷新失败时会话已处于待回滚，必须先 rollback，否则下一条 commit 会把整批打断
-                session.rollback()
+            saved = False
+            last_exc: Optional[Exception] = None
+            for _attempt in range(4):
                 try:
-                    att.parse_status = "parse_fail"
-                    att.error_message = strip_surrogates(str(exc))[:1000]
-                    if isinstance(att.extracted_text, str):
-                        att.extracted_text = strip_surrogates(att.extracted_text)
+                    parsed_ok = bool(parse_attachment_row(session, att, use_llm=use_llm))
                     session.commit()
-                except Exception:
+                    if parsed_ok:
+                        ok += 1
+                    saved = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
                     session.rollback()
+                    if not is_lock_conflict(exc):
+                        break
+            if saved:
+                continue
+            exc = last_exc or RuntimeError("parse-att failed")
+            try:
+                att.parse_status = "parse_fail"
+                att.error_message = strip_surrogates(str(exc))[:1000]
+                if isinstance(att.extracted_text, str):
+                    att.extracted_text = strip_surrogates(att.extracted_text)
+                session.commit()
+            except Exception:
+                session.rollback()
     finally:
         session.close()
     return ok
