@@ -25,7 +25,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from datetime import datetime
 
 from config import settings
-from utils import now as now_shanghai
+from utils import now as now_shanghai, strip_surrogates
 
 
 class Base(DeclarativeBase):
@@ -508,9 +508,22 @@ def get_session() -> Session:
     return SessionLocal()
 
 
+def _json_safe(obj: Any) -> Any:
+    if isinstance(obj, str):
+        return strip_surrogates(obj)
+    if isinstance(obj, dict):
+        return {
+            strip_surrogates(key) if isinstance(key, str) else key: _json_safe(value)
+            for key, value in obj.items()
+        }
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(value) for value in obj]
+    return obj
+
+
 def dumps(obj: Any) -> Any:
     """Ensure JSON-serializable structures for MySQL JSON columns."""
-    return json.loads(json.dumps(obj, ensure_ascii=False, default=str))
+    return json.loads(json.dumps(_json_safe(obj), ensure_ascii=False, default=str))
 
 
 def raw_exists(session: Session, site_id: str, notice_key: str) -> bool:

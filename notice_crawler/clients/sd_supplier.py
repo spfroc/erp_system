@@ -86,6 +86,8 @@ class SdSupplierClient:
         out = (proc.stdout or "").strip()
         if proc.returncode != 0 or not out:
             err = (proc.stderr or proc.stdout or "").strip()[:400]
+            if not err:
+                err = f"node 退出码 {proc.returncode}，没有输出"
             raise RuntimeError(f"本地解密失败: {err}")
         data = json.loads(out)
         if not isinstance(data, dict):
