@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>壹采寻源 | 壹采政企采购电商服务平台</title>
   <meta name="description" content="壹采寻源：商机大厅、公告大厅与采购意向，汇聚政企采购公开信息。" />
-  <link rel="stylesheet" href="/css/notices.css" />
+  <link rel="stylesheet" href="/css/notices.css?v=20261112i" />
+  <link rel="stylesheet" href="/css/flatpickr.min.css" />
 </head>
 <body data-page="notice-list">
   <header class="site-header">
@@ -32,36 +33,28 @@
     </div>
   </section>
 
-  <main class="container" id="sourcing-root">
-    <div class="sourcing-tabs" id="sourcing-tabs" role="tablist"></div>
-    <div class="notice-toolbar sourcing-filters" id="sourcing-filters"></div>
+  <main class="container sourcing-page" id="sourcing-root">
+    <div class="sourcing-topbar">
+      <div class="sourcing-tabs" id="sourcing-tabs" role="tablist"></div>
+      <div class="sourcing-searchbar" id="sourcing-searchbar"></div>
+    </div>
+    <div class="sourcing-filters" id="sourcing-filters"></div>
+    <div class="sourcing-resultbar" id="sourcing-resultbar"></div>
     <div id="notice-loading" class="notice-loading" hidden>加载中...</div>
-    <div id="notice-list" class="notice-card-list"></div>
+    <div id="notice-list" class="notice-card-grid"></div>
     <div id="notice-empty" class="notice-empty" hidden>暂无公告</div>
     <div id="notice-pager" class="notice-pager"></div>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <div class="footer-content">
-        <div class="footer-section">
-          <h3>关于壹采</h3>
-          <p>专业的政企采购电商服务平台，提供齐鲁云采、框架协议、泉E采等一站式入驻与运营服务。</p>
-        </div>
-        <div class="footer-section">
-          <h3>快速入口</h3>
-          <ul>
-            <li><a href="/notices">壹采寻源</a></li>
-            <li><a href="/e-index.html">泉E采</a></li>
-            <li><a href="/qiluyuncai/index.html">齐鲁云采</a></li>
-            <li><a href="/index.html#contact">联系我们</a></li>
-          </ul>
-        </div>
-      </div>
       <div class="copyright">© 山东壹知产数字科技有限公司</div>
     </div>
   </footer>
-  <script src="/js/portal-home.js?v=20261112a"></script>
-  <script src="/js/public-notices.js?v=20261112a"></script>
+  <script src="/js/flatpickr.min.js"></script>
+  <script src="/js/flatpickr-zh.js"></script>
+  <script src="/js/yc-datepicker.js?v=20261112a"></script>
+  <script src="/js/portal-home.js?v=20261112d"></script>
+  <script src="/js/public-notices.js?v=20261112i"></script>
 </body>
 </html>

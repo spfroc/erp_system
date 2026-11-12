@@ -3,8 +3,10 @@ from decimal import Decimal
 import hashlib
 import html
 import json
+import os
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable
 from django.core import signing
 from django.core.cache import cache
@@ -164,21 +166,75 @@ def find_portal_account(phone: str, password: str) -> CustomerAccountRecord | No
     return None
 
 
-def issue_portal_cookie(response: JsonResponse, account_id: str) -> JsonResponse:
+# 门户与同主域官网共享登录态（portal.qlyc.co ↔ preview.qlyc.co 等）
+PORTAL_COOKIE_PARENT_DOMAINS = (
+    ".qlyc.co",
+    ".qinghuicai.cn",
+    ".yizhichan.co",
+    ".jinanyunji.com",
+)
+
+
+def _request_hostname(request) -> str:
+    if request is None:
+        return ""
+    forwarded = (request.META.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip()
+    host = forwarded or (request.get_host() or "")
+    return host.split(":")[0].strip().lower()
+
+
+def portal_cookie_domain(request=None) -> str | None:
+    """按请求 Host 选择可跨子域共享的 Cookie Domain；可用环境变量强制覆盖。"""
+    forced = (os.getenv("PORTAL_COOKIE_DOMAIN") or "").strip()
+    if forced:
+        return forced if forced.startswith(".") else f".{forced.lstrip('.')}"
+    host = _request_hostname(request)
+    if not host or host in {"localhost", "127.0.0.1"} or host.endswith(".local"):
+        return None
+    for parent in PORTAL_COOKIE_PARENT_DOMAINS:
+        root = parent[1:]
+        if host == root or host.endswith(parent):
+            return parent
+    return None
+
+
+def _portal_cookie_secure(request=None) -> bool:
+    if request is not None and hasattr(request, "is_secure"):
+        try:
+            if request.is_secure():
+                return True
+        except Exception:
+            pass
+    if (os.getenv("PORTAL_COOKIE_SECURE") or "").strip() in {"1", "true", "True", "yes"}:
+        return True
+    return not bool(getattr(settings, "DEBUG", True))
+
+
+def issue_portal_cookie(response: JsonResponse, account_id: str, request=None) -> JsonResponse:
     token = signing.dumps(account_id, salt=PORTAL_SALT)
-    response.set_cookie(
-        PORTAL_COOKIE,
-        token,
-        max_age=PORTAL_MAX_AGE,
-        httponly=True,
-        samesite="Lax",
-        path="/",
-    )
+    kwargs = {
+        "max_age": PORTAL_MAX_AGE,
+        "httponly": True,
+        "samesite": "Lax",
+        "path": "/",
+        "secure": _portal_cookie_secure(request),
+    }
+    domain = portal_cookie_domain(request)
+    if domain:
+        kwargs["domain"] = domain
+    response.set_cookie(PORTAL_COOKIE, token, **kwargs)
     return response
 
 
-def clear_portal_cookie(response: JsonResponse) -> JsonResponse:
+def clear_portal_cookie(response: JsonResponse, request=None) -> JsonResponse:
+    # 同时清 host-only 与父域 cookie，避免升级后残留
     response.delete_cookie(PORTAL_COOKIE, path="/")
+    domain = portal_cookie_domain(request)
+    if domain:
+        response.delete_cookie(PORTAL_COOKIE, path="/", domain=domain)
+    for parent in PORTAL_COOKIE_PARENT_DOMAINS:
+        if parent != domain:
+            response.delete_cookie(PORTAL_COOKIE, path="/", domain=parent)
     return response
 
 
@@ -688,7 +744,7 @@ def build_notice_stats(
     return stats
 
 
-PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX = 20
+PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX = 50
 
 
 def _public_crawled_notice_item(item: dict) -> dict:
@@ -708,6 +764,8 @@ def _public_crawled_notice_item(item: dict) -> dict:
         "projectCode": item.get("projectCode") or "",
         "progressStatus": item.get("progressStatus") or "",
         "progressLabel": item.get("progressLabel") or "",
+        "startTime": item.get("startTime") or "",
+        "endTime": item.get("endTime") or "",
         "budgetAmount": item.get("budgetAmount"),
         "dealAmount": item.get("dealAmount"),
     }
@@ -722,11 +780,11 @@ def public_crawled_notices(request):
         page = 1
     try:
         page_size = min(
-            max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 10), 1),
+            max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1),
             PUBLIC_CRAWLED_NOTICE_PAGE_SIZE_MAX,
         )
     except (TypeError, ValueError):
-        page_size = 10
+        page_size = 20
     site_id = (request.GET.get("siteId") or "").strip()
     notice_kind = (request.GET.get("noticeKind") or "").strip()
     notice_kinds = (request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip()
@@ -746,6 +804,8 @@ def public_crawled_notices(request):
             project_name=(request.GET.get("projectName") or "").strip(),
             region_name=(request.GET.get("regionName") or request.GET.get("region") or "").strip(),
             progress=(request.GET.get("progress") or "").strip(),
+            budget_min=(request.GET.get("budgetMin") or request.GET.get("budget_min") or "").strip(),
+            budget_max=(request.GET.get("budgetMax") or request.GET.get("budget_max") or "").strip(),
         )
     except (ProgrammingError, OperationalError):
         return JsonResponse(
@@ -778,7 +838,7 @@ def portal_notices(request):
     account = public_account(record)
     scope = account_site_scope(account)
     page = int(request.GET.get("page") or 1)
-    page_size = int(request.GET.get("page_size") or request.GET.get("pageSize") or 10)
+    page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 50)
     try:
         payload = query_crawled_notices(
             page=page,
@@ -939,13 +999,13 @@ def portal_login(request):
         if disabled:
             return JsonResponse({"detail": "账号已停用，请联系管理员。"}, status=403)
         return JsonResponse({"detail": "账号或密码错误。"}, status=401)
-    return issue_portal_cookie(JsonResponse({"data": public_account(record)}), record.id)
+    return issue_portal_cookie(JsonResponse({"data": public_account(record)}), record.id, request=request)
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def portal_logout(request):
-    return clear_portal_cookie(JsonResponse({"ok": True}))
+    return clear_portal_cookie(JsonResponse({"ok": True}), request=request)
 
 
 @require_http_methods(["GET"])

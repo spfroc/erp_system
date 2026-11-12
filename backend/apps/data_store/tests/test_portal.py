@@ -77,8 +77,22 @@ class PortalAccountTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertIn("items", body)
-        self.assertLessEqual(body.get("page_size") or 0, 10)
-        self.assertLessEqual(len(body.get("items") or []), 10)
+        self.assertLessEqual(body.get("page_size") or 0, 50)
+        self.assertLessEqual(len(body.get("items") or []), 50)
+
+    def test_login_cookie_shares_parent_domain_for_official_sites(self):
+        client = Client()
+        login = client.post(
+            "/api/portal/login/",
+            data={"phone": "13900001111", "password": "Portal123456"},
+            content_type="application/json",
+            HTTP_X_FORWARDED_HOST="portal.qlyc.co",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(login.status_code, 200)
+        cookie = login.cookies.get(PORTAL_COOKIE)
+        self.assertIsNotNone(cookie)
+        self.assertEqual(cookie.get("domain"), ".qlyc.co")
 
     def test_login_cookie_can_read_notices_and_blocks_subscription(self):
         client = Client()

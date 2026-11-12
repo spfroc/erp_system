@@ -293,8 +293,10 @@ CLOSED_NOTICE_KINDS = (
     "废标",
     "失败公告",
     "结果公告",
+    "验收公告",
+    "合同公告",
 )
-CLOSED_KIND_KEYWORDS = ("成交结果", "结果公告", "终止", "废标", "失败公告", "成交公告")
+CLOSED_KIND_KEYWORDS = ("成交结果", "结果公告", "终止", "废标", "失败公告", "成交公告", "验收公告", "合同公告")
 # 「进行中」不包含直接采购 / 直购
 DIRECT_PURCHASE_KEYWORDS = ("直接采购", "直购")
 
@@ -372,13 +374,41 @@ def _safe_json_dict(obj, name: str) -> dict:
 
 
 def _notice_wall_clock(now=None) -> str:
-    """公告库时间为上海墙钟 naive；筛选用同口径字符串，避免 ORM 时区偏移。"""
+    """公告库时间为上海墙钟 naive；返回当前上海墙钟字符串。"""
     now = now or timezone.now()
     if timezone.is_aware(now):
         local = timezone.localtime(now, timezone.get_default_timezone())
     else:
         local = now
     return local.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _wall_clock_as_db_dt(value: str | datetime):
+    """把上海墙钟转成与 notice_* DATETIME 存储一致的比较值。
+
+    爬虫写入的是「墙钟数字」；Django USE_TZ 读库时会把该数字误标成 UTC。
+    筛选时必须用「同样数字的 UTC aware」去比，不能用上海本地 aware（否则会再偏 -8 小时，
+    把已开始的项目错收进「将开始」）。
+    """
+    if isinstance(value, datetime):
+        naive = value.replace(tzinfo=None) if timezone.is_aware(value) else value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            naive = datetime.strptime(text[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                naive = datetime.strptime(text[:10], "%Y-%m-%d")
+            except ValueError:
+                return None
+    return timezone.make_aware(naive, dt_timezone.utc)
+
+
+def _notice_db_clock(now=None) -> datetime:
+    """当前时刻对应的库内比较时钟（墙钟数字 + UTC 标签）。"""
+    return _wall_clock_as_db_dt(_notice_wall_clock(now))
 
 
 def _dig(data: dict, *paths: str):
@@ -1368,11 +1398,17 @@ def _range_bound_strings(from_day: date | None, to_day: date | None) -> tuple[st
 
 def _parsed_time_range_q(field: str, lo: str | None, hi: str | None) -> Q:
     """用 Exists 关联 parsed 时间字段，避免 id__in 物化大结果集。"""
-    filters: dict[str, str] = {}
+    filters: dict[str, datetime] = {}
     if lo:
-        filters[f"{field}__gte"] = lo
+        bound = _wall_clock_as_db_dt(lo)
+        if bound is not None:
+            filters[f"{field}__gte"] = bound
     if hi:
-        filters[f"{field}__lt"] = hi
+        bound = _wall_clock_as_db_dt(hi)
+        if bound is not None:
+            filters[f"{field}__lt"] = bound
+    if not filters:
+        return Q()
     return Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), **filters)))
 
 
@@ -1392,13 +1428,18 @@ def _notice_day_filter_q(
     publish_lo, publish_hi = _range_bound_strings(_parse_filter_ymd(publish_from), _parse_filter_ymd(publish_to))
     if publish_lo or publish_hi:
         applied = True
-        raw_filters: dict[str, str] = {}
+        raw_filters: dict[str, datetime] = {}
         if publish_lo:
-            raw_filters["publish_time__gte"] = publish_lo
+            bound = _wall_clock_as_db_dt(publish_lo)
+            if bound is not None:
+                raw_filters["publish_time__gte"] = bound
         if publish_hi:
-            raw_filters["publish_time__lt"] = publish_hi
+            bound = _wall_clock_as_db_dt(publish_hi)
+            if bound is not None:
+                raw_filters["publish_time__lt"] = bound
         # 当前库 raw.publish_time 已全覆盖；只走 raw 索引，避免 OR + Exists 拖慢筛选
-        q &= Q(**raw_filters)
+        if raw_filters:
+            q &= Q(**raw_filters)
 
     start_lo, start_hi = _range_bound_strings(_parse_filter_ymd(start_from), _parse_filter_ymd(start_to))
     if start_lo or start_hi:
@@ -1486,7 +1527,7 @@ def _site_count_breakdown(qs) -> list[dict[str, Any]]:
 
 def _progress_filter_q(progress_target: str, now=None) -> Q:
     """进度筛选下推到 SQL（基于 notice_parsed 时间 + notice_type/kind），避免拉全表到内存。"""
-    wall = _notice_wall_clock(now)
+    clock = _notice_db_clock(now)
     closed_type_q = Q()
     for sid, mapping in NOTICE_TYPE_LABELS.items():
         codes = [
@@ -1509,13 +1550,13 @@ def _progress_filter_q(progress_target: str, now=None) -> Q:
         )
     )
 
-    # 墙钟字符串直接比较，避免 USE_TZ 把上海时间当 UTC 偏移
-    ended_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__lt=wall)))
-    upcoming_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), start_time__gt=wall)))
+    # 用库内时钟口径比较（见 _wall_clock_as_db_dt），与 _progress_status 展示一致
+    ended_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__lt=clock)))
+    upcoming_q = Q(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), start_time__gt=clock)))
     ongoing_q = Q(
         Exists(
-            NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__gte=wall)
-            .filter(Q(start_time__isnull=True) | Q(start_time__lte=wall))
+            NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), end_time__gte=clock)
+            .filter(Q(start_time__isnull=True) | Q(start_time__lte=clock))
             .exclude(notice_kind__in=CLOSED_NOTICE_KINDS)
             .exclude(Q(procurement_mode__icontains="直购") | Q(procurement_mode__icontains="直接采购"))
         )
@@ -1585,6 +1626,19 @@ def _normalize_progress_targets(progress: str) -> list[str]:
     return targets
 
 
+def _parse_budget_bound(value: str | int | float | None) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        amount = float(text)
+    except (TypeError, ValueError):
+        return None
+    if amount < 0:
+        return None
+    return amount
+
+
 def query_crawled_notices(
     *,
     page: int = 1,
@@ -1601,6 +1655,8 @@ def query_crawled_notices(
     project_name: str = "",
     region_name: str = "",
     progress: str = "",
+    budget_min: str | int | float | None = None,
+    budget_max: str | int | float | None = None,
 ) -> dict:
     """客户控制台和后台列表共用的抓取公告查询。
 
@@ -1656,12 +1712,22 @@ def query_crawled_notices(
         for target in progress_targets:
             progress_q |= _progress_filter_q(target, now=now)
         qs = qs.filter(progress_q)
+    budget_lo = _parse_budget_bound(budget_min)
+    budget_hi = _parse_budget_bound(budget_max)
+    if budget_lo is not None or budget_hi is not None:
+        amount_filters: dict = {"budget_amount__isnull": False}
+        if budget_lo is not None:
+            amount_filters["budget_amount__gte"] = budget_lo
+        if budget_hi is not None:
+            amount_filters["budget_amount__lte"] = budget_hi
+        qs = qs.filter(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), **amount_filters)))
     keyword = (search or "").strip()
     # 已按项目编号精确过滤时，不再把整句中文残片拿去模糊 AND，避免 0 命中或误扫全表
     if keyword and not code:
         qs = qs.filter(_keyword_search_q(keyword))
     elif keyword and code and not extract_gov_project_codes(keyword):
         qs = qs.filter(_keyword_search_q(keyword))
+    has_budget = budget_lo is not None or budget_hi is not None
     has_filter = bool(
         site_id
         or kinds
@@ -1672,12 +1738,22 @@ def query_crawled_notices(
         or keyword
         or code
         or progress_targets
+        or has_budget
         or (site_ids is not None)
     )
     if not has_filter:
         total = _cached_raw_total()
     elif day_q is not None and not (
-        site_id or kinds or region or buyer or pname or keyword or code or progress_targets or (site_ids is not None)
+        site_id
+        or kinds
+        or region
+        or buyer
+        or pname
+        or keyword
+        or code
+        or progress_targets
+        or has_budget
+        or (site_ids is not None)
     ):
         total = _cached_filtered_total(
             f"console_pub:{publish_date_from}:{publish_date_to}:sites:{','.join(site_ids or [])}",

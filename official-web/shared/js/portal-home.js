@@ -120,12 +120,16 @@
     });
     fetchMe().then(function (account) {
       nodes.forEach(function (el) {
-        el.textContent = "会员登录";
         el.setAttribute("href", portalUrl());
         if (account) {
-          el.setAttribute("title", displayName(account) + " · 会员登录");
+          var name = displayName(account);
+          el.textContent = "会员中心";
+          el.setAttribute("title", (name ? name + " · " : "") + "进入会员中心");
+          el.setAttribute("alt", name || "会员中心");
           el.setAttribute("data-portal-authed", "1");
+          el.removeAttribute("data-portal-label");
         } else {
+          el.textContent = "会员登录";
           el.setAttribute("title", "会员登录");
           el.setAttribute("data-portal-label", "会员登录");
           el.removeAttribute("data-portal-authed");
