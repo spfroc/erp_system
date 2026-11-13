@@ -198,9 +198,10 @@ def extract_fields(
             detail=detail,
             list_item=list_item,
         )
-    # 山东政府采购网意向公开 / 采购需求公示：专用表格规则
+    # 山东政府采购网：意向公开走表格规则；其余走通用公告规则
     if site_id == "sd-ccgp":
         from pipeline.extractors.sd_ccgp_intention import extract_ccgp_intention, looks_like_intention
+        from pipeline.extractors.sd_ccgp_notice import extract_ccgp_notice
 
         notice_type = str(
             (list_item or {}).get("noticeType")
@@ -208,19 +209,27 @@ def extract_fields(
             or (detail or {}).get("noticeType")
             or ""
         )
+        body = text or html_to_text(html or "")
         if looks_like_intention(
             title=title or "",
-            text=text or "",
+            text=body or "",
             notice_type=notice_type,
             list_item=list_item,
         ):
             return extract_ccgp_intention(
-                text or "",
+                body or "",
                 title=title or "",
                 html=html,
                 list_item=list_item,
                 detail=detail,
             )
+        return extract_ccgp_notice(
+            body or "",
+            title=title or "",
+            notice_type=notice_type,
+            list_item=list_item,
+            detail=detail,
+        )
 
     # 框架协议：正文多为服务/项目/租赁等，规则抽取即可（含 goods 兜底）
     if site_id == "sd-gpfa-frame":
@@ -879,7 +888,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                 ]
         parsed["goods"] = goods
 
-    # 意向公开：覆盖误抽表头/合成编号，并回填预算、明细、预计采购月
+    # 山东政府采购网：意向公开 / 结果·合同·验收等规则回填
     if raw.site_id == "sd-ccgp":
         from pipeline.extractors.sd_ccgp_intention import (
             extract_ccgp_intention,
@@ -887,6 +896,7 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
             is_synthetic_project_code,
             looks_like_intention,
         )
+        from pipeline.extractors.sd_ccgp_notice import extract_ccgp_notice
 
         if looks_like_intention(
             title=raw.title or "",
@@ -949,6 +959,54 @@ def enrich_from_raw(parsed: Dict[str, Any], raw: NoticeRaw) -> Dict[str, Any]:
                     from datetime import timedelta
 
                     parsed["end_time"] = start_dt + timedelta(days=30)
+        else:
+            notice = extract_ccgp_notice(
+                raw.content_text or "",
+                title=raw.title or "",
+                notice_type=str(raw.notice_type or ""),
+                list_item=list_item if isinstance(list_item, dict) else None,
+                detail=detail if isinstance(detail, dict) else None,
+            )
+            if notice.get("notice_kind"):
+                parsed["notice_kind"] = notice["notice_kind"]
+            for key in (
+                "project_code",
+                "project_name",
+                "buyer_name",
+                "budget_amount",
+                "deal_amount",
+                "deal_supplier",
+                "deal_supplier_phone",
+                "deal_supplier_address",
+                "procurement_mode",
+                "quote_count",
+            ):
+                val = notice.get(key)
+                if val in (None, "", []):
+                    continue
+                if parsed.get(key) in (None, "", []) or key in {
+                    "deal_amount",
+                    "deal_supplier",
+                    "deal_supplier_phone",
+                    "deal_supplier_address",
+                    "budget_amount",
+                }:
+                    parsed[key] = val
+            if notice.get("goods") and (
+                not parsed.get("goods")
+                or not any(
+                    isinstance(g, dict) and g.get("amount") not in (None, "")
+                    for g in (parsed.get("goods") or [])
+                )
+            ):
+                parsed["goods"] = notice["goods"]
+            if notice.get("quotes") and not parsed.get("quotes"):
+                parsed["quotes"] = notice["quotes"]
+            if notice.get("suppliers") and not parsed.get("suppliers"):
+                parsed["suppliers"] = notice["suppliers"]
+            if isinstance(notice.get("extra"), dict):
+                extra = parsed.get("extra") if isinstance(parsed.get("extra"), dict) else {}
+                parsed["extra"] = {**extra, **notice["extra"]}
 
     # 正文和结构化字段都没有开始时间时，用发布时间兜底
     if not _to_dt(parsed.get("start_time")) and _to_dt(parsed.get("publish_time") or raw.publish_time):
