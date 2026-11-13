@@ -117,6 +117,44 @@
     return text.length >= 10 ? text.slice(0, 10) : text;
   }
 
+  function formatDateTime(value) {
+    if (!value) return "—";
+    var text = String(value).trim().replace("T", " ");
+    if (text.length >= 16) return text.slice(0, 16);
+    if (text.length >= 10) return text.slice(0, 10);
+    return text;
+  }
+
+  var SHANDONG_CITIES = [
+    "济南",
+    "青岛",
+    "淄博",
+    "枣庄",
+    "东营",
+    "烟台",
+    "潍坊",
+    "济宁",
+    "泰安",
+    "威海",
+    "日照",
+    "临沂",
+    "德州",
+    "聊城",
+    "滨州",
+    "菏泽",
+  ];
+
+  function methodLabel(item) {
+    var blob = [item.procurementMode, item.noticeKind, item.title].join(" ");
+    if (/反拍|电子反拍/.test(blob)) return "反拍";
+    if (/询比/.test(blob)) return "询比";
+    if (/竞价/.test(blob)) return "竞价";
+    if (/招标|磋商|谈判|单一来源|邀请招标|公开招标/.test(blob)) return "招标";
+    var mode = String(item.procurementMode || "").trim();
+    if (mode) return mode.replace(/^普通/, "");
+    return "";
+  }
+
   function money(value) {
     if (value == null || value === "" || Number.isNaN(Number(value))) return "—";
     try {
@@ -209,7 +247,8 @@
     return /验收|合同公告|成交结果|结果公告|终止|废标|失败公告|成交公告/.test(text);
   }
 
-  function countdownInfo(item) {
+  function countdownInfo(item, options) {
+    var opts = options || {};
     var now = Date.now();
     var start = parseNoticeTime(item.startTime);
     var end = parseNoticeTime(item.endTime);
@@ -238,7 +277,11 @@
     if (status === "upcoming" || label === "未开始") {
       return {
         label: "未开始",
-        text: start ? "距开始 " + formatCountdown(start - now) : "即将开始",
+        text: opts.hideStartCountdown
+          ? ""
+          : start
+            ? "距开始 " + formatCountdown(start - now)
+            : "即将开始",
         tone: "upcoming",
       };
     }
@@ -471,10 +514,72 @@
 
   function collectAdvanced(root) {
     if (!root) return;
-    var region = root.querySelector("[name=regionName]");
-    var buyerName = root.querySelector("[name=buyerName]");
-    if (region) state.regionName = (region.value || "").trim();
-    if (buyerName) state.buyerName = (buyerName.value || "").trim();
+    var city = root.querySelector("[name=regionCity]");
+    var province = root.querySelector("[name=regionProvince]");
+    var cityValue = city ? String(city.value || "").trim() : "";
+    if (cityValue) {
+      state.regionName = cityValue;
+    } else if (province && String(province.value || "").trim()) {
+      // 仅选省级时不收窄到具体城市
+      state.regionName = "";
+    } else {
+      state.regionName = "";
+    }
+    state.buyerName = "";
+  }
+
+  function bindRegionCascade(root) {
+    if (!root) return;
+    var province = root.querySelector("[name=regionProvince]");
+    var city = root.querySelector("[name=regionCity]");
+    if (!province || !city) return;
+    function syncCityEnabled() {
+      var hasProvince = !!String(province.value || "").trim();
+      city.disabled = !hasProvince;
+      if (!hasProvince) city.value = "";
+    }
+    province.addEventListener("change", function () {
+      syncCityEnabled();
+      collectAdvanced(root);
+      state.page = 1;
+      loadList();
+    });
+    city.addEventListener("change", function () {
+      collectAdvanced(root);
+      state.page = 1;
+      loadList();
+    });
+    syncCityEnabled();
+  }
+
+  function regionCascadeHtml() {
+    var cityValue = state.regionName || "";
+    var hasCity = SHANDONG_CITIES.indexOf(cityValue) >= 0;
+    var provinceValue = hasCity || cityValue ? "山东省" : "";
+    return (
+      '<label class="field cascade"><span>所属区域</span>' +
+      '<select name="regionProvince">' +
+      '<option value="">全部</option>' +
+      '<option value="山东省"' +
+      (provinceValue === "山东省" ? " selected" : "") +
+      ">山东省</option></select>" +
+      '<select name="regionCity"' +
+      (provinceValue ? "" : " disabled") +
+      ">" +
+      '<option value="">全部</option>' +
+      SHANDONG_CITIES.map(function (name) {
+        return (
+          '<option value="' +
+          escapeHtml(name) +
+          '"' +
+          (cityValue === name ? " selected" : "") +
+          ">" +
+          escapeHtml(name) +
+          "</option>"
+        );
+      }).join("") +
+      "</select></label>"
+    );
   }
 
   function collectSearch() {
@@ -618,7 +723,7 @@
       })
     );
     var html = "";
-    html += chipRow("站点", siteChips, state.siteId, "siteId");
+    html += chipRow("采购平台", siteChips, state.siteId, "siteId");
     if (tab.kindChips && tab.kindChips.length) {
       var activeKind = tab.kindMode === "procurementMode" ? state.procurementMode : state.resultKind;
       html += chipRow(tab.kindLabel || "公告类型", tab.kindChips, activeKind, tab.kindMode);
@@ -632,15 +737,11 @@
       '<div class="sourcing-filter-row">' +
       '<label class="label">更多条件</label>' +
       '<div class="sourcing-advanced">' +
-      '<label class="field"><span>所属区域</span><input name="regionName" type="text" placeholder="区域" value="' +
-      escapeHtml(state.regionName) +
-      '" /></label>' +
-      '<label class="field"><span>采购单位</span><input name="buyerName" type="text" placeholder="采购单位" value="' +
-      escapeHtml(state.buyerName) +
-      '" /></label>' +
+      regionCascadeHtml() +
       "</div></div>";
     root.innerHTML = html;
     bindChips(root);
+    bindRegionCascade(root);
     root.querySelectorAll("input").forEach(function (input) {
       input.addEventListener("keydown", function (event) {
         if (event.key === "Enter") runSearch();
@@ -768,10 +869,95 @@
     return tags.slice(0, 4);
   }
 
+  function renderCardBody(item, tab) {
+    var method = methodLabel(item);
+    var tags = cardTags(item);
+    var statusHtml = "";
+    var fieldsHtml = "";
+
+    if (tab.id === "result") {
+      fieldsHtml =
+        "<div>成交金额：<b>" +
+        escapeHtml(money(item.dealAmount)) +
+        "</b></div>" +
+        "<div>预算金额：<b>" +
+        escapeHtml(money(item.budgetAmount)) +
+        "</b></div>" +
+        "<div>成交时间：" +
+        escapeHtml(formatDateTime(item.endTime || item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>发布时间：" +
+        escapeHtml(formatDateTime(item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>采购方式：" +
+        escapeHtml(method || "—") +
+        "</div>";
+    } else if (tab.id === "intent") {
+      var intentClock = countdownInfo(item, { hideStartCountdown: true });
+      statusHtml =
+        '<div class="notice-card-status tone-' +
+        escapeHtml(intentClock.tone) +
+        '"><strong>' +
+        escapeHtml(intentClock.label) +
+        "</strong></div>";
+      fieldsHtml =
+        "<div>采购预算：<b>" +
+        escapeHtml(money(item.budgetAmount || item.dealAmount)) +
+        "</b></div>" +
+        "<div>发布时间：" +
+        escapeHtml(formatDateTime(item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>采购单位：" +
+        escapeHtml(item.buyerName || "—") +
+        "</div>";
+    } else {
+      var clock = countdownInfo(item);
+      statusHtml =
+        '<div class="notice-card-status tone-' +
+        escapeHtml(clock.tone) +
+        '"><strong>' +
+        escapeHtml(clock.label) +
+        "</strong><em class='countdown'>" +
+        escapeHtml(clock.text || "") +
+        "</em></div>";
+      fieldsHtml =
+        "<div>采购预算：<b>" +
+        escapeHtml(money(item.budgetAmount || item.dealAmount)) +
+        "</b></div>" +
+        "<div>开始时间：" +
+        escapeHtml(formatDateTime(item.startTime)) +
+        "</div>" +
+        "<div>结束时间：" +
+        escapeHtml(formatDateTime(item.endTime)) +
+        "</div>" +
+        "<div>采购方式：" +
+        escapeHtml(method || "—") +
+        "</div>" +
+        "<div>采购单位：" +
+        escapeHtml(item.buyerName || "—") +
+        "</div>";
+    }
+
+    return (
+      statusHtml +
+      '<div class="notice-card-fields">' +
+      fieldsHtml +
+      "</div>" +
+      '<div class="notice-card-tags">' +
+      tags
+        .map(function (tag) {
+          return "<span>" + escapeHtml(tag) + "</span>";
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
   function renderList(payload) {
     var list = document.getElementById("notice-list");
     var empty = document.getElementById("notice-empty");
     if (!list) return;
+    var tab = currentTab();
     var items = payload.items || [];
     lastTotal = Number(payload.total || 0);
     var totalPages = Math.max(1, Math.ceil(lastTotal / state.pageSize) || 1);
@@ -788,9 +974,6 @@
     if (empty) empty.hidden = true;
     list.innerHTML = items
       .map(function (item) {
-        var amount = money(item.budgetAmount || item.dealAmount);
-        var clock = countdownInfo(item);
-        var tags = cardTags(item);
         var href = "/notices/" + encodeURIComponent(item.id);
         return (
           '<a class="notice-card" href="' +
@@ -801,34 +984,7 @@
           "<h3>" +
           escapeHtml(item.title || "未命名公告") +
           "</h3>" +
-          '<div class="notice-card-status tone-' +
-          escapeHtml(clock.tone) +
-          '"><strong>' +
-          escapeHtml(clock.label) +
-          "</strong><em class='countdown'>" +
-          escapeHtml(clock.text || "") +
-          "</em></div>" +
-          '<div class="notice-card-fields">' +
-          "<div>采购预算：<b>" +
-          escapeHtml(amount) +
-          "</b></div>" +
-          "<div>发布时间：" +
-          escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
-          "</div>" +
-          "<div>结束时间：" +
-          escapeHtml(formatDate(item.endTime)) +
-          "</div>" +
-          "<div>采购单位：" +
-          escapeHtml(item.buyerName || "—") +
-          "</div>" +
-          "</div>" +
-          '<div class="notice-card-tags">' +
-          tags
-            .map(function (tag) {
-              return "<span>" + escapeHtml(tag) + "</span>";
-            })
-            .join("") +
-          "</div>" +
+          renderCardBody(item, tab) +
           '<span class="card-action">查看详情</span>' +
           "</a>"
         );

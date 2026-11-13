@@ -813,6 +813,7 @@ def _public_crawled_notice_item(item: dict) -> dict:
         "endTime": item.get("endTime") or "",
         "budgetAmount": item.get("budgetAmount"),
         "dealAmount": item.get("dealAmount"),
+        "procurementMode": item.get("procurementMode") or "",
     }
 
 

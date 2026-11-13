@@ -414,6 +414,13 @@ a:hover { color: #004499; }
   width: min(220px, 46vw);
   min-width: 140px;
 }
+.sourcing-advanced .field.cascade {
+  flex-wrap: wrap;
+}
+.sourcing-advanced .field.cascade select {
+  width: min(140px, 36vw);
+  min-width: 110px;
+}
 .sourcing-advanced input.date-input {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
@@ -459,7 +466,7 @@ a:hover { color: #004499; }
 }
 .notice-card-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -644,11 +651,11 @@ a.notice-card:visited { color: inherit; }
   box-shadow: none;
 }
 
-@media (max-width: 1280px) {
-  .notice-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .notice-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .notice-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
   .mobile-menu-btn { display: block; }
