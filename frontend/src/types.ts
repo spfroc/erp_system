@@ -660,6 +660,10 @@ export interface OfficialSite {
   domains?: string[];
   mirrorKey?: string;
   brand: string;
+  brandSubtitle?: string;
+  brandSeparator?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
   companyName?: string;
   phone?: string;
   email?: string;

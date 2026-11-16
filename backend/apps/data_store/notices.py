@@ -14,6 +14,8 @@ from django.utils import timezone
 from .models import NoticeCollectionRunRecord, NoticeCollectionSourceRecord, NoticeRecord, WebsiteLeadRecord
 
 _MASK_TOKEN = "登录可见"
+_ATTACHMENT_LOCKED = "登录后可下载附件"
+_GUEST_CONTENT_LINES = 10
 _MOBILE_RE = re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)")
 # 未标注固话要求带分隔符，避免误伤项目编号中的连续数字
 _LANDLINE_RE = re.compile(r"(?<!\d)(0\d{2,3}-\d{7,8})(?!\d)")
@@ -21,6 +23,17 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _CONTACT_LABEL_RE = re.compile(
     r"((?:项目|采购人|采购单位)?联系人|联系方式|联系电话|手机号码?|电话(?:号码)?)\s*[:：]\s*"
     r"([^\n\r<，,；;。、]{1,30})"
+)
+_ATTACHMENT_HREF_RE = re.compile(
+    r"\.(?:pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(?:\?|#|$)",
+    re.I,
+)
+_HTML_ANCHOR_RE = re.compile(
+    r"<a\b([^>]*?)href\s*=\s*(['\"])(.*?)\2([^>]*)>([\s\S]*?)</a>",
+    re.I,
+)
+_HTML_BLOCK_SPLIT_RE = re.compile(
+    r"(?i)((?:</(?:p|div|tr|li|h[1-6]|table|section|article|br)\s*>)|(?:<br\s*/?>)|(?:\n+))"
 )
 
 
@@ -180,8 +193,69 @@ def mask_sensitive_notice_text(value: str, *, extras: list[str] | None = None) -
     return text
 
 
+def neutralize_notice_attachment_links(value: str) -> str:
+    """未登录：去掉可下载附件链接，避免前端隐藏后仍能直链下载。"""
+    text = str(value or "")
+    if not text:
+        return text
+
+    def _replace(match: re.Match[str]) -> str:
+        href = str(match.group(3) or "")
+        inner = str(match.group(5) or "")
+        label = re.sub(r"<[^>]+>", "", inner)
+        if _ATTACHMENT_HREF_RE.search(href) or ("附件" in label):
+            return f'<span class="attachment-locked">{_ATTACHMENT_LOCKED}</span>'
+        return match.group(0)
+
+    if "<a" in text.lower():
+        text = _HTML_ANCHOR_RE.sub(_replace, text)
+    # 纯文本里的附件直链也抹掉
+    text = re.sub(
+        r"https?://[^\s<>'\"]+\.(?:pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(?:\?[^\s<>'\"]*)?",
+        _ATTACHMENT_LOCKED,
+        text,
+        flags=re.I,
+    )
+    return text
+
+
+def truncate_notice_content_preview(value: str, *, max_lines: int = _GUEST_CONTENT_LINES) -> str:
+    """未登录正文预览：约保留前 N 个块/行，供详情渐变遮罩。"""
+    text = str(value or "").strip()
+    if not text or max_lines <= 0:
+        return text
+    # 泉E采/青慧采组装正文：按完整区块截断，避免半截 HTML
+    if 'class="jd-notice-body"' in text or "class='jd-notice-body'" in text:
+        chunks = re.findall(
+            r'(?:<div class="jd-meta-grid">[\s\S]*?</div>)|(?:<section class="jd-notice-section">[\s\S]*?</section>)',
+            text,
+        )
+        if chunks:
+            kept = chunks[: max(2, min(max_lines, 4))]
+            return '<div class="jd-notice-body">' + "".join(kept) + "</div>"
+    parts = _HTML_BLOCK_SPLIT_RE.split(text)
+    if len(parts) <= 1:
+        lines = [line for line in re.split(r"\r\n|\r|\n", text) if line.strip()]
+        if len(lines) <= max_lines:
+            return text
+        return "\n".join(lines[:max_lines])
+
+    kept: list[str] = []
+    blocks = 0
+    for part in parts:
+        kept.append(part)
+        if _HTML_BLOCK_SPLIT_RE.fullmatch(part or ""):
+            blocks += 1
+            if blocks >= max_lines:
+                break
+    preview = "".join(kept).strip()
+    if len(preview) > 2500:
+        preview = preview[:2500]
+    return preview or text[:1200]
+
+
 def mask_public_notice_sensitive(item: dict[str, Any]) -> dict[str, Any]:
-    """未登录公开详情：保留正文，遮蔽联系方式字段与正文内敏感信息。"""
+    """未登录公开详情：正文仅预览、去附件链，并遮蔽联系方式。"""
     data = dict(item or {})
     extras = [
         data.get("contactName") or "",
@@ -191,10 +265,17 @@ def mask_public_notice_sensitive(item: dict[str, Any]) -> dict[str, Any]:
     ]
     for key in ("content", "contentText", "contentHtml"):
         if data.get(key):
-            data[key] = mask_sensitive_notice_text(str(data.get(key) or ""), extras=extras)
+            value = neutralize_notice_attachment_links(str(data.get(key) or ""))
+            value = mask_sensitive_notice_text(value, extras=extras)
+            data[key] = truncate_notice_content_preview(value)
     for key in ("contactName", "contactPhone", "buyerContactName", "buyerPhone"):
         if data.get(key):
             data[key] = _MASK_TOKEN
+    # 未登录不返回可下载附件清单
+    if "attachments" in data:
+        data["attachments"] = []
+    data["contentPreviewOnly"] = True
+    data["attachmentsLocked"] = True
     return data
 
 

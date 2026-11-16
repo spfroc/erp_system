@@ -9,7 +9,7 @@
     {
       id: "opportunity",
       label: "商机大厅",
-      progress: "ongoing,upcoming",
+      progress: "ongoing,upcoming,ended",
       // 正向包含开放类公告，避免 exclude 多类型时 SQL 过重
       noticeKinds: "采购公告,竞价公告,询比公告,更正公告,单一来源公示,竞价项目",
       excludeNoticeKinds: "",
@@ -22,7 +22,7 @@
         { value: "招标", label: "招标" },
       ],
       kindMode: "procurementMode",
-      hint: "进行中 / 将开始的采购机会",
+      hint: "进行中 / 未开始 / 已结束的采购机会",
     },
     {
       id: "result",
@@ -51,7 +51,7 @@
   ];
   var PROGRESS_CHIPS = [
     { value: "", label: "全部" },
-    { value: "upcoming", label: "将开始" },
+    { value: "upcoming", label: "未开始" },
     { value: "ongoing", label: "进行中" },
     { value: "ended", label: "已结束" },
   ];
@@ -63,8 +63,8 @@
     { value: "500000-", label: "50万以上" },
   ];
   var SORT_FIELDS_BASE = [
-    { field: "publishTime", label: "发布时间" },
-    { field: "endTime", label: "结束时间" },
+    { field: "publishTime", label: "公告发布时间" },
+    { field: "endTime", label: "截止时间" },
   ];
   var SORT_FIELDS_WITH_START = SORT_FIELDS_BASE.concat([{ field: "startTime", label: "开始时间" }]);
   var ALLOWED_SORTS = {
@@ -426,40 +426,36 @@
     normalizeSortForTab();
   }
 
-  function renderSortRow() {
+  function renderSortChips() {
     var fields = currentSortFields();
-    return (
-      '<div class="sourcing-filter-row">' +
-      '<label class="label">排序</label>' +
-      '<div class="sourcing-chips">' +
-      fields
-        .map(function (item) {
-          var active = sortFieldOf(state.sort) === item.field;
-          var arrow = sortArrow(item.field);
-          var title =
-            !active
-              ? "点击按" + item.label + "正序"
-              : sortDirOf(state.sort) === "asc"
-                ? "当前正序，点击改为倒序"
-                : "当前倒序，点击关闭排序";
-          return (
-            '<button type="button" class="sourcing-chip sourcing-sort-chip' +
-            (active ? " active" : "") +
-            '" data-sort-field="' +
-            escapeHtml(item.field) +
-            '" title="' +
-            escapeHtml(title) +
-            '" aria-label="' +
-            escapeHtml(title) +
-            '">' +
-            escapeHtml(item.label) +
-            (arrow ? '<span class="sort-arrow" aria-hidden="true">' + arrow + "</span>" : "") +
-            "</button>"
-          );
-        })
-        .join("") +
-      "</div></div>"
-    );
+    return fields
+      .map(function (item) {
+        var active = sortFieldOf(state.sort) === item.field;
+        var arrow = sortArrow(item.field);
+        var title =
+          !active
+            ? "点击按" + item.label + "正序"
+            : sortDirOf(state.sort) === "asc"
+              ? "当前正序，点击改为倒序"
+              : "当前倒序，点击关闭排序";
+        return (
+          '<button type="button" class="sourcing-sort-link' +
+          (active ? " active" : "") +
+          '" data-sort-field="' +
+          escapeHtml(item.field) +
+          '" title="' +
+          escapeHtml(title) +
+          '" aria-label="' +
+          escapeHtml(title) +
+          '">' +
+          escapeHtml(item.label) +
+          (arrow
+            ? '<span class="sort-arrow" aria-hidden="true">' + arrow + "</span>"
+            : '<span class="sort-arrow muted" aria-hidden="true">↕</span>') +
+          "</button>"
+        );
+      })
+      .join("");
   }
 
   function applyBudgetRange(params) {
@@ -543,12 +539,13 @@
   function regionCascadeHtml() {
     var city = state.regionName || "";
     var provinceOpen = city && SHANDONG_CITIES.indexOf(city) >= 0;
+    var labelText = city ? regionCascadeLabel() : "请选择";
     return (
-      '<div class="field region-cascader" data-region-cascader>' +
-      '<span class="field-label">所属区域</span>' +
+      '<div class="field region-cascader sourcing-region-inline" data-region-cascader>' +
+      '<span class="field-label">所属区域：</span>' +
       '<button type="button" class="region-cascader-trigger" data-role="region-trigger" aria-haspopup="listbox" aria-expanded="false">' +
       '<em data-role="region-label">' +
-      escapeHtml(regionCascadeLabel()) +
+      escapeHtml(labelText) +
       "</em><i></i></button>" +
       '<div class="region-cascader-panel" data-role="region-panel" hidden>' +
       '<div class="region-cascader-col" data-level="1">' +
@@ -602,7 +599,7 @@
         return;
       }
       state.regionName = value;
-      if (label) label.textContent = regionCascadeLabel();
+      if (label) label.textContent = value ? regionCascadeLabel() : "请选择";
       closeRegionCascade(root);
       state.page = 1;
       loadList();
@@ -642,8 +639,9 @@
 
     if (!bindRegionCascade._docBound) {
       document.addEventListener("click", function () {
-        var filters = document.getElementById("sourcing-filters");
-        closeRegionCascade(filters);
+        // 区域级联在结果工具栏，不在 filters
+        closeRegionCascade(document.getElementById("sourcing-resultbar"));
+        closeRegionCascade(document.getElementById("sourcing-filters"));
       });
       bindRegionCascade._docBound = true;
     }
@@ -799,16 +797,8 @@
       html += chipRow("状态", PROGRESS_CHIPS, state.progress, "progress");
     }
     html += chipRow("采购预算", BUDGET_CHIPS, state.budgetRange, "budgetRange");
-    html += renderSortRow();
-    html +=
-      '<div class="sourcing-filter-row">' +
-      '<label class="label">更多条件</label>' +
-      '<div class="sourcing-advanced">' +
-      regionCascadeHtml() +
-      "</div></div>";
     root.innerHTML = html;
     bindChips(root);
-    bindRegionCascade(root);
     root.querySelectorAll("input").forEach(function (input) {
       input.addEventListener("keydown", function (event) {
         if (event.key === "Enter") runSearch();
@@ -825,20 +815,71 @@
     if (top && top.scrollIntoView) top.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function bindToolbarControls(root, totalPages) {
+    if (!root) return;
+    root.querySelectorAll("[data-sort-field]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        cycleSortField(btn.getAttribute("data-sort-field") || "");
+        state.page = 1;
+        renderFilters();
+        loadList();
+      });
+    });
+    bindRegionCascade(root);
+    root.querySelectorAll("button[data-mini-page]").forEach(function (btn) {
+      btn.onclick = function () {
+        if (btn.disabled) return;
+        var action = btn.getAttribute("data-mini-page");
+        if (action === "prev") goPage(state.page - 1, totalPages);
+        else if (action === "next") goPage(state.page + 1, totalPages);
+      };
+    });
+  }
+
+  function renderTopToolbar(total, totalPages) {
+    var resultBar = document.getElementById("sourcing-resultbar");
+    if (!resultBar) return;
+    normalizeSortForProgress();
+    var pages = Math.max(1, totalPages || 1);
+    resultBar.innerHTML =
+      '<div class="sourcing-toolbar-left">' +
+      '<div class="sourcing-sort-inline">' +
+      renderSortChips() +
+      "</div>" +
+      regionCascadeHtml() +
+      "</div>" +
+      '<div class="sourcing-toolbar-right pager-mini">' +
+      '<span class="pager-total">共' +
+      Number(total || 0) +
+      "个结果</span>" +
+      '<span class="pager-sep">|</span>' +
+      '<button type="button" data-mini-page="prev" aria-label="上一页"' +
+      (state.page <= 1 ? " disabled" : "") +
+      ">&lt;</button>" +
+      "<strong>" +
+      state.page +
+      "/" +
+      pages +
+      "</strong>" +
+      '<button type="button" data-mini-page="next" aria-label="下一页"' +
+      (state.page >= pages ? " disabled" : "") +
+      ">&gt;</button>" +
+      "</div>";
+    bindToolbarControls(resultBar, pages);
+  }
+
   function renderPagination(total, totalPages) {
     var pager = document.getElementById("notice-pager");
-    var resultBar = document.getElementById("sourcing-resultbar");
+    var pages = Math.max(1, totalPages || 1);
     var summary =
       "共 <strong>" +
       total +
       "</strong> 条 · 第 " +
       state.page +
       " / " +
-      totalPages +
+      pages +
       " 页";
-    if (resultBar) {
-      resultBar.innerHTML = "<div>" + summary + "</div>";
-    }
+    renderTopToolbar(total, pages);
     if (!pager) return;
     if (total <= 0) {
       pager.innerHTML = "";
@@ -875,22 +916,22 @@
       "<strong>" +
       state.page +
       " / " +
-      totalPages +
+      pages +
       "</strong>" +
       '<button type="button" class="btn ghost" data-page="' +
       (state.page + 1) +
       '"' +
-      (state.page >= totalPages ? " disabled" : "") +
+      (state.page >= pages ? " disabled" : "") +
       ">下一页</button>" +
       '<button type="button" class="btn ghost" data-page="' +
-      totalPages +
+      pages +
       '"' +
-      (state.page >= totalPages ? " disabled" : "") +
+      (state.page >= pages ? " disabled" : "") +
       ">末页</button>" +
       "</div>" +
       '<label class="pagination-jump">跳至' +
       '<input type="number" min="1" max="' +
-      totalPages +
+      pages +
       '" value="' +
       state.page +
       '" data-role="jump-page" />页' +
@@ -900,7 +941,7 @@
     pager.querySelectorAll("button[data-page]").forEach(function (btn) {
       btn.onclick = function () {
         if (btn.disabled) return;
-        goPage(btn.getAttribute("data-page"), totalPages);
+        goPage(btn.getAttribute("data-page"), pages);
       };
     });
     var sizeSelect = pager.querySelector("[data-role=page-size]");
@@ -914,7 +955,7 @@
     var jumpInput = pager.querySelector("[data-role=jump-page]");
     var jumpGo = pager.querySelector("[data-role=jump-go]");
     function doJump() {
-      goPage(jumpInput && jumpInput.value, totalPages);
+      goPage(jumpInput && jumpInput.value, pages);
     }
     if (jumpGo) jumpGo.onclick = doJump;
     if (jumpInput) {
@@ -1162,6 +1203,38 @@
     return text;
   }
 
+  function neutralizeAttachmentLinks(html) {
+    return String(html || "").replace(
+      /<a\b([^>]*?)href\s*=\s*(['"])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/gi,
+      function (all, pre, q, href, post, inner) {
+        var label = String(inner || "").replace(/<[^>]+>/g, "");
+        if (/\.(pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(\?|#|$)/i.test(href) || /附件/.test(label)) {
+          return '<span class="attachment-locked">登录后可下载附件</span>';
+        }
+        return all;
+      }
+    );
+  }
+
+  function wrapGuestContent(innerHtml, isHtml) {
+    return (
+      '<div class="detail-content-clamp">' +
+      '<div class="detail-content' +
+      (isHtml ? " is-html" : "") +
+      '">' +
+      innerHtml +
+      "</div>" +
+      '<div class="detail-content-fade" aria-hidden="true"></div>' +
+      '<div class="detail-login-gate">' +
+      "<p>登录后查看完整公告正文与附件</p>" +
+      '<a class="btn" href="' +
+      escapeHtml(portalLoginUrl()) +
+      '">会员登录</a>' +
+      "</div>" +
+      "</div>"
+    );
+  }
+
   function renderDetailContent(detail, loggedIn) {
     var extras = [
       detail.contactName,
@@ -1172,14 +1245,18 @@
     var html = String(detail.contentHtml || "").trim();
     var text = String(detail.content || detail.contentText || "").trim();
     if (!loggedIn) {
-      html = maskSensitiveNoticeText(html, extras);
-      text = maskSensitiveNoticeText(text, extras);
+      html = neutralizeAttachmentLinks(maskSensitiveNoticeText(html, extras));
+      text = neutralizeAttachmentLinks(maskSensitiveNoticeText(text, extras));
     }
     if (html) {
-      return '<div class="detail-content is-html">' + sanitizeNoticeHtml(html) + "</div>";
+      var safeHtml = sanitizeNoticeHtml(html);
+      if (!loggedIn) return wrapGuestContent(safeHtml, true);
+      return '<div class="detail-content is-html">' + safeHtml + "</div>";
     }
     if (text) {
-      return '<div class="detail-content">' + escapeHtml(text) + "</div>";
+      var safeText = escapeHtml(text);
+      if (!loggedIn) return wrapGuestContent(safeText, false);
+      return '<div class="detail-content">' + safeText + "</div>";
     }
     return '<div class="detail-content muted">暂无正文内容</div>';
   }
@@ -1248,7 +1325,7 @@
           '" target="_blank" rel="noopener">打开原文</a>'
         : "") +
       (!loggedIn
-        ? '<a class="btn ghost" href="' + escapeHtml(portalLoginUrl()) + '">会员登录查看联系方式</a>'
+        ? '<a class="btn ghost" href="' + escapeHtml(portalLoginUrl()) + '">会员登录查看全文与附件</a>'
         : "") +
       "</div>"
     );
@@ -1281,6 +1358,18 @@
         me = account || null;
         root.innerHTML = renderDetailHtml(detail, Boolean(me));
         root.setAttribute("data-hydrated", "1");
+        if (!me) {
+          root.addEventListener("click", function (event) {
+            var anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+            if (!anchor || !root.contains(anchor)) return;
+            var href = anchor.getAttribute("href") || "";
+            var label = String(anchor.textContent || "");
+            if (/\.(pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(\?|#|$)/i.test(href) || /附件|下载/.test(label)) {
+              event.preventDefault();
+              window.location.href = portalLoginUrl();
+            }
+          });
+        }
       })
       .catch(function (error) {
         root.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";

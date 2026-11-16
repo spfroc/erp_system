@@ -1083,7 +1083,6 @@ def _crawl_jd_site(
 
 def json_detail_to_text(detail: dict) -> str:
     """把京东结构化详情压成可读文本，便于 LLM 抽取。"""
-    import json
 
     def _fmt_ts(v):
         if v in (None, ""):
@@ -1133,7 +1132,18 @@ def json_detail_to_text(detail: dict) -> str:
                 parts.append(
                     f"成交供应商: {s.get('supplierName') or ''} 成交价:{s.get('dealPrice') or ''}"
                 )
-    if nested:
-        parts.append("详情结构化数据:")
-        parts.append(json.dumps(nested, ensure_ascii=False, indent=2)[:20000])
+    # 需求/附件摘要（不再附加整段 JSON，官网正文由后端按 detail_json 组装 HTML）
+    if isinstance(nested, dict):
+        base_req = ""
+        if isinstance(base, dict):
+            base_req = str(base.get("requirement") or "").strip()
+        demand = nested.get("auctionDemandInfo") if isinstance(nested.get("auctionDemandInfo"), dict) else {}
+        demand_remark = str(demand.get("demandRemark") or "").strip()
+        attach_remark = str(demand.get("attachRequestedRemark") or "").strip()
+        if base_req:
+            parts.append(f"采购需求: {base_req}")
+        if demand_remark:
+            parts.append(f"需求说明: {demand_remark}")
+        if attach_remark:
+            parts.append(f"附件要求: {attach_remark}")
     return "\n".join(parts)

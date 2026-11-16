@@ -3477,7 +3477,7 @@ def public_notice_detail(request, notice_id: str):
     item = get_public_notice(notice_id)
     if not item:
         return JsonResponse({"detail": "Notice not found."}, status=404)
-    # 未登录：正文仍公开，但遮蔽联系人/电话等敏感信息（含正文内嵌）
+    # 未登录：正文仅预览、屏蔽附件下载，并遮蔽联系人/电话等敏感信息
     try:
         from .portal import current_portal_account
 

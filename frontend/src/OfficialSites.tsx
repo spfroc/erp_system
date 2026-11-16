@@ -64,6 +64,10 @@ type SiteForm = {
   domain: string;
   domainsText: string;
   brand: string;
+  brandSubtitle: string;
+  brandSeparator: string;
+  heroTitle: string;
+  heroSubtitle: string;
   companyName: string;
   status: OfficialSite["status"];
   contact: OfficialSiteContact;
@@ -104,6 +108,10 @@ const emptyForm = (): SiteForm => ({
   domain: "",
   domainsText: "",
   brand: "",
+  brandSubtitle: "",
+  brandSeparator: "·",
+  heroTitle: "",
+  heroSubtitle: "",
   companyName: "",
   status: "启用",
   contact: emptyContact(),
@@ -164,6 +172,10 @@ function siteToForm(site: OfficialSite): SiteForm {
     domain: site.domain || "",
     domainsText: domains.join("\n"),
     brand: site.brand || "",
+    brandSubtitle: site.brandSubtitle || "",
+    brandSeparator: site.brandSeparator || "·",
+    heroTitle: site.heroTitle || "",
+    heroSubtitle: site.heroSubtitle || "",
     companyName: site.companyName || "",
     status: site.status || "启用",
     contact,
@@ -315,6 +327,10 @@ export function OfficialSitesPanel({
       domains,
       mirrorKey: base?.mirrorKey || key,
       brand: form.brand.trim() || form.name.trim(),
+      brandSubtitle: form.brandSubtitle.trim(),
+      brandSeparator: form.brandSeparator.trim() || "·",
+      heroTitle: form.heroTitle.trim(),
+      heroSubtitle: form.heroSubtitle.trim(),
       companyName: form.companyName.trim(),
       phone: contact.hotline,
       email: contact.email,
@@ -612,8 +628,16 @@ export function OfficialSitesPanel({
                       <input value={form.key} onChange={(event) => setForm({ ...form, key: event.target.value })} placeholder="qlyc" />
                     </label>
                     <label>
-                      <span>品牌</span>
+                      <span>导航大标题（品牌）</span>
                       <input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="壹采" />
+                    </label>
+                    <label>
+                      <span>导航小标题</span>
+                      <input value={form.brandSubtitle} onChange={(event) => setForm({ ...form, brandSubtitle: event.target.value })} placeholder="可选，显示在大标题后" />
+                    </label>
+                    <label>
+                      <span>大小标题分隔符</span>
+                      <input value={form.brandSeparator} onChange={(event) => setForm({ ...form, brandSeparator: event.target.value })} placeholder="·" />
                     </label>
                     <label>
                       <span>公司名称</span>
@@ -635,8 +659,21 @@ export function OfficialSitesPanel({
                         placeholder={"www.qlyc.co\nwww.yizhichan.co"}
                       />
                     </label>
+                    <label className="span-2">
+                      <span>首页横幅大标题</span>
+                      <input value={form.heroTitle} onChange={(event) => setForm({ ...form, heroTitle: event.target.value })} placeholder="政企采购电商服务平台" />
+                    </label>
+                    <label className="span-2">
+                      <span>首页横幅小标题</span>
+                      <textarea
+                        rows={2}
+                        value={form.heroSubtitle}
+                        onChange={(event) => setForm({ ...form, heroSubtitle: event.target.value })}
+                        placeholder="济南泉E采阳光采购平台 | 齐鲁云采 | …"
+                      />
+                    </label>
                   </div>
-                  <p className="official-form-hint">壹采站可将 qlyc.co 与 yizhichan.co 配在同一站点，改一处两边生效。</p>
+                  <p className="official-form-hint">导航：大标题 + 分隔符 + 小标题；首页横幅：大标题与小标题两项独立配置。壹采站可将 qlyc.co 与 yizhichan.co 配在同一站点，改一处两边生效。</p>
                 </section>
               )}
 

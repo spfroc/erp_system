@@ -63,7 +63,64 @@
       box-shadow: 0 10px 18px rgba(22, 58, 40, .18);
     }
     .login-mark { margin-bottom: 16px; }
-    .login-card h1 { margin: 0 0 22px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.35; }
+    .login-card h1 { margin: 0 0 18px; font-size: 24px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.35; }
+    .login-tabs {
+      display: flex; width: 100%; margin: 0 0 18px;
+      padding: 4px; gap: 4px;
+      background: #eef3ef; border-radius: 12px;
+    }
+    .login-tabs button {
+      flex: 1; height: 36px; margin: 0; padding: 0 10px;
+      border: 0; border-radius: 9px;
+      background: transparent; color: var(--muted);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .login-tabs button:hover { color: var(--ink); }
+    .login-tabs button.active {
+      background: #fff; color: var(--green-dark);
+      box-shadow: 0 1px 4px rgba(22, 58, 40, .12);
+    }
+    .login-pane[hidden] { display: none !important; }
+    .wechat-login-panel { text-align: center; }
+    .wechat-login-title { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+    .sms-login-soon {
+      margin: 8px 0 0; padding: 28px 16px;
+      border: 1px dashed var(--line-strong); border-radius: 14px;
+      color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center;
+    }
+    .wechat-qr-box {
+      position: relative; width: 188px; height: 188px; margin: 0 auto 10px;
+      border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden;
+      background: #fff;
+    }
+    .wechat-qr-box img {
+      display: block; width: 100%; height: 100%; object-fit: contain;
+    }
+    .wechat-scan-mask {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      padding: 12px; background: rgba(255,255,255,.92);
+      color: var(--ink); font-size: 13px; line-height: 1.5;
+    }
+    .wechat-login-btn { width: 100%; margin-top: 4px; }
+    .wechat-oa-tip { margin-top: 12px; text-align: left; }
+    .wechat-oa-tip summary {
+      cursor: pointer; color: var(--muted); font-size: 12px; list-style: none;
+    }
+    .wechat-oa-tip summary::-webkit-details-marker { display: none; }
+    .wechat-oa-tip[open] summary { color: var(--green-dark); }
+    .wechat-oa-qr {
+      display: block; width: 120px; height: 120px; margin: 10px auto 6px;
+      border-radius: 10px; border: 1px solid var(--line-strong);
+    }
+    .login-admin-tip {
+      margin: 18px 0 0; padding-top: 14px;
+      border-top: 1px solid var(--line-strong);
+      color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center;
+    }
+    .login-admin-tip a {
+      color: var(--green-dark); font-weight: 600; text-decoration: none;
+    }
+    .login-admin-tip a:hover { text-decoration: underline; }
     label { display: block; margin-bottom: 14px; font-size: 13px; color: var(--muted); }
     input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
     select,
@@ -206,7 +263,11 @@
     .home-site-block .chart { height: 260px; flex: none; min-height: 0; }
     .charts-wrap { display: flex; flex-direction: column; gap: 12px; width: 100%; }
     .chart { position: relative; overflow: hidden; }
-    .chart > div { width: 100% !important; height: 100% !important; }
+    /* 只约束画布容器；勿选中 ECharts tooltip（同为 .chart 直接子 div，否则会撑成空白白框） */
+    .chart > div:first-child {
+      width: 100% !important;
+      height: 100% !important;
+    }
     .home-site-grid { display: grid; gap: 14px; grid-template-columns: 1fr; margin-top: 16px; width: 100%; }
     @media (min-width: 1280px) {
       .home-site-grid:has(> :nth-child(2)) { grid-template-columns: 1fr 1fr; }
@@ -506,6 +567,46 @@
     .detail-grid .info span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
     .detail-grid .info strong { display: block; font-size: 14px; font-weight: 650; word-break: break-word; }
     .detail-grid .info.wide { grid-column: 1 / -1; }
+    .notice-content-block { margin-top: 4px; }
+    .notice-content-html, .notice-content-text {
+      margin-top: 8px; color: #334155; font-size: 14px; line-height: 1.7; word-break: break-word;
+    }
+    .notice-content-text { white-space: pre-wrap; }
+    .notice-content-html .jd-notice-body { display: flex; flex-direction: column; gap: 12px; }
+    .notice-content-html .jd-meta-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    }
+    .notice-content-html .jd-meta-grid div {
+      background: #f6f3ec; border: 1px solid rgba(80,56,24,.08); border-radius: 10px; padding: 10px 12px;
+    }
+    .notice-content-html .jd-meta-grid span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .notice-content-html .jd-meta-grid strong { display: block; font-size: 14px; font-weight: 650; }
+    .notice-content-html .jd-notice-section {
+      border: 1px solid rgba(80,56,24,.1); border-radius: 12px; overflow: hidden; background: #fff;
+    }
+    .notice-content-html .jd-notice-section > h2 {
+      margin: 0; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #3d2a12;
+      background: linear-gradient(180deg, #faf6ee, #f3eee4); border-bottom: 1px solid rgba(80,56,24,.08);
+    }
+    .notice-content-html .jd-section-body { padding: 12px; }
+    .notice-content-html .jd-prose { margin: 0 0 8px; }
+    .notice-content-html .jd-prose:last-child { margin-bottom: 0; }
+    .notice-content-html .jd-prose em {
+      display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px;
+      background: rgba(31,138,86,.12); color: #1f8a56; font-style: normal; font-size: 12px; font-weight: 700;
+    }
+    .notice-content-html .jd-table-wrap { overflow-x: auto; border: 1px solid rgba(80,56,24,.1); border-radius: 10px; }
+    .notice-content-html .jd-goods-table { width: 100%; border-collapse: collapse; min-width: 560px; }
+    .notice-content-html .jd-goods-table th,
+    .notice-content-html .jd-goods-table td {
+      padding: 9px 10px; border-bottom: 1px solid rgba(80,56,24,.08); text-align: left; vertical-align: top; font-size: 13px;
+    }
+    .notice-content-html .jd-goods-table th { background: #faf6ee; color: #6b5840; font-weight: 700; }
+    .notice-content-html .jd-attach-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .notice-content-html .jd-attach-link {
+      display: inline-flex; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(31,138,86,.2);
+      background: rgba(31,138,86,.06); color: #1f8a56; font-weight: 700; text-decoration: none;
+    }
     .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: flex-end; align-items: center; }
     .modal-actions .primary, .modal-actions .ghost, .modal-actions .danger-btn,
     .modal-actions a.primary, .modal-actions a.ghost { width: auto; margin: 0; }
@@ -700,14 +801,50 @@
       <img src="/portal/login-visual.jpg" alt="" />
     </div>
     <div class="login-panel">
-      <form id="login-form" class="login-card">
+      <div class="login-card">
         <div class="login-mark">壹</div>
         <h1>壹采科技数据服务平台</h1>
-        <label>手机号<input name="phone" autocomplete="username" inputmode="tel" required /></label>
-        <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
-        <p class="error" id="login-error"></p>
-        <button class="primary" type="submit">登录</button>
-      </form>
+        <div class="login-tabs" id="login-tabs" role="tablist" aria-label="登录方式">
+          <button type="button" role="tab" data-login-tab="password" class="active" aria-selected="true">账号登录</button>
+          <button type="button" role="tab" data-login-tab="wechat" aria-selected="false">微信登录</button>
+          <button type="button" role="tab" data-login-tab="sms" aria-selected="false" hidden>短信登录</button>
+        </div>
+        <div id="login-pane-password" class="login-pane" role="tabpanel" data-login-pane="password">
+          <form id="login-form">
+            <label>手机号<input name="phone" autocomplete="username" inputmode="tel" required /></label>
+            <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
+            <p class="error" id="login-error"></p>
+            <button class="primary" type="submit">登录</button>
+          </form>
+        </div>
+        <div id="login-pane-wechat" class="login-pane wechat-login-panel" role="tabpanel" data-login-pane="wechat" hidden>
+          <div id="wechat-login-inapp" hidden>
+            <p class="wechat-login-title">已绑定微信可一键登录</p>
+            <button type="button" class="primary wechat-login-btn" id="wechat-one-tap">微信一键登录</button>
+          </div>
+          <div id="wechat-login-scan">
+            <div class="wechat-qr-box">
+              <img id="wechat-scan-qr" alt="微信登录二维码" width="188" height="188" />
+              <div id="wechat-scan-mask" class="wechat-scan-mask">正在生成二维码…</div>
+            </div>
+            <p class="muted" id="wechat-scan-hint">请使用已绑定的微信扫一扫</p>
+            <p class="error" id="wechat-scan-error"></p>
+            <button type="button" class="ghost wechat-login-btn" id="wechat-scan-refresh" hidden>刷新二维码</button>
+            <details class="wechat-oa-tip">
+              <summary>尚未绑定？先关注壹采服务号</summary>
+              <img class="wechat-oa-qr" src="/portal/wechat-oa-qr.jpg" alt="壹采服务号二维码" width="120" height="120" />
+              <p class="muted">关注后使用手机号登录，在「订阅」页绑定微信，即可扫码登录。</p>
+            </details>
+          </div>
+        </div>
+        <div id="login-pane-sms" class="login-pane" role="tabpanel" data-login-pane="sms" hidden>
+          <div class="sms-login-soon">短信验证码登录即将开放，请先使用账号或微信登录。</div>
+        </div>
+        <p class="login-admin-tip">
+          本站暂不支持自助注册，请联系管理员开通账号<br />
+          联系电话：<a href="tel:13105315957">13105315957</a>
+        </p>
+      </div>
     </div>
   </section>
 
@@ -1018,14 +1155,155 @@
       }
     }
 
+    let wechatScanTimer = 0;
+    let wechatScanTicket = "";
+    let wechatScanStartedAt = 0;
+
+    function stopWechatScanLogin() {
+      if (wechatScanTimer) {
+        window.clearInterval(wechatScanTimer);
+        wechatScanTimer = 0;
+      }
+      wechatScanTicket = "";
+    }
+
+    function setWechatScanMask(text, show) {
+      const mask = document.getElementById("wechat-scan-mask");
+      if (!mask) return;
+      mask.hidden = !show;
+      if (text) mask.textContent = text;
+    }
+
+    const LOGIN_SMS_ENABLED = false; // 日后开通短信登录时改为 true
+    let currentLoginTab = "password";
+
+    function applyWechatLoginMode() {
+      const inApp = document.getElementById("wechat-login-inapp");
+      const scan = document.getElementById("wechat-login-scan");
+      if (!inApp || !scan) return;
+      const inWeChat = isWeChatBrowser();
+      inApp.hidden = !inWeChat;
+      scan.hidden = inWeChat;
+      if (inWeChat) stopWechatScanLogin();
+    }
+
+    function setLoginTab(nextTab) {
+      const allowed = new Set(["password", "wechat"]);
+      if (LOGIN_SMS_ENABLED) allowed.add("sms");
+      const tabId = allowed.has(nextTab) ? nextTab : "password";
+      currentLoginTab = tabId;
+      const tabs = document.getElementById("login-tabs");
+      if (tabs) {
+        const smsBtn = tabs.querySelector('[data-login-tab="sms"]');
+        if (smsBtn) smsBtn.hidden = !LOGIN_SMS_ENABLED;
+        tabs.querySelectorAll("[data-login-tab]").forEach((btn) => {
+          const active = btn.getAttribute("data-login-tab") === tabId;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-selected", active ? "true" : "false");
+        });
+      }
+      document.querySelectorAll("[data-login-pane]").forEach((pane) => {
+        pane.hidden = pane.getAttribute("data-login-pane") !== tabId;
+      });
+      if (tabId === "wechat") {
+        applyWechatLoginMode();
+        if (!isWeChatBrowser()) startWechatScanLogin();
+        else stopWechatScanLogin();
+      } else {
+        stopWechatScanLogin();
+      }
+    }
+
+    async function startWechatScanLogin() {
+      const qr = document.getElementById("wechat-scan-qr");
+      const err = document.getElementById("wechat-scan-error");
+      const refresh = document.getElementById("wechat-scan-refresh");
+      const hint = document.getElementById("wechat-scan-hint");
+      if (!qr || !err) return;
+      if (isWeChatBrowser()) return;
+      stopWechatScanLogin();
+      err.textContent = "";
+      if (refresh) refresh.hidden = true;
+      setWechatScanMask("正在生成二维码…", true);
+      if (hint) hint.textContent = "请使用已绑定的微信扫一扫";
+      try {
+        const body = await api("/api/portal/wechat/scan-login/start/", {
+          method: "POST",
+          body: "{}",
+        });
+        wechatScanTicket = body.ticket || "";
+        wechatScanStartedAt = Date.now();
+        if (!wechatScanTicket || !body.qrImageUrl) {
+          throw new Error("二维码生成失败");
+        }
+        qr.onload = () => setWechatScanMask("", false);
+        qr.onerror = () => {
+          setWechatScanMask("二维码加载失败，请刷新", true);
+          if (refresh) refresh.hidden = false;
+        };
+        qr.src = body.qrImageUrl;
+        const expiresIn = Math.max(30, Number(body.expiresIn) || 180) * 1000;
+        wechatScanTimer = window.setInterval(async () => {
+          if (!wechatScanTicket) return;
+          if (Date.now() - wechatScanStartedAt > expiresIn) {
+            stopWechatScanLogin();
+            setWechatScanMask("二维码已过期，请刷新", true);
+            if (refresh) refresh.hidden = false;
+            if (hint) hint.textContent = "二维码约 3 分钟有效";
+            return;
+          }
+          try {
+            const statusBody = await api(
+              `/api/portal/wechat/scan-login/status/?ticket=${encodeURIComponent(wechatScanTicket)}`
+            );
+            const status = statusBody.status || "pending";
+            if (status === "pending") return;
+            if (status === "ok") {
+              stopWechatScanLogin();
+              setWechatScanMask("登录成功", true);
+              if (await redirectWithHandoffIfNeeded()) return;
+              showApp(statusBody.data);
+              return;
+            }
+            if (status === "unbound") {
+              if (hint) hint.textContent = "该微信尚未绑定账号，请先绑定后再扫码";
+              err.textContent = "未绑定微信。请先用手机号登录，在「订阅」页绑定。";
+              return;
+            }
+            if (status === "disabled") {
+              err.textContent = "账号不可用，请联系管理员。";
+              stopWechatScanLogin();
+              setWechatScanMask("账号不可用", true);
+              if (refresh) refresh.hidden = false;
+              return;
+            }
+            if (status === "expired" || status === "fail") {
+              stopWechatScanLogin();
+              setWechatScanMask(status === "expired" ? "二维码已过期，请刷新" : "登录失败，请刷新", true);
+              if (refresh) refresh.hidden = false;
+            }
+          } catch (_) {
+            /* 轮询中短暂失败可忽略 */
+          }
+        }, 1800);
+      } catch (e) {
+        setWechatScanMask("暂不可用", true);
+        err.textContent = e.message || "微信扫码暂不可用，请使用手机号登录";
+        if (refresh) refresh.hidden = false;
+      }
+    }
+
     function showLogin() {
       me = null;
       bootView.hidden = true;
       appView.hidden = true;
       loginView.hidden = false;
+      const preferWechat = isWeChatBrowser() || readWechatBindStatus();
+      setLoginTab(preferWechat ? "wechat" : "password");
     }
 
     function showApp(account) {
+      stopWechatScanLogin();
       me = account;
       bootView.hidden = true;
       loginView.hidden = true;
@@ -1791,7 +2069,20 @@
       const width = Math.max(el.clientWidth || el.parentElement?.clientWidth || 320, 240);
       const height = Math.max(el.clientHeight || 260, 220);
       const chart = echarts.init(el, null, { renderer: "canvas", width, height });
-      chart.setOption(option, true);
+      const tip = option && option.tooltip && typeof option.tooltip === "object" ? option.tooltip : {};
+      const next = {
+        ...option,
+        tooltip: {
+          appendToBody: true,
+          confine: false,
+          backgroundColor: "rgba(255,255,255,.96)",
+          borderColor: "#eadfce",
+          borderWidth: 1,
+          textStyle: { color: "#1f2a24", fontSize: 12 },
+          ...tip,
+        },
+      };
+      chart.setOption(next, true);
       charts.push(chart);
       return chart;
     }
@@ -2204,12 +2495,26 @@
         info.querySelector("strong").textContent = String(value);
         grid.appendChild(info);
       });
-      if (detail.contentText) {
-        const info = document.createElement("div");
-        info.className = "info wide";
-        info.innerHTML = "<span>正文摘要</span><strong></strong>";
-        info.querySelector("strong").textContent = String(detail.contentText).slice(0, 800);
-        grid.appendChild(info);
+      const contentHtml = String(detail.contentHtml || "").trim();
+      const contentText = String(detail.contentText || detail.content || "").trim();
+      if (contentHtml || contentText) {
+        const block = document.createElement("div");
+        block.className = "info wide notice-content-block";
+        const label = document.createElement("span");
+        label.textContent = "公告正文";
+        block.appendChild(label);
+        const body = document.createElement("div");
+        body.className = contentHtml ? "notice-content-html" : "notice-content-text";
+        if (contentHtml) {
+          body.innerHTML = contentHtml
+            .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1>/gi, "")
+            .replace(/on[a-z]+\s*=\s*(['"]).*?\1/gi, "")
+            .replace(/on[a-z]+\s*=\s*[^\s>]+/gi, "");
+        } else {
+          body.textContent = contentText.slice(0, 4000);
+        }
+        block.appendChild(body);
+        grid.appendChild(block);
       }
       const sourceBtn = backdrop.querySelector("[data-role=open-source]");
       if (!detail.sourceUrl) {
@@ -2845,12 +3150,49 @@
           method: "POST",
           body: JSON.stringify({ phone: form.phone.value.trim(), password: form.password.value }),
         });
+        stopWechatScanLogin();
         if (await redirectWithHandoffIfNeeded()) return;
         showApp(body.data);
       } catch (err) {
         error.textContent = err.message;
       }
     };
+
+    const loginTabs = document.getElementById("login-tabs");
+    if (loginTabs) {
+      loginTabs.addEventListener("click", (event) => {
+        const btn = event.target && event.target.closest ? event.target.closest("[data-login-tab]") : null;
+        if (!btn || btn.hidden) return;
+        setLoginTab(btn.getAttribute("data-login-tab") || "password");
+      });
+    }
+    const wechatOneTap = document.getElementById("wechat-one-tap");
+    if (wechatOneTap) {
+      wechatOneTap.onclick = () => {
+        location.href = wechatSilentLoginUrl("home");
+      };
+    }
+    const wechatScanRefresh = document.getElementById("wechat-scan-refresh");
+    if (wechatScanRefresh) {
+      wechatScanRefresh.onclick = () => startWechatScanLogin();
+    }
+
+    // 登录页展示静默登录失败原因
+    (() => {
+      const flag = readWechatBindStatus();
+      if (!flag) return;
+      const map = {
+        unbound: "当前微信尚未绑定账号，请先用手机号登录并在「订阅」页绑定。",
+        disabled: "账号不可用，请联系管理员。",
+        fail: "微信登录失败，请重试或使用手机号登录。",
+      };
+      const msg = map[flag];
+      if (!msg) return;
+      const loginError = document.getElementById("login-error");
+      const wechatError = document.getElementById("wechat-scan-error");
+      if (loginError) loginError.textContent = msg;
+      if (wechatError) wechatError.textContent = msg;
+    })();
 
     document.getElementById("user-trigger").onclick = (event) => {
       event.stopPropagation();
@@ -2865,6 +3207,9 @@
     };
     document.getElementById("logout").onclick = async () => {
       await api("/api/portal/logout/", { method: "POST", body: "{}" }).catch(() => {});
+      try {
+        localStorage.removeItem(TAB_STORAGE_KEY);
+      } catch (_) {}
       disposeCharts();
       setMessageBadge(0);
       const bell = document.getElementById("msg-bell");
@@ -2872,6 +3217,9 @@
         bell.hidden = true;
         bell.classList.remove("active");
       }
+      const url = new URL(location.href);
+      url.search = "";
+      history.replaceState(null, "", url.pathname + "#login");
       showLogin();
     };
     document.addEventListener("click", () => { dropdown.hidden = true; });

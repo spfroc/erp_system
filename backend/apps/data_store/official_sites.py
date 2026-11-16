@@ -241,6 +241,10 @@ def normalize_site_payload(payload: dict) -> dict:
         "domains": domains,
         "mirrorKey": (payload.get("mirrorKey") or key).strip() or key,
         "brand": (payload.get("brand") or "").strip(),
+        "brandSubtitle": (payload.get("brandSubtitle") or "").strip(),
+        "brandSeparator": (payload.get("brandSeparator") or "").strip(),
+        "heroTitle": (payload.get("heroTitle") or "").strip(),
+        "heroSubtitle": (payload.get("heroSubtitle") or "").strip(),
         "companyName": (payload.get("companyName") or "").strip(),
         "phone": phone,
         "email": email,
@@ -273,6 +277,10 @@ def public_home_config(site_data: dict[str, Any] | None) -> dict[str, Any]:
         "key": data.get("key") or "",
         "mirrorKey": data.get("mirrorKey") or data.get("key") or "",
         "brand": data.get("brand") or "",
+        "brandSubtitle": data.get("brandSubtitle") or "",
+        "brandSeparator": data.get("brandSeparator") or "",
+        "heroTitle": data.get("heroTitle") or "",
+        "heroSubtitle": data.get("heroSubtitle") or "",
         "companyName": data.get("companyName") or "",
         "domains": list(data.get("domains") or []),
         "contact": data.get("contact") or {},
@@ -605,6 +613,10 @@ SITE_SEEDS = [
         "domains": ["www.qlyc.co", "www.yizhichan.co"],
         "mirrorKey": "qlyc",
         "brand": "壹采",
+        "brandSubtitle": "",
+        "brandSeparator": "·",
+        "heroTitle": "政企采购电商服务平台",
+        "heroSubtitle": "济南泉E采阳光采购平台 | 齐鲁云采 | 框架协议等政府采购平台一站式入驻与运营服务",
         "companyName": "山东壹知产数字科技有限公司",
         "phone": "0531-86099058",
         "email": "Wangyunlei@yizhichan.co",
@@ -665,7 +677,19 @@ SITE_SEEDS = [
     },
 ]
 
-_HOME_CONFIG_FIELDS = ("domains", "mirrorKey", "contact", "industries", "inquiryPlatforms", "footer", "beian")
+_HOME_CONFIG_FIELDS = (
+    "domains",
+    "mirrorKey",
+    "contact",
+    "industries",
+    "inquiryPlatforms",
+    "footer",
+    "beian",
+    "brandSubtitle",
+    "brandSeparator",
+    "heroTitle",
+    "heroSubtitle",
+)
 
 _SEO_FIELDS = (
     "seoTitle",

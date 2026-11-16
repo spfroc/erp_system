@@ -21,6 +21,7 @@ from .notice_site_config import (
     resolve_mapped_category,
     site_label as mapped_site_label,
 )
+from .jd_notice_html import build_jd_notice_content_html, clean_jd_content_text
 from .notice_tag_models import NoticeResultTag
 from .views import _require_permission
 
@@ -66,7 +67,7 @@ _LIST_PARSED_ONLY = (
 )
 _OPTIONS_TTL_SEC = 300.0
 _RAW_COUNT_TTL_SEC = 30.0
-_FILTERED_COUNT_TTL_SEC = 20.0
+_FILTERED_COUNT_TTL_SEC = 60.0
 _options_cache: dict[str, tuple[float, Any]] = {}
 _raw_count_cache: tuple[float, int] | None = None
 _filtered_count_cache: dict[str, tuple[float, int]] = {}
@@ -149,8 +150,46 @@ def _project_code_filter_q(project_code: str) -> Q:
     )
 
 
+# 关键词先单独查出 id 再与业务筛选相交，避免 LIKE + 相关子查询在大结果集上嵌套慢查
+_KEYWORD_ID_CAP = 40000
+
+
+def _keyword_token_ids(token: str, *, cap: int = _KEYWORD_ID_CAP) -> set[int]:
+    """收集单个词命中的 notice_raw.id；拆开查 title / parsed，避免 DEPENDENT SUBQUERY。"""
+    token = (token or "").strip()
+    if not token or token in _SEARCH_NOISE_TOKENS:
+        return set()
+    ids: set[int] = set()
+
+    def _consume(qs) -> bool:
+        for pk in qs.iterator(chunk_size=2000):
+            ids.add(int(pk))
+            if len(ids) >= cap:
+                return True
+        return False
+
+    # 单位名（…局/院/公司）优先只扫 buyer，减少无效 OR
+    if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
+        _consume(NoticeParsed.objects.filter(buyer_name__icontains=token).values_list("notice_raw_id", flat=True))
+        return ids
+
+    # 1) 标题（用户关键字主路径，单独 LIKE 很快）
+    if _consume(NoticeRaw.objects.filter(title__icontains=token).values_list("id", flat=True)):
+        return ids
+
+    # 2) 解析字段：编号/项目名/采购人/公告标题（不再扫 deal_supplier / region / notice_key）
+    parsed_q = (
+        Q(project_code__icontains=token)
+        | Q(project_name__icontains=token)
+        | Q(buyer_name__icontains=token)
+        | Q(notice_title__icontains=token)
+    )
+    _consume(NoticeParsed.objects.filter(parsed_q).values_list("notice_raw_id", flat=True))
+    return ids
+
+
 def _keyword_search_q(keyword: str) -> Q:
-    """关键词搜索：单位名优先走 buyer；多词空格拆成 AND，避免整句 LIKE 扫全表。"""
+    """关键词搜索：先物化命中 id，再与站点/进度等条件相交；多词空格拆成 AND。"""
     text = (keyword or "").strip()
     if not text:
         return Q()
@@ -163,44 +202,36 @@ def _keyword_search_q(keyword: str) -> Q:
             combined |= _project_code_filter_q(code)
         return combined
 
-    def one_token(token: str) -> Q:
-        token = token.strip()
-        if not token or token in _SEARCH_NOISE_TOKENS:
-            return Q()
-        if extract_gov_project_codes(token):
-            return _project_code_filter_q(token)
-        if len(token) >= 4 and _ORG_SUFFIX_RE.search(token):
-            return Q(
-                id__in=NoticeParsed.objects.filter(buyer_name__icontains=token).values("notice_raw_id")
-            )
-        return (
-            Q(title__icontains=token)
-            | Q(notice_key__icontains=token)
-            | Q(region_name__icontains=token)
-            | Q(
-                id__in=NoticeParsed.objects.filter(
-                    Q(project_code__icontains=token)
-                    | Q(project_name__icontains=token)
-                    | Q(buyer_name__icontains=token)
-                    | Q(deal_supplier__icontains=token)
-                    | Q(notice_title__icontains=token)
-                ).values("notice_raw_id")
-            )
-        )
-
     tokens = [part for part in re.split(r"[\s,，、]+", text) if part and part not in _SEARCH_NOISE_TOKENS]
     if not tokens:
         return Q()
+    # 单字过宽且易全表扫，直接无结果提示换词
+    tokens = [t for t in tokens[:4] if len(t) >= 2 or extract_gov_project_codes(t)]
+    if not tokens:
+        return Q(pk__in=[])
+
     if len(tokens) == 1:
-        return one_token(tokens[0])
-    combined = Q()
-    applied = False
-    for token in tokens[:4]:
-        part = one_token(token)
-        if part:
-            combined &= part
-            applied = True
-    return combined if applied else Q()
+        token = tokens[0]
+        if extract_gov_project_codes(token):
+            return _project_code_filter_q(token)
+        ids = _keyword_token_ids(token)
+        return Q(pk__in=list(ids)) if ids else Q(pk__in=[])
+
+    id_set: set[int] | None = None
+    for token in tokens:
+        if extract_gov_project_codes(token):
+            part_ids = set(
+                NoticeRaw.objects.filter(_project_code_filter_q(token)).values_list("id", flat=True)[:_KEYWORD_ID_CAP]
+            )
+        else:
+            part_ids = _keyword_token_ids(token)
+        if id_set is None:
+            id_set = set(part_ids)
+        else:
+            id_set &= part_ids
+        if not id_set:
+            return Q(pk__in=[])
+    return Q(pk__in=list(id_set or []))
 
 
 SITE_LABELS = {
@@ -788,42 +819,6 @@ def _resolve_kind(raw: NoticeRaw, parsed: NoticeParsed | None) -> str:
     return kind if kind and not kind.isdigit() else ""
 
 
-def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
-    """公告类型筛选：优先分类映射；其次内置 notice_type；解析字段兜底。"""
-    mapped_q = q_for_mapped_category(notice_kind, site_id)
-    q = mapped_q
-
-    for sid, mapping in NOTICE_TYPE_LABELS.items():
-        if site_id and sid != site_id:
-            continue
-        codes = [code for code, label in mapping.items() if label == notice_kind]
-        if codes:
-            q |= Q(site_id=sid, notice_type__in=codes)
-
-    # 解析字段兜底：排除「notice_type 已映射成其它类型」的冲突行
-    parsed_qs = NoticeParsed.objects.filter(notice_kind=notice_kind)
-    if site_id:
-        parsed_qs = parsed_qs.filter(site_id=site_id)
-    conflict = Q()
-    for sid, mapping in NOTICE_TYPE_LABELS.items():
-        if site_id and sid != site_id:
-            continue
-        other_codes = [code for code, label in mapping.items() if label != notice_kind]
-        if other_codes:
-            conflict |= Q(site_id=sid, notice_type__in=other_codes)
-    q |= Q(id__in=parsed_qs.values("notice_raw_id")) & ~conflict
-
-    # 京东历史曾把竞价公告写成「采购公告」
-    if notice_kind == "竞价公告" and (not site_id or site_id in JD_SITE_IDS):
-        legacy = NoticeParsed.objects.filter(
-            site_id__in=JD_SITE_IDS if not site_id else [site_id],
-            notice_kind="采购公告",
-        )
-        q |= Q(id__in=legacy.values("notice_raw_id")) & ~conflict
-
-    return q if q else Q(pk__in=[])
-
-
 def _parse_notice_kinds(*values: str) -> list[str]:
     kinds: list[str] = []
     seen: set[str] = set()
@@ -837,14 +832,72 @@ def _parse_notice_kinds(*values: str) -> list[str]:
 
 
 def _raw_ids_for_kinds(notice_kinds: list[str], site_id: str) -> Q:
-    """多选公告类型：任一命中即可。空列表表示不按类型限制。"""
+    """多选公告类型：批量 notice_type / 映射分类，避免逐类型 DEPENDENT SUBQUERY。
+
+    解析表兜底仅用于「内置 notice_type 未覆盖」的类型，显著加快商机大厅 COUNT。
+    """
     kinds = [kind for kind in notice_kinds if kind and kind != "全部"]
     if not kinds:
         return Q()
-    combined = Q()
+    kind_set = set(kinds)
+    sid_filter = (site_id or "").strip()
+
+    type_q = Q()
+    covered: set[str] = set()
+    for sid, mapping in NOTICE_TYPE_LABELS.items():
+        if sid_filter and sid != sid_filter:
+            continue
+        codes = [code for code, label in mapping.items() if label in kind_set]
+        if not codes:
+            continue
+        type_q |= Q(site_id=sid, notice_type__in=codes)
+        for label in mapping.values():
+            if label in kind_set:
+                covered.add(label)
+
+    # 已被 notice_type 覆盖的类型不再叠 mapped OR（映射条件爆炸会拖慢排序/COUNT）
+    mapped_q = Q()
     for kind in kinds:
-        combined |= _raw_ids_for_kind(kind, site_id)
+        if kind in covered:
+            continue
+        part = q_for_mapped_category(kind, sid_filter)
+        if part:
+            mapped_q |= part
+
+    # 仅对 notice_type 未覆盖的类型补 parsed；物化 id，避免 COUNT 上的 DEPENDENT SUBQUERY
+    uncovered = [kind for kind in kinds if kind not in covered]
+    parsed_ids: set[int] = set()
+    if uncovered:
+        parsed_qs = NoticeParsed.objects.filter(notice_kind__in=uncovered)
+        if sid_filter:
+            parsed_qs = parsed_qs.filter(site_id=sid_filter)
+        parsed_ids.update(
+            int(pk) for pk in parsed_qs.values_list("notice_raw_id", flat=True).iterator(chunk_size=5000)
+        )
+
+    # 京东历史：竞价写成「采购公告」；若请求已含采购公告则不必再扩
+    if (
+        "竞价公告" in kind_set
+        and "采购公告" not in kind_set
+        and (not sid_filter or sid_filter in JD_SITE_IDS)
+    ):
+        legacy_sites = [sid_filter] if sid_filter else list(JD_SITE_IDS)
+        legacy = NoticeParsed.objects.filter(site_id__in=legacy_sites, notice_kind="采购公告")
+        parsed_ids.update(
+            int(pk) for pk in legacy.values_list("notice_raw_id", flat=True).iterator(chunk_size=5000)
+        )
+
+    parsed_q = Q(pk__in=list(parsed_ids)) if parsed_ids else Q()
+    combined = type_q | mapped_q | parsed_q
     return combined if combined else Q(pk__in=[])
+
+
+def _raw_ids_for_kind(notice_kind: str, site_id: str) -> Q:
+    """单类型筛选：复用批量实现。"""
+    kind = (notice_kind or "").strip()
+    if not kind or kind == "全部":
+        return Q()
+    return _raw_ids_for_kinds([kind], site_id)
 
 
 def _notice_kind_options(site_id: str) -> list[str]:
@@ -1301,6 +1354,14 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
     )
     contact_name, contact_phone = _resolve_buyer_contact(raw, parsed)
     contact_joined = " ".join(x for x in (contact_name, contact_phone) if x) or None
+    content_html = (raw.content_html or "").strip()
+    content_text = (raw.content_text or "").strip()
+    # 泉E采/青慧采：详情是 JSON，组装可读 HTML；并去掉 content_text 里的结构化 JSON 尾巴
+    if raw.site_id in JD_SITE_IDS:
+        detail_json = _safe_json_dict(raw, "detail_json")
+        if not content_html:
+            content_html = build_jd_notice_content_html(detail_json)
+        content_text = clean_jd_content_text(content_text)
     base.update(
         {
             "buyerContactName": contact_name,
@@ -1315,8 +1376,8 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
             "suppliers": parsed.suppliers_json if parsed else [],
             "modelName": parsed.model_name if parsed else None,
             "confidence": _dec(parsed.confidence) if parsed else None,
-            "contentText": (raw.content_text or "")[:50000],
-            "contentHtml": (raw.content_html or "")[:120000],
+            "contentText": content_text[:50000],
+            "contentHtml": content_html[:120000],
             "goods": [
                 {
                     "id": g.id,
@@ -1676,23 +1737,69 @@ def _procurement_mode_filter_q(mode: str) -> Q:
     return combined
 
 
-def _apply_notice_sort(qs, sort: str):
-    """sort 字段：publishTime|endTime|startTime；前缀 '-' 表示倒序，无参为默认发布时间倒序。"""
+def _parse_time_sort(sort: str) -> tuple[str, bool] | None:
+    """解析截止/开始时间排序；返回 (end_time|start_time, descending)。"""
     key = str(sort or "").strip()
-    end_sq = NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).values("end_time")[:1]
-    start_sq = NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).values("start_time")[:1]
+    if key in {"endTime", "end_time", "endAsc"}:
+        return ("end_time", False)
+    if key in {"-endTime", "-end_time", "endDesc"}:
+        return ("end_time", True)
+    if key in {"startTime", "start_time", "startAsc"}:
+        return ("start_time", False)
+    if key in {"-startTime", "-start_time", "startDesc"}:
+        return ("start_time", True)
+    return None
+
+
+def _page_ids_by_parsed_time(qs, *, field: str, descending: bool, page: int, page_size: int) -> list[int]:
+    """借助 notice_parsed 时间索引取一页 id，避免大结果集 filesort。"""
+    from django.db import connection
+
+    field = "end_time" if field == "end_time" else "start_time"
+    index = "idx_parsed_end_time" if field == "end_time" else "idx_parsed_start_time"
+    base = qs.order_by().values("id")
+    sql, params = base.query.sql_with_params()
+    if "WHERE" not in sql.upper():
+        where_sql = "1=1"
+        where_params: list = []
+    else:
+        where_sql = sql.split("WHERE", 1)[1]
+        where_sql = where_sql.replace("`notice_raw`.", "r.").replace("notice_raw.", "r.")
+        where_params = list(params)
+    order = f"p.`{field}` {'DESC' if descending else 'ASC'}"
+    offset = max(0, (max(int(page), 1) - 1) * max(int(page_size), 1))
+    limit = max(int(page_size), 1)
+    full_sql = (
+        f"SELECT p.notice_raw_id FROM notice_parsed p FORCE INDEX (`{index}`) "
+        f"WHERE EXISTS (SELECT 1 FROM notice_raw r WHERE r.id = p.notice_raw_id AND ({where_sql})) "
+        f"ORDER BY {order}, p.notice_raw_id DESC LIMIT %s OFFSET %s"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(full_sql, where_params + [limit, offset])
+        return [int(row[0]) for row in cursor.fetchall()]
+
+
+def _apply_notice_sort(qs, sort: str):
+    """sort 字段：publishTime|endTime|startTime；前缀 '-' 表示倒序，无参为默认发布时间倒序。
+
+    截止/开始时间排序请优先走 _page_ids_by_parsed_time；此处保留兼容路径。
+    注意：调用方应先 COUNT 再排序，避免排序注解拖慢总数统计。
+    """
+    key = str(sort or "").strip()
     if key in {"publishTime", "publish_time", "publishAsc"}:
         return qs.order_by(F("publish_time").asc(nulls_last=True), "id")
     if key in {"-publishTime", "-publish_time", "publishDesc"}:
-        return qs.order_by(F("publish_time").desc(nulls_last=True), "-id")
-    if key in {"endTime", "end_time", "endAsc"}:
-        return qs.annotate(_sort_end=Subquery(end_sq)).order_by(F("_sort_end").asc(nulls_last=True), "-id")
-    if key in {"-endTime", "-end_time", "endDesc"}:
-        return qs.annotate(_sort_end=Subquery(end_sq)).order_by(F("_sort_end").desc(nulls_last=True), "-id")
-    if key in {"startTime", "start_time", "startAsc"}:
-        return qs.annotate(_sort_start=Subquery(start_sq)).order_by(F("_sort_start").asc(nulls_last=True), "-id")
-    if key in {"-startTime", "-start_time", "startDesc"}:
-        return qs.annotate(_sort_start=Subquery(start_sq)).order_by(F("_sort_start").desc(nulls_last=True), "-id")
+        return qs.order_by("-publish_time", "-id")
+
+    parsed_sort = _parse_time_sort(key)
+    if parsed_sort:
+        field, descending = parsed_sort
+        sq = NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk")).values(field)[:1]
+        alias = "_sort_end" if field == "end_time" else "_sort_start"
+        qs = qs.annotate(**{alias: Subquery(sq)})
+        order = F(alias).desc(nulls_last=True) if descending else F(alias).asc(nulls_last=True)
+        return qs.order_by(order, "-id")
+
     return qs.order_by("-publish_time", "-id")
 
 
@@ -1736,6 +1843,22 @@ def query_crawled_notices(
         qs = qs.filter(site_id__in=site_ids)
     if site_id:
         qs = qs.filter(site_id=site_id)
+
+    buyer = (buyer_name or "").strip()
+    code = (project_code or "").strip()
+    pname = (project_name or "").strip()
+    keyword = (search or "").strip()
+    if not code:
+        embedded = extract_gov_project_codes(search)
+        if embedded:
+            code = embedded[0]
+
+    # 关键字先收敛到命中 id，再叠 noticeKinds/进度等，避免大结果集上相关子查询拖慢
+    if keyword and not code:
+        qs = qs.filter(_keyword_search_q(keyword))
+    elif keyword and code and not extract_gov_project_codes(keyword):
+        qs = qs.filter(_keyword_search_q(keyword))
+
     if isinstance(notice_kinds, list):
         kinds = _parse_notice_kinds(notice_kind, *notice_kinds)
     else:
@@ -1757,13 +1880,6 @@ def query_crawled_notices(
     day_q = _notice_day_filter_q(publish_from=publish_date_from, publish_to=publish_date_to)
     if day_q is not None:
         qs = qs.filter(day_q)
-    buyer = (buyer_name or "").strip()
-    code = (project_code or "").strip()
-    pname = (project_name or "").strip()
-    if not code:
-        embedded = extract_gov_project_codes(search)
-        if embedded:
-            code = embedded[0]
     if buyer or code or pname:
         field_q = _notice_field_filter_q(
             project_code=code,
@@ -1775,6 +1891,9 @@ def query_crawled_notices(
         if field_q is not None:
             qs = qs.filter(field_q)
     progress_targets = _normalize_progress_targets(progress)
+    # 商机大厅默认 ongoing+upcoming+ended：三类齐全时跳过进度 SQL（约等于非 unknown）
+    if set(progress_targets) >= {"ongoing", "upcoming", "ended"}:
+        progress_targets = []
     if progress_targets:
         now = timezone.now()
         progress_q = Q()
@@ -1790,13 +1909,6 @@ def query_crawled_notices(
         if budget_hi is not None:
             amount_filters["budget_amount__lte"] = budget_hi
         qs = qs.filter(Exists(NoticeParsed.objects.filter(notice_raw_id=OuterRef("pk"), **amount_filters)))
-    keyword = (search or "").strip()
-    # 已按项目编号精确过滤时，不再把整句中文残片拿去模糊 AND，避免 0 命中或误扫全表
-    if keyword and not code:
-        qs = qs.filter(_keyword_search_q(keyword))
-    elif keyword and code and not extract_gov_project_codes(keyword):
-        qs = qs.filter(_keyword_search_q(keyword))
-    qs = _apply_notice_sort(qs, sort)
     has_budget = budget_lo is not None or budget_hi is not None
     has_filter = bool(
         site_id
@@ -1813,27 +1925,42 @@ def query_crawled_notices(
         or has_budget
         or (site_ids is not None)
     )
+    # COUNT 不带排序注解，避免排序子查询拖慢 total
     if not has_filter:
         total = _cached_raw_total()
-    elif day_q is not None and not (
-        site_id
-        or kinds
-        or region
-        or buyer
-        or pname
-        or keyword
-        or code
-        or progress_targets
-        or has_budget
-        or (site_ids is not None)
-    ):
-        total = _cached_filtered_total(
-            f"console_pub:{publish_date_from}:{publish_date_to}:sites:{','.join(site_ids or [])}",
-            qs.count,
-        )
     else:
-        total = qs.count()
-    rows = list(qs[(page - 1) * page_size : page * page_size])
+        cache_key = "|".join(
+            [
+                f"site:{site_id}",
+                f"sites:{','.join(site_ids or [])}",
+                f"kinds:{','.join(kinds)}",
+                f"ex:{','.join(excluded)}",
+                f"mode:{mode}",
+                f"region:{region}",
+                f"day:{publish_date_from}:{publish_date_to}",
+                f"buyer:{buyer}",
+                f"pname:{pname}",
+                f"kw:{keyword}",
+                f"code:{code}",
+                f"prog:{','.join(progress_targets)}",
+                f"budget:{budget_lo}:{budget_hi}",
+            ]
+        )
+        total = _cached_filtered_total(cache_key, qs.count)
+    parsed_sort = _parse_time_sort(sort)
+    if parsed_sort and total > 0:
+        field, descending = parsed_sort
+        ordered_ids = _page_ids_by_parsed_time(
+            qs, field=field, descending=descending, page=page, page_size=page_size
+        )
+        fetched = {
+            row.id: row
+            for row in NoticeRaw.objects.filter(id__in=ordered_ids).only(*_LIST_RAW_ONLY)
+        }
+        rows = [fetched[i] for i in ordered_ids if i in fetched]
+    else:
+        qs = _apply_notice_sort(qs, sort)
+        rows = list(qs[(page - 1) * page_size : page * page_size])
     parsed_map = _load_parsed_map([row.id for row in rows])
     items = _attach_result_tags(
         [_serialize_list_item(row, parsed_map.get(row.id)) for row in rows]

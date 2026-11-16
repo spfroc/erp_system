@@ -295,7 +295,9 @@ async function handleNoticeRoutes(req, res, url, siteKey, root) {
     if (!shell) return false;
     const query = Object.fromEntries(url.searchParams.entries());
     const result = await renderNoticeListPage({ req, siteKey, shellHtml: shell, query });
-    sendHtml(res, result.status, result.html);
+    const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
+    const homeConfig = await fetchOfficialHomeConfig(PREVIEW_CONFIG_HOST[requestHost] || requestHost);
+    sendHtml(res, result.status, injectHomeConfigIntoHtml(result.html, homeConfig));
     return true;
   }
 
@@ -304,7 +306,9 @@ async function handleNoticeRoutes(req, res, url, siteKey, root) {
     const shell = readSiteShell(root, "notice-detail.html");
     if (!shell) return false;
     const result = await renderNoticeDetailPage({ req, siteKey, shellHtml: shell, id: detailId });
-    sendHtml(res, result.status, result.html);
+    const requestHost = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
+    const homeConfig = await fetchOfficialHomeConfig(PREVIEW_CONFIG_HOST[requestHost] || requestHost);
+    sendHtml(res, result.status, injectHomeConfigIntoHtml(result.html, homeConfig));
     return true;
   }
 
