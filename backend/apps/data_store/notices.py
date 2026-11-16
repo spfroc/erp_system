@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from decimal import Decimal
 from typing import Any
@@ -11,6 +12,16 @@ from urllib.request import Request, urlopen
 from django.utils import timezone
 
 from .models import NoticeCollectionRunRecord, NoticeCollectionSourceRecord, NoticeRecord, WebsiteLeadRecord
+
+_MASK_TOKEN = "登录可见"
+_MOBILE_RE = re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)")
+# 未标注固话要求带分隔符，避免误伤项目编号中的连续数字
+_LANDLINE_RE = re.compile(r"(?<!\d)(0\d{2,3}-\d{7,8})(?!\d)")
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_CONTACT_LABEL_RE = re.compile(
+    r"((?:项目|采购人|采购单位)?联系人|联系方式|联系电话|手机号码?|电话(?:号码)?)\s*[:：]\s*"
+    r"([^\n\r<，,；;。、]{1,30})"
+)
 
 
 def _now_iso() -> str:
@@ -152,30 +163,84 @@ def _money_float(value) -> float:
         return 0.0
 
 
+def mask_sensitive_notice_text(value: str, *, extras: list[str] | None = None) -> str:
+    """遮蔽正文中的联系人/电话/邮箱等敏感片段。"""
+    text = str(value or "")
+    if not text:
+        return text
+    text = _CONTACT_LABEL_RE.sub(lambda m: f"{m.group(1)}：{_MASK_TOKEN}", text)
+    text = _MOBILE_RE.sub(_MASK_TOKEN, text)
+    text = _LANDLINE_RE.sub(_MASK_TOKEN, text)
+    text = _EMAIL_RE.sub(_MASK_TOKEN, text)
+    for extra in extras or []:
+        token = str(extra or "").strip()
+        if len(token) < 2:
+            continue
+        text = text.replace(token, _MASK_TOKEN)
+    return text
+
+
+def mask_public_notice_sensitive(item: dict[str, Any]) -> dict[str, Any]:
+    """未登录公开详情：保留正文，遮蔽联系方式字段与正文内敏感信息。"""
+    data = dict(item or {})
+    extras = [
+        data.get("contactName") or "",
+        data.get("buyerContactName") or "",
+        data.get("contactPhone") or "",
+        data.get("buyerPhone") or "",
+    ]
+    for key in ("content", "contentText", "contentHtml"):
+        if data.get(key):
+            data[key] = mask_sensitive_notice_text(str(data.get(key) or ""), extras=extras)
+    for key in ("contactName", "contactPhone", "buyerContactName", "buyerPhone"):
+        if data.get(key):
+            data[key] = _MASK_TOKEN
+    return data
+
+
 def _public_payload_from_crawled(item: dict[str, Any]) -> dict[str, Any]:
     """把爬虫列表/详情字段映射成官网 notices 页使用的结构。"""
     amount = item.get("dealAmount")
     if amount in (None, ""):
         amount = item.get("budgetAmount")
     published = item.get("publishTime") or item.get("publishedAt") or ""
+    content_text = item.get("contentText") or ""
+    content_html = item.get("contentHtml") or ""
     return {
         "id": str(item.get("id") or ""),
         "title": item.get("title") or "",
         "projectNumber": item.get("projectCode") or "",
+        "projectCode": item.get("projectCode") or "",
+        "projectName": item.get("projectName") or "",
         "department": item.get("buyerName") or "",
+        "buyerName": item.get("buyerName") or "",
         "category": item.get("procurementMode") or item.get("siteLabel") or "",
         "noticeKind": item.get("noticeKind") or "其他",
         "bidStatus": item.get("progressLabel") or "",
+        "progressLabel": item.get("progressLabel") or "",
+        "progressStatus": item.get("progressStatus") or "",
         "amount": _money_float(amount),
-        "contactName": item.get("buyerContactName") or "",
-        "contactPhone": item.get("buyerPhone") or "",
+        "budgetAmount": item.get("budgetAmount"),
+        "dealAmount": item.get("dealAmount"),
+        "contactName": item.get("buyerContactName") or item.get("contactName") or "",
+        "contactPhone": item.get("buyerPhone") or item.get("contactPhone") or "",
+        "buyerContactName": item.get("buyerContactName") or "",
+        "buyerPhone": item.get("buyerPhone") or "",
         "detailUrl": item.get("sourceUrl") or "",
-        "content": item.get("contentText") or "",
+        "sourceUrl": item.get("sourceUrl") or "",
+        "content": content_text or "",
+        "contentText": content_text or "",
+        "contentHtml": content_html or "",
         "publisher": item.get("siteLabel") or "",
         "supplierName": item.get("dealSupplier") or "",
         "startAt": item.get("startTime") or "",
         "endAt": item.get("endTime") or "",
+        "startTime": item.get("startTime") or "",
+        "endTime": item.get("endTime") or "",
+        "publishTime": published,
         "publishedAt": published,
+        "regionName": item.get("regionName") or "",
+        "procurementMode": item.get("procurementMode") or "",
         "siteId": item.get("siteId") or "",
         "siteLabel": item.get("siteLabel") or "",
     }

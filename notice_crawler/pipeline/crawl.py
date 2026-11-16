@@ -77,11 +77,10 @@ class _DupStop:
         self.streak = 0
 
     def hit(self, duplicated: bool) -> bool:
-        if not self.limit:
-            return False
+        # limit 为空时仍累计 streak 以跳过已入库，但不因重复停类（全量回补）
         if duplicated:
             self.streak += 1
-            return self.streak >= self.limit
+            return bool(self.limit and self.streak >= self.limit)
         self.streak = 0
         return False
 

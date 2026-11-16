@@ -10,9 +10,9 @@
       id: "opportunity",
       label: "商机大厅",
       progress: "ongoing,upcoming",
-      noticeKinds: "",
-      excludeNoticeKinds:
-        "意向公开,成交公告,成交结果公告,结果公告,失败公告,终止公告,废标公告,验收公告,合同公告",
+      // 正向包含开放类公告，避免 exclude 多类型时 SQL 过重
+      noticeKinds: "采购公告,竞价公告,询比公告,更正公告,单一来源公示,竞价项目",
+      excludeNoticeKinds: "",
       kindLabel: "采购方式",
       kindChips: [
         { value: "", label: "全部" },
@@ -366,7 +366,21 @@
   }
 
   function currentSortFields() {
+    var tab = currentTab();
+    if (tab && tab.id === "intent") {
+      return [{ field: "publishTime", label: "发布时间" }];
+    }
     return canSortByStartTime() ? SORT_FIELDS_WITH_START : SORT_FIELDS_BASE;
+  }
+
+  function normalizeSortForTab() {
+    var fields = currentSortFields().map(function (item) {
+      return item.field;
+    });
+    var field = sortFieldOf(state.sort);
+    if (field && fields.indexOf(field) < 0) {
+      state.sort = DEFAULT_SORT;
+    }
   }
 
   function sortFieldOf(sortValue) {
@@ -409,6 +423,7 @@
     if (!canSortByStartTime() && sortFieldOf(state.sort) === "startTime") {
       state.sort = DEFAULT_SORT;
     }
+    normalizeSortForTab();
   }
 
   function renderSortRow() {
@@ -514,72 +529,124 @@
 
   function collectAdvanced(root) {
     if (!root) return;
-    var city = root.querySelector("[name=regionCity]");
-    var province = root.querySelector("[name=regionProvince]");
-    var cityValue = city ? String(city.value || "").trim() : "";
-    if (cityValue) {
-      state.regionName = cityValue;
-    } else if (province && String(province.value || "").trim()) {
-      // 仅选省级时不收窄到具体城市
-      state.regionName = "";
-    } else {
-      state.regionName = "";
-    }
+    // 区域由级联组件直接写入 state.regionName
     state.buyerName = "";
+  }
+
+  function regionCascadeLabel() {
+    var city = state.regionName || "";
+    if (city && SHANDONG_CITIES.indexOf(city) >= 0) return "山东省 / " + city;
+    if (city) return city;
+    return "全部";
+  }
+
+  function regionCascadeHtml() {
+    var city = state.regionName || "";
+    var provinceOpen = city && SHANDONG_CITIES.indexOf(city) >= 0;
+    return (
+      '<div class="field region-cascader" data-region-cascader>' +
+      '<span class="field-label">所属区域</span>' +
+      '<button type="button" class="region-cascader-trigger" data-role="region-trigger" aria-haspopup="listbox" aria-expanded="false">' +
+      '<em data-role="region-label">' +
+      escapeHtml(regionCascadeLabel()) +
+      "</em><i></i></button>" +
+      '<div class="region-cascader-panel" data-role="region-panel" hidden>' +
+      '<div class="region-cascader-col" data-level="1">' +
+      '<button type="button" class="region-cascader-option' +
+      (!city ? " active" : "") +
+      '" data-province="">全部</button>' +
+      '<button type="button" class="region-cascader-option' +
+      (provinceOpen || city === "山东省" ? " active" : "") +
+      '" data-province="山东省">山东省</button>' +
+      "</div>" +
+      '<div class="region-cascader-col" data-level="2"' +
+      (provinceOpen ? "" : " hidden") +
+      ">" +
+      SHANDONG_CITIES.map(function (name) {
+        return (
+          '<button type="button" class="region-cascader-option' +
+          (city === name ? " active" : "") +
+          '" data-city="' +
+          escapeHtml(name) +
+          '">' +
+          escapeHtml(name) +
+          "</button>"
+        );
+      }).join("") +
+      "</div></div></div>"
+    );
+  }
+
+  function closeRegionCascade(root) {
+    if (!root) return;
+    var panel = root.querySelector("[data-role=region-panel]");
+    var trigger = root.querySelector("[data-role=region-trigger]");
+    if (panel) panel.hidden = true;
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
   }
 
   function bindRegionCascade(root) {
     if (!root) return;
-    var province = root.querySelector("[name=regionProvince]");
-    var city = root.querySelector("[name=regionCity]");
-    if (!province || !city) return;
-    function syncCityEnabled() {
-      var hasProvince = !!String(province.value || "").trim();
-      city.disabled = !hasProvince;
-      if (!hasProvince) city.value = "";
-    }
-    province.addEventListener("change", function () {
-      syncCityEnabled();
-      collectAdvanced(root);
-      state.page = 1;
-      loadList();
-    });
-    city.addEventListener("change", function () {
-      collectAdvanced(root);
-      state.page = 1;
-      loadList();
-    });
-    syncCityEnabled();
-  }
+    var wrap = root.querySelector("[data-region-cascader]");
+    if (!wrap) return;
+    var trigger = wrap.querySelector("[data-role=region-trigger]");
+    var panel = wrap.querySelector("[data-role=region-panel]");
+    var cityCol = wrap.querySelector('[data-level="2"]');
+    var label = wrap.querySelector("[data-role=region-label]");
+    if (!trigger || !panel) return;
 
-  function regionCascadeHtml() {
-    var cityValue = state.regionName || "";
-    var hasCity = SHANDONG_CITIES.indexOf(cityValue) >= 0;
-    var provinceValue = hasCity || cityValue ? "山东省" : "";
-    return (
-      '<label class="field cascade"><span>所属区域</span>' +
-      '<select name="regionProvince">' +
-      '<option value="">全部</option>' +
-      '<option value="山东省"' +
-      (provinceValue === "山东省" ? " selected" : "") +
-      ">山东省</option></select>" +
-      '<select name="regionCity"' +
-      (provinceValue ? "" : " disabled") +
-      ">" +
-      '<option value="">全部</option>' +
-      SHANDONG_CITIES.map(function (name) {
-        return (
-          '<option value="' +
-          escapeHtml(name) +
-          '"' +
-          (cityValue === name ? " selected" : "") +
-          ">" +
-          escapeHtml(name) +
-          "</option>"
-        );
-      }).join("") +
-      "</select></label>"
-    );
+    function applyRegion(next) {
+      var value = String(next || "").trim();
+      if (state.regionName === value) {
+        closeRegionCascade(root);
+        return;
+      }
+      state.regionName = value;
+      if (label) label.textContent = regionCascadeLabel();
+      closeRegionCascade(root);
+      state.page = 1;
+      loadList();
+    }
+
+    trigger.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      var open = panel.hidden;
+      panel.hidden = !open;
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    panel.addEventListener("click", function (event) {
+      event.stopPropagation();
+      var btn = event.target.closest("button[data-province],button[data-city]");
+      if (!btn) return;
+      if (btn.hasAttribute("data-city")) {
+        applyRegion(btn.getAttribute("data-city") || "");
+        return;
+      }
+      var province = btn.getAttribute("data-province") || "";
+      if (!province) {
+        if (cityCol) cityCol.hidden = true;
+        panel.querySelectorAll("[data-province]").forEach(function (item) {
+          item.classList.toggle("active", !item.getAttribute("data-province"));
+        });
+        applyRegion("");
+        return;
+      }
+      // 选中省级后展开市级，等选城市再生效
+      if (cityCol) cityCol.hidden = false;
+      panel.querySelectorAll("[data-province]").forEach(function (item) {
+        item.classList.toggle("active", item.getAttribute("data-province") === province);
+      });
+    });
+
+    if (!bindRegionCascade._docBound) {
+      document.addEventListener("click", function () {
+        var filters = document.getElementById("sourcing-filters");
+        closeRegionCascade(filters);
+      });
+      bindRegionCascade._docBound = true;
+    }
   }
 
   function collectSearch() {
@@ -863,10 +930,15 @@
   function cardTags(item) {
     var tags = [];
     if (item.siteLabel) tags.push(item.siteLabel);
-    if (item.noticeKind) tags.push(item.noticeKind);
     if (item.procurementMode) tags.push(item.procurementMode);
     if (item.regionName) tags.push(item.regionName);
-    return tags.slice(0, 4);
+    return tags.slice(0, 3);
+  }
+
+  function noticeKindPrefix(item) {
+    var kind = String((item && item.noticeKind) || "").trim();
+    if (!kind) return "";
+    return "【" + kind + "】";
   }
 
   function renderCardBody(item, tab) {
@@ -893,13 +965,8 @@
         escapeHtml(method || "—") +
         "</div>";
     } else if (tab.id === "intent") {
-      var intentClock = countdownInfo(item, { hideStartCountdown: true });
-      statusHtml =
-        '<div class="notice-card-status tone-' +
-        escapeHtml(intentClock.tone) +
-        '"><strong>' +
-        escapeHtml(intentClock.label) +
-        "</strong></div>";
+      // 采购意向不展示开始/结束状态条
+      statusHtml = "";
       fieldsHtml =
         "<div>采购预算：<b>" +
         escapeHtml(money(item.budgetAmount || item.dealAmount)) +
@@ -975,6 +1042,7 @@
     list.innerHTML = items
       .map(function (item) {
         var href = "/notices/" + encodeURIComponent(item.id);
+        var kindPrefix = noticeKindPrefix(item);
         return (
           '<a class="notice-card" href="' +
           escapeHtml(href) +
@@ -982,6 +1050,7 @@
           escapeHtml(item.id) +
           '">' +
           "<h3>" +
+          (kindPrefix ? '<span class="notice-kind-prefix">' + escapeHtml(kindPrefix) + "</span>" : "") +
           escapeHtml(item.title || "未命名公告") +
           "</h3>" +
           renderCardBody(item, tab) +
@@ -1016,8 +1085,23 @@
       })
       .then(function (body) {
         if (seq !== listRequestSeq) return;
-        if (Array.isArray(body.sites) && body.sites.length) sites = body.sites;
-        renderFilters();
+        var nextSites = Array.isArray(body.sites) ? body.sites : [];
+        if (nextSites.length) {
+          var prev = sites
+            .map(function (site) {
+              return String(site.id) + ":" + String(site.label);
+            })
+            .join("|");
+          var next = nextSites
+            .map(function (site) {
+              return String(site.id) + ":" + String(site.label);
+            })
+            .join("|");
+          if (prev !== next) {
+            sites = nextSites;
+            renderFilters();
+          }
+        }
         renderList(body);
       })
       .catch(function (error) {
@@ -1033,6 +1117,7 @@
 
   function bootList() {
     readStateFromUrl();
+    normalizeSortForTab();
     // 避免 SSR 旧列表残留造成闪烁
     var list = document.getElementById("notice-list");
     if (list) list.innerHTML = "";
@@ -1043,32 +1128,74 @@
     renderTabs();
     renderSearchBar();
     renderFilters();
-    fetchMe().then(function (account) {
-      me = account || null;
-      loadList();
+    // 列表不依赖登录态，并行探测会员，避免首屏被 /api/portal/me 阻塞
+    fetchMe();
+    loadList();
+  }
+
+  function sanitizeNoticeHtml(raw) {
+    var text = String(raw == null ? "" : raw);
+    if (!text) return "";
+    return text
+      .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1>/gi, "")
+      .replace(/on[a-z]+\s*=\s*(['"]).*?\1/gi, "")
+      .replace(/on[a-z]+\s*=\s*[^\s>]+/gi, "")
+      .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, ' $1="#"');
+  }
+
+  function maskSensitiveNoticeText(value, extras) {
+    var text = String(value == null ? "" : value);
+    if (!text) return text;
+    text = text.replace(
+      /((?:项目|采购人|采购单位)?联系人|联系方式|联系电话|手机号码?|电话(?:号码)?)\s*[:：]\s*([^\n\r<，,；;。、]{1,30})/g,
+      "$1：登录可见"
+    );
+    text = text.replace(/(?<!\d)(1[3-9]\d{9})(?!\d)/g, "登录可见");
+    // 未标注固话要求带分隔符，避免误伤项目编号
+    text = text.replace(/(?<!\d)(0\d{2,3}-\d{7,8})(?!\d)/g, "登录可见");
+    text = text.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g, "登录可见");
+    (extras || []).forEach(function (extra) {
+      var token = String(extra || "").trim();
+      if (token.length < 2 || token === "登录可见") return;
+      text = text.split(token).join("登录可见");
     });
+    return text;
+  }
+
+  function renderDetailContent(detail, loggedIn) {
+    var extras = [
+      detail.contactName,
+      detail.buyerContactName,
+      detail.contactPhone,
+      detail.buyerPhone,
+    ];
+    var html = String(detail.contentHtml || "").trim();
+    var text = String(detail.content || detail.contentText || "").trim();
+    if (!loggedIn) {
+      html = maskSensitiveNoticeText(html, extras);
+      text = maskSensitiveNoticeText(text, extras);
+    }
+    if (html) {
+      return '<div class="detail-content is-html">' + sanitizeNoticeHtml(html) + "</div>";
+    }
+    if (text) {
+      return '<div class="detail-content">' + escapeHtml(text) + "</div>";
+    }
+    return '<div class="detail-content muted">暂无正文内容</div>';
   }
 
   function renderDetailHtml(detail, loggedIn) {
-    var buyer = maskSensitive(detail.buyerName || detail.department || "—", loggedIn);
-    var amount = loggedIn ? money(detail.budgetAmount || detail.dealAmount || detail.amount) : "登录可见";
-    var contact = loggedIn
-      ? [detail.contactName, detail.contactPhone].filter(Boolean).join(" ") || "—"
-      : "登录可见";
-    var projectCode = maskSensitive(detail.projectCode || detail.projectNumber || "—", loggedIn);
-    var content = "";
-    if (detail.content) {
-      content = loggedIn
-        ? '<div class="detail-content">' + escapeHtml(detail.content) + "</div>"
-        : '<div class="detail-content is-masked"><p>正文已隐藏，登录后可查看完整公告内容。</p><p><a class="btn" href="' +
-          escapeHtml(portalLoginUrl()) +
-          '">会员登录</a></p></div>';
-    } else if (!loggedIn) {
-      content =
-        '<div class="detail-content is-masked"><p>关键信息已隐藏，登录后可查看完整公告。</p><p><a class="btn" href="' +
-        escapeHtml(portalLoginUrl()) +
-        '">会员登录</a></p></div>';
-    }
+    var buyer = detail.buyerName || detail.department || "—";
+    var amount = money(detail.budgetAmount || detail.dealAmount || detail.amount);
+    var contactName = String(detail.contactName || detail.buyerContactName || "").trim();
+    var contactPhone = String(detail.contactPhone || detail.buyerPhone || "").trim();
+    var maskedContact =
+      '<span class="contact-masked">登录可见</span> <a class="link-login" href="' +
+      escapeHtml(portalLoginUrl()) +
+      '">会员登录</a>';
+    var projectCode = detail.projectCode || detail.projectNumber || "—";
+    var projectName = detail.projectName || "—";
+    var sourceUrl = detail.sourceUrl || detail.detailUrl || "";
     return (
       "<h1>" +
       escapeHtml(detail.title || "公告详情") +
@@ -1087,6 +1214,9 @@
       "<div><span>项目编号</span><strong>" +
       escapeHtml(projectCode) +
       "</strong></div>" +
+      "<div><span>项目名称</span><strong>" +
+      escapeHtml(projectName) +
+      "</strong></div>" +
       "<div><span>区域</span><strong>" +
       escapeHtml(detail.regionName || "—") +
       "</strong></div>" +
@@ -1096,23 +1226,29 @@
       "<div><span>进度</span><strong>" +
       escapeHtml(detail.progressLabel || detail.bidStatus || "—") +
       "</strong></div>" +
+      "<div><span>开始时间</span><strong>" +
+      escapeHtml(formatDateTime(detail.startTime || detail.startAt)) +
+      "</strong></div>" +
+      "<div><span>结束时间</span><strong>" +
+      escapeHtml(formatDateTime(detail.endTime || detail.endAt)) +
+      "</strong></div>" +
       "<div><span>联系人</span><strong>" +
-      escapeHtml(contact) +
+      (loggedIn ? escapeHtml(contactName || "—") : maskedContact) +
+      "</strong></div>" +
+      "<div><span>联系方式</span><strong>" +
+      (loggedIn ? escapeHtml(contactPhone || "—") : maskedContact) +
       "</strong></div>" +
       "</div>" +
-      content +
+      renderDetailContent(detail, loggedIn) +
       '<div class="detail-actions">' +
       '<a class="btn secondary" href="/notices">返回壹采寻源</a>' +
-      (detail.sourceUrl || detail.detailUrl
-        ? '<a class="btn' +
-          (loggedIn ? "" : " ghost") +
-          '" href="' +
-          (loggedIn ? escapeHtml(detail.sourceUrl || detail.detailUrl) : escapeHtml(portalLoginUrl())) +
-          '"' +
-          (loggedIn ? ' target="_blank" rel="noopener"' : "") +
-          ">" +
-          (loggedIn ? "打开原文" : "登录后查看原文") +
-          "</a>"
+      (loggedIn && sourceUrl
+        ? '<a class="btn" href="' +
+          escapeHtml(sourceUrl) +
+          '" target="_blank" rel="noopener">打开原文</a>'
+        : "") +
+      (!loggedIn
+        ? '<a class="btn ghost" href="' + escapeHtml(portalLoginUrl()) + '">会员登录查看联系方式</a>'
         : "") +
       "</div>"
     );

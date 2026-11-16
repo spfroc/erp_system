@@ -5,7 +5,7 @@
 (function () {
   var QUADS = [
     { key: "quanyicai", title: "泉E采", siteId: "jd-quan-yicai", progress: "ongoing", prefix: "mode" },
-    { key: "qinghuicai", title: "青慧采", siteId: "jd-qing-huicai", progress: "ongoing", prefix: "mode" },
+    { key: "qinghuicai", title: "青慧采", siteId: "jd-qing-huicai", progress: "ongoing,upcoming", prefix: "mode" },
     { key: "ccgp", title: "招标信息", siteId: "sd-ccgp", progress: "ongoing", prefix: "region" },
     { key: "qlyc", title: "齐鲁云采", siteId: "sd-ggzyjyzx", progress: "ongoing", prefix: "region" },
   ];
@@ -57,7 +57,6 @@
     style.textContent =
       "#home-notice-quad{--hnq-bg:#fff;--hnq-card:#fff;--hnq-line:#e6edf5;padding:36px 0 20px;background:var(--hnq-bg);color:#1a3a5c;}" +
       "#home-notice-quad.is-dark{--hnq-bg:#0f2030;--hnq-card:#0f2030;--hnq-line:rgba(255,255,255,.1);background:var(--hnq-bg);color:#e8eef5;}" +
-      "#home-notice-quad.is-light{--hnq-bg:#fff;--hnq-card:#fff;--hnq-line:#e6edf5;background:var(--hnq-bg);color:#1a3a5c;}" +
       "#home-notice-quad .hnq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;box-sizing:border-box;}" +
       "#home-notice-quad .hnq-card{min-width:0;width:100%;max-width:100%;overflow:hidden;background:var(--hnq-card);border:1px solid var(--hnq-line);border-radius:16px;padding:16px 16px 10px;min-height:280px;display:flex;flex-direction:column;box-shadow:none;box-sizing:border-box;}" +
       "#home-notice-quad .hnq-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;min-width:0;}" +
@@ -150,13 +149,8 @@
   }
 
   function openItem(item) {
-    fetchMe().then(function (account) {
-      if (!account) {
-        showLoginToast();
-        return;
-      }
-      window.open(withSiteParam("/notices/" + encodeURIComponent(item.id)), "_blank", "noopener,noreferrer");
-    });
+    if (!item || !item.id) return;
+    window.open(withSiteParam("/notices/" + encodeURIComponent(item.id)), "_blank", "noopener,noreferrer");
   }
 
   function renderCard(root, quad, payload) {
@@ -175,11 +169,14 @@
             var lineText = (prefix ? prefix : "") + fullTitle + (date ? " " + date : "");
             var safeTitle = escapeHtml(fullTitle);
             var badge = isNew(item) ? '<span class="hnq-new" aria-label="新">New</span>' : "";
+            var detailHref = withSiteParam("/notices/" + encodeURIComponent(item.id));
             return (
               "<li>" +
-              '<a class="hnq-link" href="#" data-id="' +
+              '<a class="hnq-link" href="' +
+              escapeHtml(detailHref) +
+              '" data-id="' +
               escapeHtml(item.id) +
-              '" alt="' +
+              '" target="_blank" rel="noopener noreferrer" alt="' +
               safeTitle +
               '" title="' +
               escapeHtml(lineText) +
@@ -208,6 +205,8 @@
       listHtml;
     root.querySelectorAll("a[data-id]").forEach(function (link) {
       link.addEventListener("click", function (event) {
+        // 允许浏览器默认新开详情页；仅在无 href 时兜底
+        if (link.getAttribute("href") && link.getAttribute("href") !== "#") return;
         event.preventDefault();
         var id = link.getAttribute("data-id");
         var item = items.find(function (row) {

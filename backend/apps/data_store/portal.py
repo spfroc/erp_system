@@ -52,22 +52,59 @@ def normalize_portal_permissions(value) -> list[str]:
     return [item for item in value if item in allowed]
 
 
+def _known_site_ids() -> set[str]:
+    known = set(SITE_LABELS.keys())
+    try:
+        from .notice_site_config import list_enabled_sites
+
+        for item in list_enabled_sites():
+            sid = str(item.get("siteId") or "").strip()
+            if sid:
+                known.add(sid)
+    except Exception:
+        pass
+    return known
+
+
 def normalize_allowed_site_ids(value) -> list[str] | None:
     """None = 未配置（全部站点）；list = 白名单（空列表表示无站点）。"""
     if value is None:
         return None
     if not isinstance(value, list):
         return None
-    known = set(SITE_LABELS.keys())
+    known = _known_site_ids()
     return [str(item).strip() for item in value if str(item).strip() in known]
 
 
 def site_options(site_ids: list[str] | None = None) -> list[dict]:
-    if site_ids is None:
-        items = SITE_LABELS.items()
-    else:
-        items = ((sid, SITE_LABELS[sid]) for sid in site_ids if sid in SITE_LABELS)
-    return [{"id": key, "label": label} for key, label in items]
+    """优先使用管理后台「站点管理」启用项（含自定义名称/排序），失败时回退内置标签。"""
+    try:
+        from .notice_site_config import DEFAULT_SITES, list_enabled_sites
+
+        enabled = list_enabled_sites()
+        if not enabled:
+            enabled = [
+                {
+                    "siteId": item["siteId"],
+                    "label": item["label"],
+                    "sortOrder": item.get("sortOrder") or 0,
+                }
+                for item in DEFAULT_SITES
+            ]
+        rows = sorted(
+            enabled,
+            key=lambda item: (int(item.get("sortOrder") or 0), int(item.get("id") or 0), str(item.get("siteId") or "")),
+        )
+        if site_ids is not None:
+            allow = set(site_ids)
+            rows = [item for item in rows if item.get("siteId") in allow]
+        return [{"id": item["siteId"], "label": item["label"]} for item in rows if item.get("siteId")]
+    except Exception:
+        if site_ids is None:
+            items = SITE_LABELS.items()
+        else:
+            items = ((sid, SITE_LABELS[sid]) for sid in site_ids if sid in SITE_LABELS)
+        return [{"id": key, "label": label} for key, label in items]
 
 
 def account_site_scope(account: dict) -> list[str] | None:
@@ -817,9 +854,18 @@ def _public_crawled_notice_item(item: dict) -> dict:
     }
 
 
+PUBLIC_CRAWLED_CACHE_SECONDS = 45
+
+
 @require_http_methods(["GET"])
 def public_crawled_notices(request):
     """匿名只读：爬虫公告列表，供官网首页田字格与壹采寻源。"""
+    query = request.META.get("QUERY_STRING") or ""
+    cache_key = "public_crawled_notices:" + hashlib.md5(query.encode("utf-8")).hexdigest()
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict):
+        return JsonResponse(cached)
+
     try:
         page = max(int(request.GET.get("page") or 1), 1)
     except (TypeError, ValueError):
@@ -869,16 +915,16 @@ def public_crawled_notices(request):
             },
             status=503,
         )
-    return JsonResponse(
-        {
-            "items": [_public_crawled_notice_item(item) for item in payload.get("items") or []],
-            "total": payload.get("total") or 0,
-            "page": payload.get("page") or page,
-            "page_size": payload.get("page_size") or page_size,
-            "sites": site_options(None),
-            "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
-        }
-    )
+    body = {
+        "items": [_public_crawled_notice_item(item) for item in payload.get("items") or []],
+        "total": payload.get("total") or 0,
+        "page": payload.get("page") or page,
+        "page_size": payload.get("page_size") or page_size,
+        "sites": site_options(None),
+        "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
+    }
+    cache.set(cache_key, body, PUBLIC_CRAWLED_CACHE_SECONDS)
+    return JsonResponse(body)
 
 
 @require_http_methods(["GET"])

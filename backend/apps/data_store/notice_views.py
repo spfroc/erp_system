@@ -1315,7 +1315,8 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
             "suppliers": parsed.suppliers_json if parsed else [],
             "modelName": parsed.model_name if parsed else None,
             "confidence": _dec(parsed.confidence) if parsed else None,
-            "contentText": (raw.content_text or "")[:20000],
+            "contentText": (raw.content_text or "")[:50000],
+            "contentHtml": (raw.content_html or "")[:120000],
             "goods": [
                 {
                     "id": g.id,
