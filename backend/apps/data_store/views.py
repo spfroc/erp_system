@@ -69,6 +69,7 @@ from .library_sms import (
 from .notices import (
     ensure_default_sample_source,
     get_public_notice,
+    list_public_notice_sitemap_items,
     list_public_notices,
     mask_public_notice_sensitive,
     normalize_notice_payload,
@@ -3470,6 +3471,18 @@ def public_notices(request):
         notice_kind=(request.GET.get("noticeKind") or request.GET.get("kind") or "").strip(),
     )
     return JsonResponse(payload)
+
+
+@require_http_methods(["GET"])
+def public_notices_sitemap(request):
+    try:
+        limit = int(request.GET.get("limit") or 5000)
+    except (TypeError, ValueError):
+        limit = 5000
+    payload = list_public_notice_sitemap_items(limit=limit)
+    response = JsonResponse(payload)
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 @require_http_methods(["GET"])

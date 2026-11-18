@@ -273,10 +273,10 @@ async function handleNoticeRoutes(req, res, url, siteKey, root) {
   if (pathname === "/sitemap-notices.xml") {
     try {
       const origin = requestOrigin(req, siteKey);
-      const items = await fetchAllPublicNoticeIds(500);
+      const items = await fetchAllPublicNoticeIds(5000);
       const xml = renderNoticesSitemapXml({ origin, items });
       sendText(res, 200, xml, "application/xml; charset=utf-8", {
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "public, max-age=3600",
       });
     } catch (error) {
       sendText(res, 502, error instanceof Error ? error.message : "sitemap error");

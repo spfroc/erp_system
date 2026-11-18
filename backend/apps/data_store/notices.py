@@ -435,6 +435,76 @@ def list_public_notices(
     }
 
 
+def _iso_date(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    if hasattr(value, "isoformat"):
+        try:
+            return str(value.isoformat())[:10]
+        except Exception:
+            return ""
+    text = str(value).strip()
+    return text[:10] if len(text) >= 10 else text
+
+
+def list_public_notice_sitemap_items(*, limit: int = 5000) -> dict[str, Any]:
+    """官网 sitemap 专用：只返回 id + publishedAt，避免列表接口分页拼装。"""
+    limit = min(20000, max(1, int(limit or 5000)))
+    try:
+        from django.core.cache import cache
+        from django.db.utils import OperationalError, ProgrammingError
+
+        from .notice_models import NoticeRaw
+    except Exception:
+        cache = None
+        OperationalError = Exception  # type: ignore[misc, assignment]
+        ProgrammingError = Exception  # type: ignore[misc, assignment]
+        NoticeRaw = None  # type: ignore[assignment]
+
+    cache_key = f"public_notice_sitemap_items:{limit}"
+    if cache is not None:
+        cached = cache.get(cache_key)
+        if isinstance(cached, dict) and isinstance(cached.get("items"), list):
+            return cached
+
+    items: list[dict[str, str]] = []
+    source = "cms"
+    if NoticeRaw is not None:
+        try:
+            rows = list(
+                NoticeRaw.objects.only("id", "publish_time")
+                .order_by("-publish_time", "-id")[:limit]
+                .values_list("id", "publish_time")
+            )
+            if rows:
+                items = [
+                    {"id": str(raw_id), "publishedAt": _iso_date(published)}
+                    for raw_id, published in rows
+                    if raw_id is not None
+                ]
+                source = "crawler"
+        except (ProgrammingError, OperationalError):
+            items = []
+
+    if not items:
+        rows = list(
+            NoticeRecord.objects.filter(is_deleted=False, is_public=True)
+            .order_by("-published_at", "-updated_at", "-id")[:limit]
+            .values_list("id", "published_at")
+        )
+        items = [
+            {"id": str(row_id), "publishedAt": _iso_date(published)}
+            for row_id, published in rows
+            if row_id
+        ]
+        source = "cms"
+
+    payload = {"items": items, "total": len(items), "limit": limit, "source": source}
+    if cache is not None:
+        cache.set(cache_key, payload, timeout=3600)
+    return payload
+
+
 def get_public_notice(notice_id: str) -> dict[str, Any] | None:
     crawled = _get_public_notice_from_crawler(notice_id)
     if crawled is not None:

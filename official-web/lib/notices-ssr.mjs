@@ -72,20 +72,39 @@ export async function fetchNoticeDetail(id) {
   return body.data || null;
 }
 
-export async function fetchAllPublicNoticeIds(limit = 500) {
-  const items = [];
-  let page = 1;
-  while (items.length < limit) {
-    const payload = await fetchNoticeList({ page, search: "", kind: "" });
-    const batch = payload.items || [];
-    if (!batch.length) break;
-    items.push(...batch);
-    const total = Number(payload.total || 0);
-    if (items.length >= total || batch.length < PAGE_SIZE) break;
-    page += 1;
-    if (page > 50) break;
+export async function fetchAllPublicNoticeIds(limit = 5000) {
+  const capped = Math.min(20000, Math.max(1, Number(limit) || 5000));
+  try {
+    const payload = await fetchJson(`/api/public/notices/sitemap/?limit=${capped}`);
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    return items
+      .map((item) => ({
+        id: String(item?.id || "").trim(),
+        publishedAt: String(item?.publishedAt || item?.publishTime || "").trim(),
+      }))
+      .filter((item) => item.id)
+      .slice(0, capped);
+  } catch {
+    // 兼容旧后端：退回列表分页（慢路径）
+    const items = [];
+    let page = 1;
+    const pageSize = 50;
+    while (items.length < capped) {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      const payload = await fetchJson(`/api/public/notices/?${params.toString()}`);
+      const batch = payload.items || [];
+      if (!batch.length) break;
+      items.push(...batch);
+      const total = Number(payload.total || 0);
+      if (items.length >= total || batch.length < pageSize) break;
+      page += 1;
+      if (page > 400) break;
+    }
+    return items.slice(0, capped);
   }
-  return items.slice(0, limit);
 }
 
 function listUrl({ page = 1, kind = "", search = "" } = {}) {

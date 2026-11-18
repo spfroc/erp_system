@@ -57,6 +57,33 @@ class NoticeCollectionTests(TestCase):
         hidden = client.get("/api/public/notices/notice-private-1/")
         self.assertEqual(hidden.status_code, 404)
 
+    def test_public_notices_sitemap_is_lightweight(self):
+        public, _ = upsert_notice({
+            "id": "notice-sitemap-1",
+            "title": "Sitemap 公开公告",
+            "noticeKind": "竞价项目",
+            "isPublic": True,
+            "projectNumber": "SM-001",
+            "publishedAt": "2026-11-18T10:00:00+08:00",
+        })
+        upsert_notice({
+            "id": "notice-sitemap-private",
+            "title": "Sitemap 内部公告",
+            "noticeKind": "采购公告",
+            "isPublic": False,
+        })
+        client = Client()
+        response = client.get("/api/public/notices/sitemap/", {"limit": 100})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("items", body)
+        ids = {item["id"] for item in body["items"]}
+        self.assertIn(public.id, ids)
+        self.assertNotIn("notice-sitemap-private", ids)
+        sample = next(item for item in body["items"] if item["id"] == public.id)
+        self.assertEqual(set(sample.keys()), {"id", "publishedAt"})
+        self.assertTrue(str(sample.get("publishedAt") or "").startswith("2026-11-18"))
+
     def test_mask_public_notice_sensitive_truncates_and_locks_attachments(self):
         lines = [f"<p>正文第{i}行内容足够长</p>" for i in range(1, 21)]
         item = {
