@@ -751,6 +751,48 @@
       background: var(--green);
       border-color: var(--green);
     }
+  
+    .notice-content-block { margin-top: 4px; }
+    .notice-content-html, .notice-content-text {
+      margin-top: 8px; color: #334155; font-size: 14px; line-height: 1.7; word-break: break-word;
+    }
+    .notice-content-text { white-space: pre-wrap; }
+    .notice-content-html .jd-notice-body { display: flex; flex-direction: column; gap: 12px; }
+    .notice-content-html .jd-meta-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    }
+    .notice-content-html .jd-meta-grid div {
+      background: #f6f3ec; border: 1px solid rgba(80,56,24,.08); border-radius: 10px; padding: 10px 12px;
+    }
+    .notice-content-html .jd-meta-grid span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .notice-content-html .jd-meta-grid strong { display: block; font-size: 14px; font-weight: 650; }
+    .notice-content-html .jd-notice-section {
+      border: 1px solid rgba(80,56,24,.1); border-radius: 12px; overflow: hidden; background: #fff;
+    }
+    .notice-content-html .jd-notice-section > h2 {
+      margin: 0; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #3d2a12;
+      background: linear-gradient(180deg, #faf6ee, #f3eee4); border-bottom: 1px solid rgba(80,56,24,.08);
+    }
+    .notice-content-html .jd-section-body { padding: 12px; }
+    .notice-content-html .jd-prose { margin: 0 0 8px; }
+    .notice-content-html .jd-prose:last-child { margin-bottom: 0; }
+    .notice-content-html .jd-prose em {
+      display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px;
+      background: rgba(31,138,86,.12); color: #1f8a56; font-style: normal; font-size: 12px; font-weight: 700;
+    }
+    .notice-content-html .jd-table-wrap { overflow-x: auto; border: 1px solid rgba(80,56,24,.1); border-radius: 10px; }
+    .notice-content-html .jd-goods-table { width: 100%; border-collapse: collapse; min-width: 560px; }
+    .notice-content-html .jd-goods-table th,
+    .notice-content-html .jd-goods-table td {
+      padding: 9px 10px; border-bottom: 1px solid rgba(80,56,24,.08); text-align: left; vertical-align: top; font-size: 13px;
+    }
+    .notice-content-html .jd-goods-table th { background: #faf6ee; color: #6b5840; font-weight: 700; }
+    .notice-content-html .jd-attach-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .notice-content-html .jd-attach-link {
+      display: inline-flex; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(31,138,86,.2);
+      background: rgba(31,138,86,.06); color: #1f8a56; font-weight: 700; text-decoration: none;
+    }
+
   </style>
   <link rel="stylesheet" href="/css/flatpickr.min.css" />
 </head>
@@ -2466,12 +2508,26 @@
         info.querySelector("strong").textContent = String(value);
         grid.appendChild(info);
       });
-      if (detail.contentText) {
-        const info = document.createElement("div");
-        info.className = "info wide";
-        info.innerHTML = "<span>正文摘要</span><strong></strong>";
-        info.querySelector("strong").textContent = String(detail.contentText).slice(0, 800);
-        grid.appendChild(info);
+      const contentHtml = String(detail.contentHtml || "").trim();
+      const contentText = String(detail.contentText || detail.content || "").trim();
+      if (contentHtml || contentText) {
+        const block = document.createElement("div");
+        block.className = "info wide notice-content-block";
+        const label = document.createElement("span");
+        label.textContent = "公告正文";
+        block.appendChild(label);
+        const body = document.createElement("div");
+        body.className = contentHtml ? "notice-content-html" : "notice-content-text";
+        if (contentHtml) {
+          body.innerHTML = contentHtml
+            .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1>/gi, "")
+            .replace(/on[a-z]+\s*=\s*(['"]).*?\1/gi, "")
+            .replace(/on[a-z]+\s*=\s*[^\s>]+/gi, "");
+        } else {
+          body.textContent = contentText.slice(0, 4000);
+        }
+        block.appendChild(body);
+        grid.appendChild(block);
       }
       const sourceBtn = backdrop.querySelector("[data-role=open-source]");
       if (!detail.sourceUrl) {

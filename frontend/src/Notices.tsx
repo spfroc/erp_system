@@ -601,7 +601,7 @@ export function Notices({
         </div>
         <div className="table">
           <div className="table-row notice-table head">
-            <span>名称/编号</span>
+            <span>公告名称/编号</span>
             <span>站点/区域</span>
             <span>采购单位</span>
             <span>成交供应商</span>
@@ -618,12 +618,12 @@ export function Notices({
             <div className="empty-hint">暂无公告数据，请先运行 notice_crawler 抓取。</div>
           )}
           {items.map((item) => {
-            const displayName = item.projectName || item.title || "";
+            const displayName = item.title || "";
             const displayCode = item.projectCode || item.noticeKey || "";
             return (
               <div className="table-row notice-table" key={item.id}>
                 <span className="notice-main-cell">
-                  <CopyableLine text={displayName} label="项目名称">
+                  <CopyableLine text={displayName} label="公告名称">
                     <strong>{text(displayName)}</strong>
                   </CopyableLine>
                   {displayCode ? (

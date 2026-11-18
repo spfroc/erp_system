@@ -57,7 +57,8 @@ EXTRACT_SCHEMA: Dict[str, Any] = {
 }
 
 # 尚未产生成交结果的公告种类：不解析成交供应商相关字段
-NO_DEAL_SUPPLIER_KINDS = frozenset({"采购公告", "竞价公告", "意向公开", "单一来源公示"})
+# 单一来源公示的「拟定唯一供应商」仍保留在 deal_supplier，便于列表展示
+NO_DEAL_SUPPLIER_KINDS = frozenset({"采购公告", "竞价公告", "意向公开"})
 
 
 def strip_deal_supplier_if_pre_result(parsed: Dict[str, Any]) -> Dict[str, Any]:

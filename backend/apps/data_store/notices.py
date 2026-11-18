@@ -224,6 +224,15 @@ def truncate_notice_content_preview(value: str, *, max_lines: int = _GUEST_CONTE
     text = str(value or "").strip()
     if not text or max_lines <= 0:
         return text
+    # 泉E采/青慧采组装正文：按完整区块截断，避免半截 HTML
+    if 'class="jd-notice-body"' in text or "class='jd-notice-body'" in text:
+        chunks = re.findall(
+            r'(?:<div class="jd-meta-grid">[\s\S]*?</div>)|(?:<section class="jd-notice-section">[\s\S]*?</section>)',
+            text,
+        )
+        if chunks:
+            kept = chunks[: max(2, min(max_lines, 4))]
+            return '<div class="jd-notice-body">' + "".join(kept) + "</div>"
     parts = _HTML_BLOCK_SPLIT_RE.split(text)
     if len(parts) <= 1:
         lines = [line for line in re.split(r"\r\n|\r|\n", text) if line.strip()]

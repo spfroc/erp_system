@@ -14,6 +14,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
+from .jd_notice_html import build_jd_notice_content_html, clean_jd_content_text
 from .notice_site_config import (
     list_enabled_sites,
     mapped_category_options,
@@ -1353,6 +1354,14 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
     )
     contact_name, contact_phone = _resolve_buyer_contact(raw, parsed)
     contact_joined = " ".join(x for x in (contact_name, contact_phone) if x) or None
+    content_html = (raw.content_html or "").strip()
+    content_text = (raw.content_text or "").strip()
+    # 泉E采/青慧采：详情是 JSON，组装可读 HTML；并去掉 content_text 里的结构化 JSON 尾巴
+    if raw.site_id in JD_SITE_IDS:
+        detail_json = _safe_json_dict(raw, "detail_json")
+        if not content_html:
+            content_html = build_jd_notice_content_html(detail_json)
+        content_text = clean_jd_content_text(content_text)
     base.update(
         {
             "buyerContactName": contact_name,
@@ -1367,8 +1376,8 @@ def _serialize_detail(raw: NoticeRaw, parsed: NoticeParsed | None, goods: list[N
             "suppliers": parsed.suppliers_json if parsed else [],
             "modelName": parsed.model_name if parsed else None,
             "confidence": _dec(parsed.confidence) if parsed else None,
-            "contentText": (raw.content_text or "")[:50000],
-            "contentHtml": (raw.content_html or "")[:120000],
+            "contentText": content_text[:50000],
+            "contentHtml": content_html[:120000],
             "goods": [
                 {
                     "id": g.id,
