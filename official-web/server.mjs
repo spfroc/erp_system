@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import {
   fetchAllPublicNoticeIds,
@@ -10,6 +11,49 @@ import {
 } from "./lib/notices-ssr.mjs";
 import { fetchOfficialHomeConfig, injectHomeConfigIntoHtml } from "./lib/home-config.mjs";
 import { fetchOfficialSeo, getSiteSeo, requestOrigin } from "./lib/seo.mjs";
+
+const CRAWLER_UA_RE =
+  /googlebot|bingbot|baiduspider|yandex|duckduck|slurp|bytespider|sogou|360spider|semrush|ahrefs|petalbot|applebot|msnbot|curl|wget|python-requests|httpclient|scrapy|sitemap/i;
+
+function isBrowserDocumentRequest(req, url) {
+  if (url.searchParams.get("raw") === "1" || url.searchParams.get("format") === "xml") return false;
+  const ua = String(req.headers["user-agent"] || "");
+  if (CRAWLER_UA_RE.test(ua)) return false;
+  const dest = String(req.headers["sec-fetch-dest"] || "").toLowerCase();
+  if (dest === "document") return true;
+  const mode = String(req.headers["sec-fetch-mode"] || "").toLowerCase();
+  if (mode === "navigate") return true;
+  const accept = String(req.headers.accept || "");
+  const first = accept.split(",")[0]?.trim() || "";
+  return first.startsWith("text/html");
+}
+
+function sendGzipText(req, res, status, text, type, extraHeaders = {}) {
+  if (res.headersSent) return;
+  const raw = Buffer.from(String(text || ""), "utf8");
+  const acceptEncoding = String(req.headers["accept-encoding"] || "");
+  const headers = {
+    "Content-Type": type,
+    Vary: "Accept-Encoding",
+    ...extraHeaders,
+  };
+  if (/\bgzip\b/i.test(acceptEncoding) && raw.length > 1024) {
+    zlib.gzip(raw, (error, body) => {
+      if (res.headersSent) return;
+      if (error) {
+        res.writeHead(status, headers);
+        res.end(raw);
+        return;
+      }
+      res.writeHead(status, { ...headers, "Content-Encoding": "gzip", "Content-Length": body.length });
+      res.end(body);
+    });
+    return;
+  }
+  headers["Content-Length"] = raw.length;
+  res.writeHead(status, headers);
+  res.end(raw);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5180);
@@ -272,11 +316,42 @@ async function handleNoticeRoutes(req, res, url, siteKey, root) {
 
   if (pathname === "/sitemap-notices.xml") {
     try {
+      // 浏览器直接打开大 XML 会卡死渲染树；给人看说明页，爬虫仍拿 XML
+      if (isBrowserDocumentRequest(req, url)) {
+        const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,follow" />
+  <title>公告 Sitemap</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:42rem;margin:48px auto;padding:0 16px;line-height:1.6;color:#1f2937}
+    code{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+    a{color:#0f6b40}
+  </style>
+</head>
+<body>
+  <h1>公告站点地图</h1>
+  <p>此地址供<strong>搜索引擎爬虫</strong>抓取公告列表与详情，通常含数千条 URL。</p>
+  <p>浏览器直接打开原始 XML 容易卡顿，因此这里显示说明页。</p>
+  <p><a href="/sitemap-notices.xml?raw=1">下载原始 XML</a>（站长平台提交请仍用 <code>/sitemap-notices.xml</code>，不要带参数）</p>
+</body>
+</html>`;
+        sendText(res, 200, html, "text/html; charset=utf-8", {
+          "Cache-Control": "private, no-store",
+          Vary: "User-Agent, Accept, Sec-Fetch-Dest, Sec-Fetch-Mode",
+        });
+        return true;
+      }
       const origin = requestOrigin(req, siteKey);
       const items = await fetchAllPublicNoticeIds(5000);
       const xml = renderNoticesSitemapXml({ origin, items });
-      sendText(res, 200, xml, "application/xml; charset=utf-8", {
+      // attachment：避免浏览器内联渲染巨型 XML 树；爬虫只解析正文，不受影响
+      sendGzipText(req, res, 200, xml, "application/xml; charset=utf-8", {
         "Cache-Control": "public, max-age=3600",
+        "Content-Disposition": 'attachment; filename="sitemap-notices.xml"',
+        Vary: "Accept-Encoding, User-Agent, Accept, Sec-Fetch-Dest, Sec-Fetch-Mode",
       });
     } catch (error) {
       sendText(res, 502, error instanceof Error ? error.message : "sitemap error");

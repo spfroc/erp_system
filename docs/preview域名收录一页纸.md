@@ -57,4 +57,4 @@ https://preview.qinghuicai.cn/    + /sitemap.xml + /sitemap-notices.xml
 
 ## 注意（一句话）
 
-验证期 **www 与 preview 并存**；站长平台请直接提交 preview 的 sitemap，不要只依赖 robots。切换正式域后，再把 preview 降权或停收录。
+验证期 **www 与 preview 并存**；站长平台请直接提交 preview 的 sitemap，不要只依赖 robots。浏览器打开 `/sitemap-notices.xml` 会看到说明页（避免卡顿），爬虫拿到的仍是 XML。切换正式域后，再把 preview 降权或停收录。
