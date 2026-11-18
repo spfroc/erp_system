@@ -44,7 +44,8 @@ const purchaseOrderTransitions: StatusTransitionMap<PurchaseOrder["status"]> = {
   已下单: ["部分到货", "已完成", "已取消"],
   部分到货: ["已完成", "已取消"],
   已完成: [],
-  已取消: [],
+  // 允许从误操作取消恢复到业务状态
+  已取消: ["待下单", "已下单", "部分到货", "已完成"],
 };
 
 const invoiceTransitions: StatusTransitionMap<Invoice["status"]> = {

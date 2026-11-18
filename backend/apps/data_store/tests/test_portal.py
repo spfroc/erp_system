@@ -4,7 +4,17 @@ from django.contrib.auth.hashers import make_password
 from django.core import signing
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
-from apps.data_store.models import CustomerAccountRecord, NoticeRecord
+from datetime import timedelta
+
+from django.utils import timezone
+
+from apps.data_store.models import (
+    CustomerAccountRecord,
+    NoticeRecord,
+    OrganizationRecord,
+    PlatformAccountRecord,
+    ProjectRecord,
+)
 from apps.data_store.portal import (
     PORTAL_COOKIE,
     PORTAL_WECHAT_LOGIN_SALT,
@@ -170,6 +180,95 @@ class PortalAccountTests(TestCase):
         session.save()
         response = client.get("/api/portal/me/")
         self.assertEqual(response.status_code, 401)
+
+
+class PortalPlatformLoginTests(TestCase):
+    def setUp(self):
+        self.org = OrganizationRecord.objects.create(
+            id="org-pa-demo",
+            name="平台登录演示公司",
+            entity_type="客户",
+            status="正常",
+            data={"id": "org-pa-demo", "name": "平台登录演示公司"},
+        )
+        self.platform_account = PlatformAccountRecord.objects.create(
+            id="pa-demo-1",
+            customer_org_id=self.org.id,
+            platform="泉E采",
+            account_name="qec-demo",
+            current_status="服务中",
+            data={
+                "id": "pa-demo-1",
+                "customerOrgId": self.org.id,
+                "platform": "泉E采",
+                "accountName": "qec-demo",
+                "accountPasswordMasked": "PaLogin#123",
+                "currentStatus": "服务中",
+            },
+        )
+
+    def _create_service_project(self, *, end_offset_days: int, status: str = "服务中"):
+        end = (timezone.localdate() + timedelta(days=end_offset_days)).isoformat()
+        return ProjectRecord.objects.create(
+            id=f"proj-pa-{end_offset_days}-{status}",
+            project_no=f"SP-{end_offset_days}",
+            name="演示服务项目",
+            type="服务项目",
+            customer_org_id=self.org.id,
+            status=status,
+            data={
+                "id": f"proj-pa-{end_offset_days}-{status}",
+                "type": "服务项目",
+                "customerOrgId": self.org.id,
+                "status": status,
+                "serviceEndDate": end,
+            },
+        )
+
+    def test_platform_login_wrong_password(self):
+        client = Client()
+        response = client.post(
+            "/api/portal/login/platform/",
+            data={"accountName": "qec-demo", "password": "wrong"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json().get("detail"), "账号或密码错误。")
+
+    def test_platform_login_service_expired(self):
+        self._create_service_project(end_offset_days=-3, status="服务到期结束")
+        client = Client()
+        response = client.post(
+            "/api/portal/login/platform/",
+            data={"accountName": "qec-demo", "password": "PaLogin#123"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get("detail"), "服务已过期。")
+
+    def test_platform_login_success_creates_shadow_account(self):
+        self._create_service_project(end_offset_days=30, status="服务中")
+        client = Client()
+        response = client.post(
+            "/api/portal/login/platform/",
+            data={"accountName": "qec-demo", "password": "PaLogin#123"},
+            content_type="application/json",
+            HTTP_X_FORWARDED_HOST="portal.qlyc.co",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(PORTAL_COOKIE, response.cookies)
+        body = response.json()["data"]
+        self.assertEqual(body.get("customerOrgId"), self.org.id)
+        self.assertIn("portal.notice.view", body.get("permissions") or [])
+        shadow = CustomerAccountRecord.objects.filter(
+            is_deleted=False,
+            data__platformAccountId=self.platform_account.id,
+        ).first()
+        self.assertIsNotNone(shadow)
+        me = client.get("/api/portal/me/")
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["data"]["id"], shadow.id)
 
 
 @override_settings(

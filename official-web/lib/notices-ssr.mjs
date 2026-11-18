@@ -175,14 +175,26 @@ function renderDetailArticle(item, { masked = true } = {}) {
     `<div><span>联系人</span><strong>${escapeHtml(contact)}</strong></div>` +
     "</div>" +
     (masked
-      ? '<div class="detail-content is-masked"><p>正文与关键信息已隐藏，登录后可查看完整公告。</p><p><a class="btn" href="/portal/?from=site">会员登录</a></p></div>'
+      ? (() => {
+          const raw = String(item.contentHtml || item.content || item.contentText || "").trim();
+          const preview = raw
+            ? escapeHtml(raw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 480)
+            : "登录后可查看完整公告正文与附件。";
+          return (
+            '<div class="detail-content-clamp">' +
+            `<div class="detail-content">${preview || "登录后可查看完整公告正文与附件。"}</div>` +
+            '<div class="detail-content-fade" aria-hidden="true"></div>' +
+            '<div class="detail-login-gate"><p>登录后查看完整公告正文与附件</p>' +
+            '<a class="btn" href="/portal/?from=site">会员登录</a></div></div>'
+          );
+        })()
       : item.content
         ? `<div class="detail-content">${escapeHtml(item.content)}</div>`
         : "") +
     '<div class="detail-actions">' +
     '<a class="btn secondary" href="/notices">返回壹采寻源</a>' +
     (masked
-      ? '<a class="btn" href="/portal/?from=site">登录后查看原文</a>'
+      ? '<a class="btn" href="/portal/?from=site">登录后查看全文与附件</a>'
       : item.detailUrl || item.sourceUrl
         ? `<a class="btn" href="${escapeAttr(item.detailUrl || item.sourceUrl)}" target="_blank" rel="noreferrer">打开原文</a>`
         : "") +
@@ -383,22 +395,16 @@ export async function renderNoticeDetailPage({ req, siteKey, shellHtml, id }) {
   }
 
   const title = `${item.title || "公告详情"} | 壹采寻源 | ${seo.brand}`;
+  const platform = item.siteLabel || item.publisher || seo.brand || "";
+  const noticeKind = item.noticeKind || "采购公告";
+  const buyer = item.department || item.buyerName || "";
+  const region = String(item.regionName || "").trim();
   const description = truncateText(
-    `${item.noticeKind || "采购公告"} ${item.regionName || ""} ${item.title || ""}`.trim() || seo.description,
+    [platform, noticeKind, buyer, item.title].filter(Boolean).join(" ").trim() || seo.description,
   );
   const canonical = absoluteUrl(origin, detailUrl(item.id));
-  const place = item.regionName || seo.geoPlacename || "";
-  const keywords = splitSeoKeywords(
-    item.title,
-    item.noticeKind,
-    item.procurementMode,
-    item.regionName,
-    item.projectNumber || item.projectCode,
-    "壹采寻源",
-    seo.brand,
-    seo.keywords || "",
-    place,
-  );
+  // 详情 SEO 关键词：平台、公告类型、采购单位；有所在地市时一并加入
+  const keywords = splitSeoKeywords(platform, noticeKind, buyer, region);
   const meta = buildMetaTags({
     title,
     description,
@@ -409,9 +415,9 @@ export async function renderNoticeDetailPage({ req, siteKey, shellHtml, id }) {
     ogImageUrl: seo.ogImageUrl || "",
     baiduSiteVerification: seo.baiduSiteVerification || "",
     googleSiteVerification: seo.googleSiteVerification || "",
-    geoRegion: seo.geoRegion || "",
-    geoPlacename: place || seo.geoPlacename || "",
-    geoPosition: seo.geoPosition || "",
+    geoRegion: "",
+    geoPlacename: "",
+    geoPosition: "",
   });
   const articleJsonLd = {
     "@context": "https://schema.org",

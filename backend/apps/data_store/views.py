@@ -70,6 +70,7 @@ from .notices import (
     ensure_default_sample_source,
     get_public_notice,
     list_public_notices,
+    mask_public_notice_sensitive,
     normalize_notice_payload,
     notice_defaults,
     run_collection_source,
@@ -3476,6 +3477,15 @@ def public_notice_detail(request, notice_id: str):
     item = get_public_notice(notice_id)
     if not item:
         return JsonResponse({"detail": "Notice not found."}, status=404)
+    # 未登录：正文仅预览、屏蔽附件下载，并遮蔽联系人/电话等敏感信息
+    try:
+        from .portal import current_portal_account
+
+        logged_in = current_portal_account(request) is not None
+    except Exception:
+        logged_in = False
+    if not logged_in:
+        item = mask_public_notice_sensitive(item)
     return JsonResponse({"data": item})
 
 

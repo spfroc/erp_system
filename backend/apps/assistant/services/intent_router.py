@@ -23,6 +23,8 @@ notice.search：若用户给出 SDGP/SCJJ 等项目编号，必须传 params.pro
 平台账号：erp.platform_account.search（keyword=客户名；要密码时 include_password=true）；
 erp.platform_account.create（可用 text 识别添加）；erp.platform_account.update。
 客户基础信息：erp.customer.search；erp.customer.create（可用 text；重复时返回对照，确认后传 id+confirm_update=true 更新）。
+按订单编号改状态（需确认）：erp.order.update_status（order_no+status；可选 order_type=sales|purchase|service）；
+也可直接用 erp.sales_order.update_status / erp.purchase_order.update_status / erp.service_order.update_status。
 其它：deal.suppliers；erp.customer.expiry；erp.project.status；navigation.find。
 erp.customer.expiry 参数：within_months/within_days；include_overdue（仅用户说「过期」时 true）；
 service_type=周期|按次；exclude_renewed=true 表示排除已续费客户；不要把整句说明塞进 customer/keyword。
@@ -38,6 +40,8 @@ _RULE_FASTPATH_REASONS = frozenset(
         "refuse_dangerous_write",
         # 项目编号公告查询必须精确，不交给模型以免漏参扫全库
         "notice_project_code",
+        # 订单改状态已从编号/目标状态抽好参数，避免模型改写成查询
+        "order_status_update",
     }
 )
 

@@ -187,6 +187,50 @@ def exchange_oauth_code(code: str) -> dict[str, str]:
     }
 
 
+def create_temp_scene_qrcode(*, scene_str: str, expire_seconds: int = 180) -> dict[str, Any]:
+    """创建临时场景二维码（扫码带 EventKey，用于 PC 扫码登录）。"""
+    scene = str(scene_str or "").strip()
+    if not scene or not mp_configured():
+        return {}
+    # scene_str 最长 64 字节
+    scene = scene.encode("utf-8")[:64].decode("utf-8", errors="ignore")
+    expire_seconds = max(30, min(int(expire_seconds or 180), 2592000))
+    token = get_access_token()
+    if not token:
+        return {}
+    payload = _http_json(
+        f"https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token={token}",
+        data={
+            "expire_seconds": expire_seconds,
+            "action_name": "QR_STR_SCENE",
+            "action_info": {"scene": {"scene_str": scene}},
+        },
+    )
+    errcode = int(payload.get("errcode") or 0)
+    if errcode == 40001:
+        token = get_access_token(force=True)
+        if token:
+            payload = _http_json(
+                f"https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token={token}",
+                data={
+                    "expire_seconds": expire_seconds,
+                    "action_name": "QR_STR_SCENE",
+                    "action_info": {"scene": {"scene_str": scene}},
+                },
+            )
+            errcode = int(payload.get("errcode") or 0)
+    ticket = str(payload.get("ticket") or "").strip()
+    if not ticket or errcode:
+        logger.warning("wechat_mp create qrcode failed: %s", payload)
+        return {}
+    return {
+        "ticket": ticket,
+        "expire_seconds": int(payload.get("expire_seconds") or expire_seconds),
+        "url": str(payload.get("url") or ""),
+        "qrImageUrl": f"https://mp.weixin.qq.com/cgi-bin/showqrcode?{urlencode({'ticket': ticket})}",
+    }
+
+
 def send_template_message(
     *,
     openid: str,

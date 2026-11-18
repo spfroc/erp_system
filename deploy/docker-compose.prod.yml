@@ -123,10 +123,13 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=prod.host
+      # priority 高于历史安全快照容器，避免抢走 preview / 门户流量
       - traefik.http.routers.yzc-official.rule=Host(`preview.qlyc.co`) || Host(`yizhichan.qlyc.co`) || Host(`preview.qinghuicai.cn`)
+      - traefik.http.routers.yzc-official.priority=20000
       - traefik.http.routers.yzc-official.entrypoints=websecure
       - traefik.http.routers.yzc-official.tls.certresolver=letsencrypt
       - traefik.http.routers.yzc-portal.rule=Host(`portal.qlyc.co`)
+      - traefik.http.routers.yzc-portal.priority=20000
       - traefik.http.routers.yzc-portal.entrypoints=websecure
       - traefik.http.routers.yzc-portal.tls.certresolver=letsencrypt
       - traefik.http.routers.yzc-portal.service=yzc-official

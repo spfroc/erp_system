@@ -9,10 +9,10 @@
     {
       id: "opportunity",
       label: "商机大厅",
-      progress: "ongoing,upcoming",
-      noticeKinds: "",
-      excludeNoticeKinds:
-        "意向公开,成交公告,成交结果公告,结果公告,失败公告,终止公告,废标公告,验收公告,合同公告",
+      progress: "ongoing,upcoming,ended",
+      // 正向包含开放类公告，避免 exclude 多类型时 SQL 过重
+      noticeKinds: "采购公告,竞价公告,询比公告,更正公告,单一来源公示,竞价项目",
+      excludeNoticeKinds: "",
       kindLabel: "采购方式",
       kindChips: [
         { value: "", label: "全部" },
@@ -22,7 +22,7 @@
         { value: "招标", label: "招标" },
       ],
       kindMode: "procurementMode",
-      hint: "进行中 / 将开始的采购机会",
+      hint: "进行中 / 未开始 / 已结束的采购机会",
     },
     {
       id: "result",
@@ -51,7 +51,7 @@
   ];
   var PROGRESS_CHIPS = [
     { value: "", label: "全部" },
-    { value: "upcoming", label: "将开始" },
+    { value: "upcoming", label: "未开始" },
     { value: "ongoing", label: "进行中" },
     { value: "ended", label: "已结束" },
   ];
@@ -63,8 +63,8 @@
     { value: "500000-", label: "50万以上" },
   ];
   var SORT_FIELDS_BASE = [
-    { field: "publishTime", label: "发布时间" },
-    { field: "endTime", label: "结束时间" },
+    { field: "publishTime", label: "公告发布时间" },
+    { field: "endTime", label: "截止时间" },
   ];
   var SORT_FIELDS_WITH_START = SORT_FIELDS_BASE.concat([{ field: "startTime", label: "开始时间" }]);
   var ALLOWED_SORTS = {
@@ -115,6 +115,44 @@
     if (!value) return "—";
     var text = String(value);
     return text.length >= 10 ? text.slice(0, 10) : text;
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "—";
+    var text = String(value).trim().replace("T", " ");
+    if (text.length >= 16) return text.slice(0, 16);
+    if (text.length >= 10) return text.slice(0, 10);
+    return text;
+  }
+
+  var SHANDONG_CITIES = [
+    "济南",
+    "青岛",
+    "淄博",
+    "枣庄",
+    "东营",
+    "烟台",
+    "潍坊",
+    "济宁",
+    "泰安",
+    "威海",
+    "日照",
+    "临沂",
+    "德州",
+    "聊城",
+    "滨州",
+    "菏泽",
+  ];
+
+  function methodLabel(item) {
+    var blob = [item.procurementMode, item.noticeKind, item.title].join(" ");
+    if (/反拍|电子反拍/.test(blob)) return "反拍";
+    if (/询比/.test(blob)) return "询比";
+    if (/竞价/.test(blob)) return "竞价";
+    if (/招标|磋商|谈判|单一来源|邀请招标|公开招标/.test(blob)) return "招标";
+    var mode = String(item.procurementMode || "").trim();
+    if (mode) return mode.replace(/^普通/, "");
+    return "";
   }
 
   function money(value) {
@@ -209,7 +247,8 @@
     return /验收|合同公告|成交结果|结果公告|终止|废标|失败公告|成交公告/.test(text);
   }
 
-  function countdownInfo(item) {
+  function countdownInfo(item, options) {
+    var opts = options || {};
     var now = Date.now();
     var start = parseNoticeTime(item.startTime);
     var end = parseNoticeTime(item.endTime);
@@ -238,7 +277,11 @@
     if (status === "upcoming" || label === "未开始") {
       return {
         label: "未开始",
-        text: start ? "距开始 " + formatCountdown(start - now) : "即将开始",
+        text: opts.hideStartCountdown
+          ? ""
+          : start
+            ? "距开始 " + formatCountdown(start - now)
+            : "即将开始",
         tone: "upcoming",
       };
     }
@@ -323,7 +366,21 @@
   }
 
   function currentSortFields() {
+    var tab = currentTab();
+    if (tab && tab.id === "intent") {
+      return [{ field: "publishTime", label: "发布时间" }];
+    }
     return canSortByStartTime() ? SORT_FIELDS_WITH_START : SORT_FIELDS_BASE;
+  }
+
+  function normalizeSortForTab() {
+    var fields = currentSortFields().map(function (item) {
+      return item.field;
+    });
+    var field = sortFieldOf(state.sort);
+    if (field && fields.indexOf(field) < 0) {
+      state.sort = DEFAULT_SORT;
+    }
   }
 
   function sortFieldOf(sortValue) {
@@ -366,42 +423,39 @@
     if (!canSortByStartTime() && sortFieldOf(state.sort) === "startTime") {
       state.sort = DEFAULT_SORT;
     }
+    normalizeSortForTab();
   }
 
-  function renderSortRow() {
+  function renderSortChips() {
     var fields = currentSortFields();
-    return (
-      '<div class="sourcing-filter-row">' +
-      '<label class="label">排序</label>' +
-      '<div class="sourcing-chips">' +
-      fields
-        .map(function (item) {
-          var active = sortFieldOf(state.sort) === item.field;
-          var arrow = sortArrow(item.field);
-          var title =
-            !active
-              ? "点击按" + item.label + "正序"
-              : sortDirOf(state.sort) === "asc"
-                ? "当前正序，点击改为倒序"
-                : "当前倒序，点击关闭排序";
-          return (
-            '<button type="button" class="sourcing-chip sourcing-sort-chip' +
-            (active ? " active" : "") +
-            '" data-sort-field="' +
-            escapeHtml(item.field) +
-            '" title="' +
-            escapeHtml(title) +
-            '" aria-label="' +
-            escapeHtml(title) +
-            '">' +
-            escapeHtml(item.label) +
-            (arrow ? '<span class="sort-arrow" aria-hidden="true">' + arrow + "</span>" : "") +
-            "</button>"
-          );
-        })
-        .join("") +
-      "</div></div>"
-    );
+    return fields
+      .map(function (item) {
+        var active = sortFieldOf(state.sort) === item.field;
+        var arrow = sortArrow(item.field);
+        var title =
+          !active
+            ? "点击按" + item.label + "正序"
+            : sortDirOf(state.sort) === "asc"
+              ? "当前正序，点击改为倒序"
+              : "当前倒序，点击关闭排序";
+        return (
+          '<button type="button" class="sourcing-sort-link' +
+          (active ? " active" : "") +
+          '" data-sort-field="' +
+          escapeHtml(item.field) +
+          '" title="' +
+          escapeHtml(title) +
+          '" aria-label="' +
+          escapeHtml(title) +
+          '">' +
+          escapeHtml(item.label) +
+          (arrow
+            ? '<span class="sort-arrow" aria-hidden="true">' + arrow + "</span>"
+            : '<span class="sort-arrow muted" aria-hidden="true">↕</span>') +
+          "</button>"
+        );
+      })
+      .join("");
   }
 
   function applyBudgetRange(params) {
@@ -471,10 +525,126 @@
 
   function collectAdvanced(root) {
     if (!root) return;
-    var region = root.querySelector("[name=regionName]");
-    var buyerName = root.querySelector("[name=buyerName]");
-    if (region) state.regionName = (region.value || "").trim();
-    if (buyerName) state.buyerName = (buyerName.value || "").trim();
+    // 区域由级联组件直接写入 state.regionName
+    state.buyerName = "";
+  }
+
+  function regionCascadeLabel() {
+    var city = state.regionName || "";
+    if (city && SHANDONG_CITIES.indexOf(city) >= 0) return "山东省 / " + city;
+    if (city) return city;
+    return "全部";
+  }
+
+  function regionCascadeHtml() {
+    var city = state.regionName || "";
+    var provinceOpen = city && SHANDONG_CITIES.indexOf(city) >= 0;
+    var labelText = city ? regionCascadeLabel() : "请选择";
+    return (
+      '<div class="field region-cascader sourcing-region-inline" data-region-cascader>' +
+      '<span class="field-label">所属区域：</span>' +
+      '<button type="button" class="region-cascader-trigger" data-role="region-trigger" aria-haspopup="listbox" aria-expanded="false">' +
+      '<em data-role="region-label">' +
+      escapeHtml(labelText) +
+      "</em><i></i></button>" +
+      '<div class="region-cascader-panel" data-role="region-panel" hidden>' +
+      '<div class="region-cascader-col" data-level="1">' +
+      '<button type="button" class="region-cascader-option' +
+      (!city ? " active" : "") +
+      '" data-province="">全部</button>' +
+      '<button type="button" class="region-cascader-option' +
+      (provinceOpen || city === "山东省" ? " active" : "") +
+      '" data-province="山东省">山东省</button>' +
+      "</div>" +
+      '<div class="region-cascader-col" data-level="2"' +
+      (provinceOpen ? "" : " hidden") +
+      ">" +
+      SHANDONG_CITIES.map(function (name) {
+        return (
+          '<button type="button" class="region-cascader-option' +
+          (city === name ? " active" : "") +
+          '" data-city="' +
+          escapeHtml(name) +
+          '">' +
+          escapeHtml(name) +
+          "</button>"
+        );
+      }).join("") +
+      "</div></div></div>"
+    );
+  }
+
+  function closeRegionCascade(root) {
+    if (!root) return;
+    var panel = root.querySelector("[data-role=region-panel]");
+    var trigger = root.querySelector("[data-role=region-trigger]");
+    if (panel) panel.hidden = true;
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function bindRegionCascade(root) {
+    if (!root) return;
+    var wrap = root.querySelector("[data-region-cascader]");
+    if (!wrap) return;
+    var trigger = wrap.querySelector("[data-role=region-trigger]");
+    var panel = wrap.querySelector("[data-role=region-panel]");
+    var cityCol = wrap.querySelector('[data-level="2"]');
+    var label = wrap.querySelector("[data-role=region-label]");
+    if (!trigger || !panel) return;
+
+    function applyRegion(next) {
+      var value = String(next || "").trim();
+      if (state.regionName === value) {
+        closeRegionCascade(root);
+        return;
+      }
+      state.regionName = value;
+      if (label) label.textContent = value ? regionCascadeLabel() : "请选择";
+      closeRegionCascade(root);
+      state.page = 1;
+      loadList();
+    }
+
+    trigger.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      var open = panel.hidden;
+      panel.hidden = !open;
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    panel.addEventListener("click", function (event) {
+      event.stopPropagation();
+      var btn = event.target.closest("button[data-province],button[data-city]");
+      if (!btn) return;
+      if (btn.hasAttribute("data-city")) {
+        applyRegion(btn.getAttribute("data-city") || "");
+        return;
+      }
+      var province = btn.getAttribute("data-province") || "";
+      if (!province) {
+        if (cityCol) cityCol.hidden = true;
+        panel.querySelectorAll("[data-province]").forEach(function (item) {
+          item.classList.toggle("active", !item.getAttribute("data-province"));
+        });
+        applyRegion("");
+        return;
+      }
+      // 选中省级后展开市级，等选城市再生效
+      if (cityCol) cityCol.hidden = false;
+      panel.querySelectorAll("[data-province]").forEach(function (item) {
+        item.classList.toggle("active", item.getAttribute("data-province") === province);
+      });
+    });
+
+    if (!bindRegionCascade._docBound) {
+      document.addEventListener("click", function () {
+        // 区域级联在结果工具栏，不在 filters
+        closeRegionCascade(document.getElementById("sourcing-resultbar"));
+        closeRegionCascade(document.getElementById("sourcing-filters"));
+      });
+      bindRegionCascade._docBound = true;
+    }
   }
 
   function collectSearch() {
@@ -618,7 +788,7 @@
       })
     );
     var html = "";
-    html += chipRow("站点", siteChips, state.siteId, "siteId");
+    html += chipRow("采购平台", siteChips, state.siteId, "siteId");
     if (tab.kindChips && tab.kindChips.length) {
       var activeKind = tab.kindMode === "procurementMode" ? state.procurementMode : state.resultKind;
       html += chipRow(tab.kindLabel || "公告类型", tab.kindChips, activeKind, tab.kindMode);
@@ -627,18 +797,6 @@
       html += chipRow("状态", PROGRESS_CHIPS, state.progress, "progress");
     }
     html += chipRow("采购预算", BUDGET_CHIPS, state.budgetRange, "budgetRange");
-    html += renderSortRow();
-    html +=
-      '<div class="sourcing-filter-row">' +
-      '<label class="label">更多条件</label>' +
-      '<div class="sourcing-advanced">' +
-      '<label class="field"><span>所属区域</span><input name="regionName" type="text" placeholder="区域" value="' +
-      escapeHtml(state.regionName) +
-      '" /></label>' +
-      '<label class="field"><span>采购单位</span><input name="buyerName" type="text" placeholder="采购单位" value="' +
-      escapeHtml(state.buyerName) +
-      '" /></label>' +
-      "</div></div>";
     root.innerHTML = html;
     bindChips(root);
     root.querySelectorAll("input").forEach(function (input) {
@@ -657,20 +815,71 @@
     if (top && top.scrollIntoView) top.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function bindToolbarControls(root, totalPages) {
+    if (!root) return;
+    root.querySelectorAll("[data-sort-field]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        cycleSortField(btn.getAttribute("data-sort-field") || "");
+        state.page = 1;
+        renderFilters();
+        loadList();
+      });
+    });
+    bindRegionCascade(root);
+    root.querySelectorAll("button[data-mini-page]").forEach(function (btn) {
+      btn.onclick = function () {
+        if (btn.disabled) return;
+        var action = btn.getAttribute("data-mini-page");
+        if (action === "prev") goPage(state.page - 1, totalPages);
+        else if (action === "next") goPage(state.page + 1, totalPages);
+      };
+    });
+  }
+
+  function renderTopToolbar(total, totalPages) {
+    var resultBar = document.getElementById("sourcing-resultbar");
+    if (!resultBar) return;
+    normalizeSortForProgress();
+    var pages = Math.max(1, totalPages || 1);
+    resultBar.innerHTML =
+      '<div class="sourcing-toolbar-left">' +
+      '<div class="sourcing-sort-inline">' +
+      renderSortChips() +
+      "</div>" +
+      regionCascadeHtml() +
+      "</div>" +
+      '<div class="sourcing-toolbar-right pager-mini">' +
+      '<span class="pager-total">共' +
+      Number(total || 0) +
+      "个结果</span>" +
+      '<span class="pager-sep">|</span>' +
+      '<button type="button" data-mini-page="prev" aria-label="上一页"' +
+      (state.page <= 1 ? " disabled" : "") +
+      ">&lt;</button>" +
+      "<strong>" +
+      state.page +
+      "/" +
+      pages +
+      "</strong>" +
+      '<button type="button" data-mini-page="next" aria-label="下一页"' +
+      (state.page >= pages ? " disabled" : "") +
+      ">&gt;</button>" +
+      "</div>";
+    bindToolbarControls(resultBar, pages);
+  }
+
   function renderPagination(total, totalPages) {
     var pager = document.getElementById("notice-pager");
-    var resultBar = document.getElementById("sourcing-resultbar");
+    var pages = Math.max(1, totalPages || 1);
     var summary =
       "共 <strong>" +
       total +
       "</strong> 条 · 第 " +
       state.page +
       " / " +
-      totalPages +
+      pages +
       " 页";
-    if (resultBar) {
-      resultBar.innerHTML = "<div>" + summary + "</div>";
-    }
+    renderTopToolbar(total, pages);
     if (!pager) return;
     if (total <= 0) {
       pager.innerHTML = "";
@@ -707,22 +916,22 @@
       "<strong>" +
       state.page +
       " / " +
-      totalPages +
+      pages +
       "</strong>" +
       '<button type="button" class="btn ghost" data-page="' +
       (state.page + 1) +
       '"' +
-      (state.page >= totalPages ? " disabled" : "") +
+      (state.page >= pages ? " disabled" : "") +
       ">下一页</button>" +
       '<button type="button" class="btn ghost" data-page="' +
-      totalPages +
+      pages +
       '"' +
-      (state.page >= totalPages ? " disabled" : "") +
+      (state.page >= pages ? " disabled" : "") +
       ">末页</button>" +
       "</div>" +
       '<label class="pagination-jump">跳至' +
       '<input type="number" min="1" max="' +
-      totalPages +
+      pages +
       '" value="' +
       state.page +
       '" data-role="jump-page" />页' +
@@ -732,7 +941,7 @@
     pager.querySelectorAll("button[data-page]").forEach(function (btn) {
       btn.onclick = function () {
         if (btn.disabled) return;
-        goPage(btn.getAttribute("data-page"), totalPages);
+        goPage(btn.getAttribute("data-page"), pages);
       };
     });
     var sizeSelect = pager.querySelector("[data-role=page-size]");
@@ -746,7 +955,7 @@
     var jumpInput = pager.querySelector("[data-role=jump-page]");
     var jumpGo = pager.querySelector("[data-role=jump-go]");
     function doJump() {
-      goPage(jumpInput && jumpInput.value, totalPages);
+      goPage(jumpInput && jumpInput.value, pages);
     }
     if (jumpGo) jumpGo.onclick = doJump;
     if (jumpInput) {
@@ -762,16 +971,101 @@
   function cardTags(item) {
     var tags = [];
     if (item.siteLabel) tags.push(item.siteLabel);
-    if (item.noticeKind) tags.push(item.noticeKind);
     if (item.procurementMode) tags.push(item.procurementMode);
     if (item.regionName) tags.push(item.regionName);
-    return tags.slice(0, 4);
+    return tags.slice(0, 3);
+  }
+
+  function noticeKindPrefix(item) {
+    var kind = String((item && item.noticeKind) || "").trim();
+    if (!kind) return "";
+    return "【" + kind + "】";
+  }
+
+  function renderCardBody(item, tab) {
+    var method = methodLabel(item);
+    var tags = cardTags(item);
+    var statusHtml = "";
+    var fieldsHtml = "";
+
+    if (tab.id === "result") {
+      fieldsHtml =
+        "<div>成交金额：<b>" +
+        escapeHtml(money(item.dealAmount)) +
+        "</b></div>" +
+        "<div>预算金额：<b>" +
+        escapeHtml(money(item.budgetAmount)) +
+        "</b></div>" +
+        "<div>成交时间：" +
+        escapeHtml(formatDateTime(item.endTime || item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>发布时间：" +
+        escapeHtml(formatDateTime(item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>采购方式：" +
+        escapeHtml(method || "—") +
+        "</div>";
+    } else if (tab.id === "intent") {
+      // 采购意向不展示开始/结束状态条
+      statusHtml = "";
+      fieldsHtml =
+        "<div>采购预算：<b>" +
+        escapeHtml(money(item.budgetAmount || item.dealAmount)) +
+        "</b></div>" +
+        "<div>发布时间：" +
+        escapeHtml(formatDateTime(item.publishTime || item.publishedAt)) +
+        "</div>" +
+        "<div>采购单位：" +
+        escapeHtml(item.buyerName || "—") +
+        "</div>";
+    } else {
+      var clock = countdownInfo(item);
+      statusHtml =
+        '<div class="notice-card-status tone-' +
+        escapeHtml(clock.tone) +
+        '"><strong>' +
+        escapeHtml(clock.label) +
+        "</strong><em class='countdown'>" +
+        escapeHtml(clock.text || "") +
+        "</em></div>";
+      fieldsHtml =
+        "<div>采购预算：<b>" +
+        escapeHtml(money(item.budgetAmount || item.dealAmount)) +
+        "</b></div>" +
+        "<div>开始时间：" +
+        escapeHtml(formatDateTime(item.startTime)) +
+        "</div>" +
+        "<div>结束时间：" +
+        escapeHtml(formatDateTime(item.endTime)) +
+        "</div>" +
+        "<div>采购方式：" +
+        escapeHtml(method || "—") +
+        "</div>" +
+        "<div>采购单位：" +
+        escapeHtml(item.buyerName || "—") +
+        "</div>";
+    }
+
+    return (
+      statusHtml +
+      '<div class="notice-card-fields">' +
+      fieldsHtml +
+      "</div>" +
+      '<div class="notice-card-tags">' +
+      tags
+        .map(function (tag) {
+          return "<span>" + escapeHtml(tag) + "</span>";
+        })
+        .join("") +
+      "</div>"
+    );
   }
 
   function renderList(payload) {
     var list = document.getElementById("notice-list");
     var empty = document.getElementById("notice-empty");
     if (!list) return;
+    var tab = currentTab();
     var items = payload.items || [];
     lastTotal = Number(payload.total || 0);
     var totalPages = Math.max(1, Math.ceil(lastTotal / state.pageSize) || 1);
@@ -788,10 +1082,8 @@
     if (empty) empty.hidden = true;
     list.innerHTML = items
       .map(function (item) {
-        var amount = money(item.budgetAmount || item.dealAmount);
-        var clock = countdownInfo(item);
-        var tags = cardTags(item);
         var href = "/notices/" + encodeURIComponent(item.id);
+        var kindPrefix = noticeKindPrefix(item);
         return (
           '<a class="notice-card" href="' +
           escapeHtml(href) +
@@ -799,36 +1091,10 @@
           escapeHtml(item.id) +
           '">' +
           "<h3>" +
+          (kindPrefix ? '<span class="notice-kind-prefix">' + escapeHtml(kindPrefix) + "</span>" : "") +
           escapeHtml(item.title || "未命名公告") +
           "</h3>" +
-          '<div class="notice-card-status tone-' +
-          escapeHtml(clock.tone) +
-          '"><strong>' +
-          escapeHtml(clock.label) +
-          "</strong><em class='countdown'>" +
-          escapeHtml(clock.text || "") +
-          "</em></div>" +
-          '<div class="notice-card-fields">' +
-          "<div>采购预算：<b>" +
-          escapeHtml(amount) +
-          "</b></div>" +
-          "<div>发布时间：" +
-          escapeHtml(formatDate(item.publishTime || item.publishedAt)) +
-          "</div>" +
-          "<div>结束时间：" +
-          escapeHtml(formatDate(item.endTime)) +
-          "</div>" +
-          "<div>采购单位：" +
-          escapeHtml(item.buyerName || "—") +
-          "</div>" +
-          "</div>" +
-          '<div class="notice-card-tags">' +
-          tags
-            .map(function (tag) {
-              return "<span>" + escapeHtml(tag) + "</span>";
-            })
-            .join("") +
-          "</div>" +
+          renderCardBody(item, tab) +
           '<span class="card-action">查看详情</span>' +
           "</a>"
         );
@@ -860,8 +1126,23 @@
       })
       .then(function (body) {
         if (seq !== listRequestSeq) return;
-        if (Array.isArray(body.sites) && body.sites.length) sites = body.sites;
-        renderFilters();
+        var nextSites = Array.isArray(body.sites) ? body.sites : [];
+        if (nextSites.length) {
+          var prev = sites
+            .map(function (site) {
+              return String(site.id) + ":" + String(site.label);
+            })
+            .join("|");
+          var next = nextSites
+            .map(function (site) {
+              return String(site.id) + ":" + String(site.label);
+            })
+            .join("|");
+          if (prev !== next) {
+            sites = nextSites;
+            renderFilters();
+          }
+        }
         renderList(body);
       })
       .catch(function (error) {
@@ -877,6 +1158,7 @@
 
   function bootList() {
     readStateFromUrl();
+    normalizeSortForTab();
     // 避免 SSR 旧列表残留造成闪烁
     var list = document.getElementById("notice-list");
     if (list) list.innerHTML = "";
@@ -887,32 +1169,110 @@
     renderTabs();
     renderSearchBar();
     renderFilters();
-    fetchMe().then(function (account) {
-      me = account || null;
-      loadList();
+    // 列表不依赖登录态，并行探测会员，避免首屏被 /api/portal/me 阻塞
+    fetchMe();
+    loadList();
+  }
+
+  function sanitizeNoticeHtml(raw) {
+    var text = String(raw == null ? "" : raw);
+    if (!text) return "";
+    return text
+      .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1>/gi, "")
+      .replace(/on[a-z]+\s*=\s*(['"]).*?\1/gi, "")
+      .replace(/on[a-z]+\s*=\s*[^\s>]+/gi, "")
+      .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, ' $1="#"');
+  }
+
+  function maskSensitiveNoticeText(value, extras) {
+    var text = String(value == null ? "" : value);
+    if (!text) return text;
+    text = text.replace(
+      /((?:项目|采购人|采购单位)?联系人|联系方式|联系电话|手机号码?|电话(?:号码)?)\s*[:：]\s*([^\n\r<，,；;。、]{1,30})/g,
+      "$1：登录可见"
+    );
+    text = text.replace(/(?<!\d)(1[3-9]\d{9})(?!\d)/g, "登录可见");
+    // 未标注固话要求带分隔符，避免误伤项目编号
+    text = text.replace(/(?<!\d)(0\d{2,3}-\d{7,8})(?!\d)/g, "登录可见");
+    text = text.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g, "登录可见");
+    (extras || []).forEach(function (extra) {
+      var token = String(extra || "").trim();
+      if (token.length < 2 || token === "登录可见") return;
+      text = text.split(token).join("登录可见");
     });
+    return text;
+  }
+
+  function neutralizeAttachmentLinks(html) {
+    return String(html || "").replace(
+      /<a\b([^>]*?)href\s*=\s*(['"])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/gi,
+      function (all, pre, q, href, post, inner) {
+        var label = String(inner || "").replace(/<[^>]+>/g, "");
+        if (/\.(pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(\?|#|$)/i.test(href) || /附件/.test(label)) {
+          return '<span class="attachment-locked">登录后可下载附件</span>';
+        }
+        return all;
+      }
+    );
+  }
+
+  function wrapGuestContent(innerHtml, isHtml) {
+    return (
+      '<div class="detail-content-clamp">' +
+      '<div class="detail-content' +
+      (isHtml ? " is-html" : "") +
+      '">' +
+      innerHtml +
+      "</div>" +
+      '<div class="detail-content-fade" aria-hidden="true"></div>' +
+      '<div class="detail-login-gate">' +
+      "<p>登录后查看完整公告正文与附件</p>" +
+      '<a class="btn" href="' +
+      escapeHtml(portalLoginUrl()) +
+      '">会员登录</a>' +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderDetailContent(detail, loggedIn) {
+    var extras = [
+      detail.contactName,
+      detail.buyerContactName,
+      detail.contactPhone,
+      detail.buyerPhone,
+    ];
+    var html = String(detail.contentHtml || "").trim();
+    var text = String(detail.content || detail.contentText || "").trim();
+    if (!loggedIn) {
+      html = neutralizeAttachmentLinks(maskSensitiveNoticeText(html, extras));
+      text = neutralizeAttachmentLinks(maskSensitiveNoticeText(text, extras));
+    }
+    if (html) {
+      var safeHtml = sanitizeNoticeHtml(html);
+      if (!loggedIn) return wrapGuestContent(safeHtml, true);
+      return '<div class="detail-content is-html">' + safeHtml + "</div>";
+    }
+    if (text) {
+      var safeText = escapeHtml(text);
+      if (!loggedIn) return wrapGuestContent(safeText, false);
+      return '<div class="detail-content">' + safeText + "</div>";
+    }
+    return '<div class="detail-content muted">暂无正文内容</div>';
   }
 
   function renderDetailHtml(detail, loggedIn) {
-    var buyer = maskSensitive(detail.buyerName || detail.department || "—", loggedIn);
-    var amount = loggedIn ? money(detail.budgetAmount || detail.dealAmount || detail.amount) : "登录可见";
-    var contact = loggedIn
-      ? [detail.contactName, detail.contactPhone].filter(Boolean).join(" ") || "—"
-      : "登录可见";
-    var projectCode = maskSensitive(detail.projectCode || detail.projectNumber || "—", loggedIn);
-    var content = "";
-    if (detail.content) {
-      content = loggedIn
-        ? '<div class="detail-content">' + escapeHtml(detail.content) + "</div>"
-        : '<div class="detail-content is-masked"><p>正文已隐藏，登录后可查看完整公告内容。</p><p><a class="btn" href="' +
-          escapeHtml(portalLoginUrl()) +
-          '">会员登录</a></p></div>';
-    } else if (!loggedIn) {
-      content =
-        '<div class="detail-content is-masked"><p>关键信息已隐藏，登录后可查看完整公告。</p><p><a class="btn" href="' +
-        escapeHtml(portalLoginUrl()) +
-        '">会员登录</a></p></div>';
-    }
+    var buyer = detail.buyerName || detail.department || "—";
+    var amount = money(detail.budgetAmount || detail.dealAmount || detail.amount);
+    var contactName = String(detail.contactName || detail.buyerContactName || "").trim();
+    var contactPhone = String(detail.contactPhone || detail.buyerPhone || "").trim();
+    var maskedContact =
+      '<span class="contact-masked">登录可见</span> <a class="link-login" href="' +
+      escapeHtml(portalLoginUrl()) +
+      '">会员登录</a>';
+    var projectCode = detail.projectCode || detail.projectNumber || "—";
+    var projectName = detail.projectName || "—";
+    var sourceUrl = detail.sourceUrl || detail.detailUrl || "";
     return (
       "<h1>" +
       escapeHtml(detail.title || "公告详情") +
@@ -931,6 +1291,9 @@
       "<div><span>项目编号</span><strong>" +
       escapeHtml(projectCode) +
       "</strong></div>" +
+      "<div><span>项目名称</span><strong>" +
+      escapeHtml(projectName) +
+      "</strong></div>" +
       "<div><span>区域</span><strong>" +
       escapeHtml(detail.regionName || "—") +
       "</strong></div>" +
@@ -940,23 +1303,29 @@
       "<div><span>进度</span><strong>" +
       escapeHtml(detail.progressLabel || detail.bidStatus || "—") +
       "</strong></div>" +
+      "<div><span>开始时间</span><strong>" +
+      escapeHtml(formatDateTime(detail.startTime || detail.startAt)) +
+      "</strong></div>" +
+      "<div><span>结束时间</span><strong>" +
+      escapeHtml(formatDateTime(detail.endTime || detail.endAt)) +
+      "</strong></div>" +
       "<div><span>联系人</span><strong>" +
-      escapeHtml(contact) +
+      (loggedIn ? escapeHtml(contactName || "—") : maskedContact) +
+      "</strong></div>" +
+      "<div><span>联系方式</span><strong>" +
+      (loggedIn ? escapeHtml(contactPhone || "—") : maskedContact) +
       "</strong></div>" +
       "</div>" +
-      content +
+      renderDetailContent(detail, loggedIn) +
       '<div class="detail-actions">' +
       '<a class="btn secondary" href="/notices">返回壹采寻源</a>' +
-      (detail.sourceUrl || detail.detailUrl
-        ? '<a class="btn' +
-          (loggedIn ? "" : " ghost") +
-          '" href="' +
-          (loggedIn ? escapeHtml(detail.sourceUrl || detail.detailUrl) : escapeHtml(portalLoginUrl())) +
-          '"' +
-          (loggedIn ? ' target="_blank" rel="noopener"' : "") +
-          ">" +
-          (loggedIn ? "打开原文" : "登录后查看原文") +
-          "</a>"
+      (loggedIn && sourceUrl
+        ? '<a class="btn" href="' +
+          escapeHtml(sourceUrl) +
+          '" target="_blank" rel="noopener">打开原文</a>'
+        : "") +
+      (!loggedIn
+        ? '<a class="btn ghost" href="' + escapeHtml(portalLoginUrl()) + '">会员登录查看全文与附件</a>'
         : "") +
       "</div>"
     );
@@ -989,6 +1358,18 @@
         me = account || null;
         root.innerHTML = renderDetailHtml(detail, Boolean(me));
         root.setAttribute("data-hydrated", "1");
+        if (!me) {
+          root.addEventListener("click", function (event) {
+            var anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+            if (!anchor || !root.contains(anchor)) return;
+            var href = anchor.getAttribute("href") || "";
+            var label = String(anchor.textContent || "");
+            if (/\.(pdf|docx?|xlsx?|xls|zip|rar|7z|wps|ofd|csv|pptx?)(\?|#|$)/i.test(href) || /附件|下载/.test(label)) {
+              event.preventDefault();
+              window.location.href = portalLoginUrl();
+            }
+          });
+        }
       })
       .catch(function (error) {
         root.innerHTML = '<p class="notice-empty">' + escapeHtml(error.message || "加载失败") + "</p>";

@@ -166,6 +166,15 @@ REST_FRAMEWORK = {
 }
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+# 扫码登录 ticket / 列表短缓存需跨 gunicorn worker 共享，勿用默认 LocMem
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("DJANGO_CACHE_REDIS_URL", REDIS_URL),
+        "KEY_PREFIX": "yzc",
+        "TIMEOUT": 300,
+    }
+}
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 CELERY_TIMEZONE = TIME_ZONE

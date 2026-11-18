@@ -1,7 +1,12 @@
 from django.test import Client, TestCase
 
 from apps.data_store.models import NoticeCollectionSourceRecord, NoticeRecord, WebsiteLeadRecord
-from apps.data_store.notices import ensure_default_sample_source, run_collection_source, upsert_notice
+from apps.data_store.notices import (
+    ensure_default_sample_source,
+    mask_public_notice_sensitive,
+    run_collection_source,
+    upsert_notice,
+)
 
 
 class NoticeCollectionTests(TestCase):
@@ -51,3 +56,22 @@ class NoticeCollectionTests(TestCase):
 
         hidden = client.get("/api/public/notices/notice-private-1/")
         self.assertEqual(hidden.status_code, 404)
+
+    def test_mask_public_notice_sensitive_truncates_and_locks_attachments(self):
+        lines = [f"<p>正文第{i}行内容足够长</p>" for i in range(1, 21)]
+        item = {
+            "title": "测试公告",
+            "contactName": "张三",
+            "contactPhone": "13800138000",
+            "contentHtml": "".join(lines)
+            + '<p><a href="https://example.com/a.pdf">附件下载</a></p>',
+            "attachments": [{"name": "a.pdf", "url": "https://example.com/a.pdf"}],
+        }
+        masked = mask_public_notice_sensitive(item)
+        self.assertTrue(masked.get("contentPreviewOnly"))
+        self.assertTrue(masked.get("attachmentsLocked"))
+        self.assertEqual(masked.get("attachments"), [])
+        self.assertEqual(masked.get("contactName"), "登录可见")
+        self.assertNotIn("https://example.com/a.pdf", masked.get("contentHtml") or "")
+        self.assertIn("登录后可下载附件", masked.get("contentHtml") or "")
+        self.assertLessEqual((masked.get("contentHtml") or "").count("</p>"), 12)

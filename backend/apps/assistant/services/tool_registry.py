@@ -55,8 +55,15 @@ def list_tools(*, permission_filter: Callable[[str], bool] | None = None) -> lis
     tools = list(_REGISTRY.values())
     if permission_filter is None:
         return sorted(tools, key=lambda item: item.name)
+
+    def _allowed(permission: str) -> bool:
+        options = [part.strip() for part in str(permission or "").split("|") if part.strip()]
+        if not options:
+            return False
+        return any(permission_filter(item) for item in options)
+
     return sorted(
-        [tool for tool in tools if permission_filter(tool.permission)],
+        [tool for tool in tools if _allowed(tool.permission)],
         key=lambda item: item.name,
     )
 

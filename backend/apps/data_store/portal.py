@@ -4,19 +4,22 @@ import hashlib
 import html
 import json
 import os
-from urllib.parse import urlencode
+import secrets
+import uuid
+from urllib.parse import quote, urlencode
 
 from django.conf import settings
-from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable
+from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable, make_password
 from django.core import signing
 from django.core.cache import cache
 from django.db import OperationalError, ProgrammingError, connection
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import CustomerAccountRecord
+from .models import CustomerAccountRecord, OrganizationRecord, PlatformAccountRecord, ProjectRecord
 from .notice_inbox_models import PortalNoticeInbox
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
 from .notice_subscription import normalize_subscription, subscription_has_filters
@@ -43,6 +46,11 @@ PORTAL_PERMISSIONS = (
     "portal.account.view",
     "portal.account.manage",
 )
+PORTAL_PLATFORM_DEFAULT_PERMISSIONS = (
+    "portal.notice.view",
+    "portal.notice.subscribe",
+)
+SERVICE_PROJECT_INACTIVE_STATUSES = frozenset({"服务到期结束", "项目终止"})
 
 
 def normalize_portal_permissions(value) -> list[str]:
@@ -52,22 +60,59 @@ def normalize_portal_permissions(value) -> list[str]:
     return [item for item in value if item in allowed]
 
 
+def _known_site_ids() -> set[str]:
+    known = set(SITE_LABELS.keys())
+    try:
+        from .notice_site_config import list_enabled_sites
+
+        for item in list_enabled_sites():
+            sid = str(item.get("siteId") or "").strip()
+            if sid:
+                known.add(sid)
+    except Exception:
+        pass
+    return known
+
+
 def normalize_allowed_site_ids(value) -> list[str] | None:
     """None = 未配置（全部站点）；list = 白名单（空列表表示无站点）。"""
     if value is None:
         return None
     if not isinstance(value, list):
         return None
-    known = set(SITE_LABELS.keys())
+    known = _known_site_ids()
     return [str(item).strip() for item in value if str(item).strip() in known]
 
 
 def site_options(site_ids: list[str] | None = None) -> list[dict]:
-    if site_ids is None:
-        items = SITE_LABELS.items()
-    else:
-        items = ((sid, SITE_LABELS[sid]) for sid in site_ids if sid in SITE_LABELS)
-    return [{"id": key, "label": label} for key, label in items]
+    """优先使用管理后台「站点管理」启用项（含自定义名称/排序），失败时回退内置标签。"""
+    try:
+        from .notice_site_config import DEFAULT_SITES, list_enabled_sites
+
+        enabled = list_enabled_sites()
+        if not enabled:
+            enabled = [
+                {
+                    "siteId": item["siteId"],
+                    "label": item["label"],
+                    "sortOrder": item.get("sortOrder") or 0,
+                }
+                for item in DEFAULT_SITES
+            ]
+        rows = sorted(
+            enabled,
+            key=lambda item: (int(item.get("sortOrder") or 0), int(item.get("id") or 0), str(item.get("siteId") or "")),
+        )
+        if site_ids is not None:
+            allow = set(site_ids)
+            rows = [item for item in rows if item.get("siteId") in allow]
+        return [{"id": item["siteId"], "label": item["label"]} for item in rows if item.get("siteId")]
+    except Exception:
+        if site_ids is None:
+            items = SITE_LABELS.items()
+        else:
+            items = ((sid, SITE_LABELS[sid]) for sid in site_ids if sid in SITE_LABELS)
+        return [{"id": key, "label": label} for key, label in items]
 
 
 def account_site_scope(account: dict) -> list[str] | None:
@@ -168,6 +213,142 @@ def find_portal_account(phone: str, password: str) -> CustomerAccountRecord | No
     return None
 
 
+def _plain_secret_matches(stored: str, raw: str) -> bool:
+    stored = str(stored or "")
+    raw = str(raw or "")
+    if not stored or not raw:
+        return False
+    try:
+        return secrets.compare_digest(stored, raw)
+    except (TypeError, ValueError):
+        return stored == raw
+
+
+def _parse_service_end_date(value) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    text = text[:10]
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def org_has_active_service_project(customer_org_id: str) -> bool:
+    org_id = str(customer_org_id or "").strip()
+    if not org_id:
+        return False
+    today = timezone.localdate()
+    qs = ProjectRecord.objects.filter(
+        is_deleted=False,
+        customer_org_id=org_id,
+    ).filter(Q(type="服务项目") | Q(data__type="服务项目"))
+    for project in qs.only("id", "status", "type", "data").iterator(chunk_size=100):
+        status = str(project.status or (project.data or {}).get("status") or "").strip()
+        if status in SERVICE_PROJECT_INACTIVE_STATUSES:
+            continue
+        end = _parse_service_end_date((project.data or {}).get("serviceEndDate"))
+        if end is None:
+            continue
+        if end >= today:
+            return True
+    return False
+
+
+def find_platform_account_for_login(account_name: str, password: str) -> PlatformAccountRecord | None:
+    name = str(account_name or "").strip()
+    if not name or not password:
+        return None
+    candidates = list(
+        PlatformAccountRecord.objects.filter(is_deleted=False)
+        .filter(Q(account_name=name) | Q(data__accountName=name))
+        .order_by("created_at", "id")[:50]
+    )
+    matched: list[PlatformAccountRecord] = []
+    for record in candidates:
+        data = record.data if isinstance(record.data, dict) else {}
+        stored_name = str(data.get("accountName") or record.account_name or "").strip()
+        if stored_name != name:
+            continue
+        stored_password = str(data.get("accountPasswordMasked") or "")
+        if _plain_secret_matches(stored_password, password):
+            matched.append(record)
+    if not matched:
+        return None
+    if len(matched) == 1:
+        return matched[0]
+    # 同名多条时优先所属公司仍有有效服务的账号
+    for record in matched:
+        if org_has_active_service_project(record.customer_org_id or (record.data or {}).get("customerOrgId") or ""):
+            return record
+    return matched[0]
+
+
+def resolve_portal_account_for_platform(platform_account: PlatformAccountRecord) -> CustomerAccountRecord:
+    pa_id = str(platform_account.id)
+    org_id = str(platform_account.customer_org_id or (platform_account.data or {}).get("customerOrgId") or "").strip()
+    data = platform_account.data if isinstance(platform_account.data, dict) else {}
+    account_name = str(data.get("accountName") or platform_account.account_name or "").strip()
+
+    linked = (
+        CustomerAccountRecord.objects.filter(
+            is_deleted=False,
+            status="启用",
+            data__platformAccountId=pa_id,
+        )
+        .order_by("created_at", "id")
+        .first()
+    )
+    if linked:
+        return linked
+
+    if org_id:
+        existing = (
+            CustomerAccountRecord.objects.filter(is_deleted=False, status="启用", customer_org_id=org_id)
+            .order_by("created_at", "id")
+            .first()
+        )
+        if existing:
+            payload = dict(existing.data or {})
+            if not payload.get("platformAccountId"):
+                payload["platformAccountId"] = pa_id
+                payload["loginSource"] = payload.get("loginSource") or "platformAccount"
+                existing.data = payload
+                existing.save(update_fields=["data", "updated_at"])
+            return existing
+
+    org = OrganizationRecord.objects.filter(id=org_id, is_deleted=False).only("id", "name").first() if org_id else None
+    customer_name = (org.name if org else "") or str(data.get("customerName") or "").strip() or account_name or "平台账号客户"
+    display_name = account_name or customer_name
+    phone = f"pa-{pa_id}"[:50]
+    new_id = f"ca-{uuid.uuid4().hex[:12]}"
+    now = timezone.now()
+    payload = {
+        "id": new_id,
+        "name": display_name,
+        "phone": phone,
+        "password": make_password(secrets.token_urlsafe(24)),
+        "customerName": customer_name,
+        "customerOrgId": org_id,
+        "status": "启用",
+        "permissions": list(PORTAL_PLATFORM_DEFAULT_PERMISSIONS),
+        "subscription": {"enabled": False, "keywords": ""},
+        "platformAccountId": pa_id,
+        "loginSource": "platformAccount",
+    }
+    return CustomerAccountRecord.objects.create(
+        id=new_id,
+        name=display_name,
+        phone=phone,
+        customer_name=customer_name,
+        customer_org_id=org_id,
+        status="启用",
+        data=payload,
+        created_at=now,
+    )
+
+
 # 门户与同主域官网共享登录态（portal.qlyc.co ↔ preview.qlyc.co 等）
 PORTAL_COOKIE_PARENT_DOMAINS = (
     ".qlyc.co",
@@ -181,7 +362,12 @@ def _request_hostname(request) -> str:
     if request is None:
         return ""
     forwarded = (request.META.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip()
-    host = forwarded or (request.get_host() or "")
+    if forwarded:
+        return forwarded.split(":")[0].strip().lower()
+    try:
+        host = request.get_host() or ""
+    except Exception:
+        host = (request.META.get("HTTP_HOST") or "").strip()
     return host.split(":")[0].strip().lower()
 
 
@@ -272,14 +458,24 @@ def issue_portal_cookie(response: JsonResponse, account_id: str, request=None) -
 
 
 def clear_portal_cookie(response: JsonResponse, request=None) -> JsonResponse:
-    # 同时清 host-only 与父域 cookie，避免升级后残留
-    response.delete_cookie(PORTAL_COOKIE, path="/")
+    """清除 portal_session。
+
+    须与 issue_portal_cookie 属性一致（Secure + 父域），否则浏览器不会删除。
+    Django 同名 Cookie 只能写一条 Set-Cookie，优先清当前主域共享 cookie。
+    """
     domain = portal_cookie_domain(request)
-    if domain:
-        response.delete_cookie(PORTAL_COOKIE, path="/", domain=domain)
-    for parent in PORTAL_COOKIE_PARENT_DOMAINS:
-        if parent != domain:
-            response.delete_cookie(PORTAL_COOKIE, path="/", domain=parent)
+    secure = _portal_cookie_secure(request)
+    response.set_cookie(
+        PORTAL_COOKIE,
+        "",
+        max_age=0,
+        expires="Thu, 01 Jan 1970 00:00:00 GMT",
+        path="/",
+        domain=domain,
+        secure=secure,
+        httponly=True,
+        samesite="Lax",
+    )
     return response
 
 
@@ -813,12 +1009,22 @@ def _public_crawled_notice_item(item: dict) -> dict:
         "endTime": item.get("endTime") or "",
         "budgetAmount": item.get("budgetAmount"),
         "dealAmount": item.get("dealAmount"),
+        "procurementMode": item.get("procurementMode") or "",
     }
+
+
+PUBLIC_CRAWLED_CACHE_SECONDS = 90
 
 
 @require_http_methods(["GET"])
 def public_crawled_notices(request):
     """匿名只读：爬虫公告列表，供官网首页田字格与壹采寻源。"""
+    query = request.META.get("QUERY_STRING") or ""
+    cache_key = "public_crawled_notices:" + hashlib.md5(query.encode("utf-8")).hexdigest()
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict):
+        return JsonResponse(cached)
+
     try:
         page = max(int(request.GET.get("page") or 1), 1)
     except (TypeError, ValueError):
@@ -868,16 +1074,16 @@ def public_crawled_notices(request):
             },
             status=503,
         )
-    return JsonResponse(
-        {
-            "items": [_public_crawled_notice_item(item) for item in payload.get("items") or []],
-            "total": payload.get("total") or 0,
-            "page": payload.get("page") or page,
-            "page_size": payload.get("page_size") or page_size,
-            "sites": site_options(None),
-            "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
-        }
-    )
+    body = {
+        "items": [_public_crawled_notice_item(item) for item in payload.get("items") or []],
+        "total": payload.get("total") or 0,
+        "page": payload.get("page") or page,
+        "page_size": payload.get("page_size") or page_size,
+        "sites": site_options(None),
+        "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
+    }
+    cache.set(cache_key, body, PUBLIC_CRAWLED_CACHE_SECONDS)
+    return JsonResponse(body)
 
 
 @require_http_methods(["GET"])
@@ -1051,6 +1257,37 @@ def portal_login(request):
         if disabled:
             return JsonResponse({"detail": "账号已停用，请联系管理员。"}, status=403)
         return JsonResponse({"detail": "账号或密码错误。"}, status=401)
+    return issue_portal_cookie(JsonResponse({"data": public_account(record)}), record.id, request=request)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def portal_platform_login(request):
+    """使用管理后台「平台账号」台账凭证登录门户；需所属公司有有效服务项目。"""
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "请输入平台账号和密码。"}, status=400)
+    account_name = str(payload.get("accountName") or payload.get("identifier") or payload.get("phone") or "").strip()
+    password = str(payload.get("password") or "")
+    if not account_name or not password:
+        return JsonResponse({"detail": "请输入平台账号和密码。"}, status=400)
+
+    platform_account = find_platform_account_for_login(account_name, password)
+    if not platform_account:
+        return JsonResponse({"detail": "账号或密码错误。"}, status=401)
+
+    org_id = str(
+        platform_account.customer_org_id
+        or (platform_account.data or {}).get("customerOrgId")
+        or ""
+    ).strip()
+    if not org_has_active_service_project(org_id):
+        return JsonResponse({"detail": "服务已过期。"}, status=403)
+
+    record = resolve_portal_account_for_platform(platform_account)
+    if (record.status or "") != "启用":
+        return JsonResponse({"detail": "账号已停用，请联系管理员。"}, status=403)
     return issue_portal_cookie(JsonResponse({"data": public_account(record)}), record.id, request=request)
 
 
@@ -1242,11 +1479,80 @@ def portal_wechat_unbind(request):
 
 PORTAL_WECHAT_LOGIN_SALT = "portal-wechat-login"
 PORTAL_WECHAT_NEXT_TABS = {"messages", "subscription", "notices", "home", "account"}
+PORTAL_WX_SCAN_TTL = 180
+PORTAL_WX_SCAN_PREFIX = "psl_"
+PORTAL_WX_SCAN_CACHE_PREFIX = "portal_wx_scan:"
 
 
 def _portal_home_base() -> str:
     base = (wechat_mp.portal_base_url() or "/").rstrip("/") + "/"
     return base
+
+
+def _wx_scan_cache_key(ticket: str) -> str:
+    return f"{PORTAL_WX_SCAN_CACHE_PREFIX}{ticket}"
+
+
+def _complete_portal_scan_login(*, ticket: str, openid: str) -> str:
+    """根据扫码 openid 更新 ticket 状态，返回 status。"""
+    ticket = str(ticket or "").strip()
+    openid = str(openid or "").strip()
+    if not ticket or not openid:
+        return "fail"
+    key = _wx_scan_cache_key(ticket)
+    current = cache.get(key)
+    if not isinstance(current, dict) or current.get("status") not in {"pending", "unbound", "disabled", "fail"}:
+        return "expired" if not current else str(current.get("status") or "expired")
+    record = _find_account_by_openid(openid)
+    if not record:
+        cache.set(key, {"status": "unbound"}, PORTAL_WX_SCAN_TTL)
+        return "unbound"
+    if (record.status or "") != "启用":
+        cache.set(key, {"status": "disabled"}, PORTAL_WX_SCAN_TTL)
+        return "disabled"
+    cache.set(key, {"status": "ok", "account_id": str(record.id)}, PORTAL_WX_SCAN_TTL)
+    return "ok"
+
+
+def _portal_scan_result_page(*, status: str) -> HttpResponse:
+    """手机扫码确认后的提示页（不在手机上写 PC 会话）。"""
+    status = (status or "fail").strip() or "fail"
+    messages = {
+        "ok": ("登录成功", "请返回电脑，页面将自动进入系统。"),
+        "unbound": ("尚未绑定", "当前微信未绑定会员账号。请先用手机号登录，在「订阅」页绑定微信后再扫码。"),
+        "disabled": ("账号不可用", "该账号已停用，请联系管理员。"),
+        "expired": ("二维码已失效", "请返回电脑刷新二维码后重试。"),
+        "fail": ("登录失败", "请返回电脑刷新二维码，或使用手机号登录。"),
+    }
+    if status not in messages:
+        status = "fail"
+    title, hint = messages[status]
+    safe_title = html.escape(title)
+    safe_hint = html.escape(hint)
+    page = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{safe_title}</title>
+  <style>
+    body {{ margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f7f5; color: #17382d; }}
+    .box {{ width: min(88vw, 360px); padding: 28px 22px; border-radius: 16px;
+      background: #fff; box-shadow: 0 10px 30px rgba(23,56,45,.08); text-align: center; }}
+    h1 {{ margin: 0 0 10px; font-size: 20px; }}
+    p {{ margin: 0; color: #5b7368; font-size: 14px; line-height: 1.6; }}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>{safe_title}</h1>
+    <p>{safe_hint}</p>
+  </div>
+</body>
+</html>"""
+    return HttpResponse(page, content_type="text/html; charset=utf-8")
 
 
 def _normalize_portal_next(next_tab: str) -> str:
@@ -1374,6 +1680,102 @@ def portal_wechat_silent_login(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def portal_wechat_scan_login_start(request):
+    """PC 登录页：签发扫码 ticket，返回微信临时二维码。"""
+    if not wechat_mp.mp_configured():
+        return JsonResponse({"detail": "微信登录暂不可用，请使用手机号登录。"}, status=503)
+    ticket = secrets.token_urlsafe(16)
+    scene = f"{PORTAL_WX_SCAN_PREFIX}{ticket}"
+    cache.set(_wx_scan_cache_key(ticket), {"status": "pending"}, PORTAL_WX_SCAN_TTL)
+    qr = wechat_mp.create_temp_scene_qrcode(scene_str=scene, expire_seconds=PORTAL_WX_SCAN_TTL)
+    qr_image_url = str((qr or {}).get("qrImageUrl") or "").strip()
+    mode = "scene"
+    scan_url = ""
+    if not qr_image_url:
+        # 回退：生成授权链接二维码（需微信内打开）
+        origin = ""
+        redirect = wechat_mp.oauth_redirect_uri()
+        if redirect and "/api/" in redirect:
+            origin = redirect.split("/api/", 1)[0].rstrip("/")
+        if origin:
+            scan_url = f"{origin}/api/portal/wechat/scan-login/authorize/?ticket={quote(ticket)}"
+            qr_image_url = (
+                "https://api.qrserver.com/v1/create-qr-code/"
+                f"?size=220x220&margin=8&data={quote(scan_url, safe='')}"
+            )
+            mode = "oauth"
+        else:
+            cache.delete(_wx_scan_cache_key(ticket))
+            return JsonResponse({"detail": "无法创建登录二维码，请稍后重试。"}, status=503)
+    return JsonResponse(
+        {
+            "ticket": ticket,
+            "expiresIn": PORTAL_WX_SCAN_TTL,
+            "qrImageUrl": qr_image_url,
+            "mode": mode,
+            "scanUrl": scan_url,
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def portal_wechat_scan_login_authorize(request):
+    """回退模式：手机微信打开后走 snsapi_base，再回写 ticket。"""
+    ticket = (request.GET.get("ticket") or "").strip()
+    data = cache.get(_wx_scan_cache_key(ticket)) if ticket else None
+    if not ticket or not isinstance(data, dict):
+        return _portal_scan_result_page(status="expired")
+    if data.get("status") == "ok":
+        return _portal_scan_result_page(status="ok")
+    if data.get("status") not in {"pending", "unbound", "disabled", "fail"}:
+        return _portal_scan_result_page(status="expired")
+    if not wechat_mp.mp_configured():
+        return _portal_scan_result_page(status="fail")
+    state = signing.dumps(
+        {"purpose": "scan_login", "ticket": ticket, "ts": timezone.now().timestamp()},
+        salt=PORTAL_WECHAT_LOGIN_SALT,
+    )
+    url = wechat_mp.build_oauth_url(state=state, scope="snsapi_base")
+    if not url:
+        return _portal_scan_result_page(status="fail")
+    return _portal_js_redirect_page(
+        title="微信授权中",
+        hint="正在确认身份…",
+        target=url,
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def portal_wechat_scan_login_status(request):
+    """PC 轮询扫码结果；成功时在当前域写入 portal_session。"""
+    ticket = (request.GET.get("ticket") or "").strip()
+    if not ticket:
+        return JsonResponse({"status": "expired"})
+    key = _wx_scan_cache_key(ticket)
+    data = cache.get(key)
+    if not isinstance(data, dict):
+        return JsonResponse({"status": "expired"})
+    status = str(data.get("status") or "pending")
+    if status != "ok":
+        return JsonResponse({"status": status})
+    account_id = str(data.get("account_id") or "").strip()
+    cache.delete(key)
+    if not account_id:
+        return JsonResponse({"status": "fail"})
+    record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
+    if not record or (record.status or "") != "启用":
+        return JsonResponse({"status": "disabled"})
+    return issue_portal_cookie(
+        JsonResponse({"status": "ok", "data": public_account(record)}),
+        record.id,
+        request=request,
+    )
+
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def wechat_mp_oauth_callback(request):
     try:
@@ -1405,8 +1807,14 @@ def wechat_mp_oauth_callback(request):
                 )
             return _portal_bind_result_page(status="fail")
 
-        # —— 静默登录：openid → portal_session ——
+        # —— 登录类 state：静默登录 / PC 扫码 ——
         if login_payload is not None:
+            purpose = str((login_payload or {}).get("purpose") or "login").strip() or "login"
+            if purpose == "scan_login":
+                ticket = str((login_payload or {}).get("ticket") or "").strip()
+                status = _complete_portal_scan_login(ticket=ticket, openid=openid)
+                return _portal_scan_result_page(status=status)
+
             next_tab = _normalize_portal_next((login_payload or {}).get("next") or "messages")
             record = _find_account_by_openid(openid)
             if not record:
@@ -1452,6 +1860,14 @@ def wechat_mp_callback(request):
     event_name = (event.get("Event") or "").lower()
     openid = (event.get("FromUserName") or "").strip()
     if msg_type == "event" and openid:
+        # 临时场景码扫码 / 带参关注 → PC 扫码登录
+        if event_name in {"scan", "subscribe"}:
+            event_key = (event.get("EventKey") or "").strip()
+            scene = event_key[8:] if event_key.startswith("qrscene_") else event_key
+            if scene.startswith(PORTAL_WX_SCAN_PREFIX):
+                ticket = scene[len(PORTAL_WX_SCAN_PREFIX) :]
+                _complete_portal_scan_login(ticket=ticket, openid=openid)
+
         record = _find_account_by_openid(openid)
         if record:
             data = dict(record.data or {})

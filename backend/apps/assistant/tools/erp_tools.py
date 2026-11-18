@@ -6,7 +6,9 @@ from decimal import Decimal
 from typing import Any
 
 from django.db.models import Count, OuterRef, Q, Subquery, Sum
+from django.utils import timezone
 
+from apps.assistant.permissions import user_has_permission
 from apps.assistant.services.chart_params import resolve_chart_type
 from apps.assistant.services.tool_registry import ToolDefinition, register_tool
 from apps.data_store.models import (
@@ -20,11 +22,62 @@ from apps.data_store.models import (
     ServiceOrderRecord,
     TransactionRecord,
 )
+from apps.data_store.views import _record_defaults
 
 # 禁止把完整 data JSON 交给模型；仅白名单字段
 PRODUCT_FIELDS = ("id", "code", "name", "kind", "category")
 ORDER_FIELDS = ("id", "order_no", "status", "project_id")
 CONFIRMED_INVOICE_STATUS = "已确认"
+
+SALES_SERVICE_ORDER_STATUSES = ("待付款", "部分付款", "已付款", "退款", "取消")
+PURCHASE_ORDER_STATUSES = ("草稿", "待下单", "已下单", "部分到货", "已完成", "已取消")
+
+SALES_SERVICE_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "待付款": ("部分付款", "已付款", "退款", "取消"),
+    "部分付款": ("已付款", "退款", "取消"),
+    "已付款": ("退款",),
+    "退款": (),
+    "取消": (),
+}
+PURCHASE_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "草稿": ("待下单", "已取消"),
+    "待下单": ("已下单", "已取消"),
+    "已下单": ("部分到货", "已完成", "已取消"),
+    "部分到货": ("已完成", "已取消"),
+    "已完成": (),
+    # 允许从误操作取消恢复到业务状态
+    "已取消": ("待下单", "已下单", "部分到货", "已完成"),
+}
+
+ORDER_KIND_META = {
+    "sales": {
+        "label": "销售订单",
+        "collection": "salesOrders",
+        "model": SalesOrderRecord,
+        "permission": "salesOrder.manage",
+        "tool": "erp.sales_order.update_status",
+        "allowed": SALES_SERVICE_ORDER_STATUSES,
+        "transitions": SALES_SERVICE_TRANSITIONS,
+    },
+    "purchase": {
+        "label": "采购订单",
+        "collection": "purchaseOrders",
+        "model": PurchaseOrderRecord,
+        "permission": "purchaseOrder.manage",
+        "tool": "erp.purchase_order.update_status",
+        "allowed": PURCHASE_ORDER_STATUSES,
+        "transitions": PURCHASE_TRANSITIONS,
+    },
+    "service": {
+        "label": "服务订单",
+        "collection": "serviceOrders",
+        "model": ServiceOrderRecord,
+        "permission": "serviceOrder.manage",
+        "tool": "erp.service_order.update_status",
+        "allowed": SALES_SERVICE_ORDER_STATUSES,
+        "transitions": SALES_SERVICE_TRANSITIONS,
+    },
+}
 
 
 def _pick(record, fields: tuple[str, ...], extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -877,6 +930,295 @@ def _sales_overview(*, params: dict[str, Any], user_data: dict) -> dict[str, Any
     }
 
 
+def _normalize_order_kind(value: str) -> str:
+    text = str(value or "").strip().lower()
+    aliases = {
+        "sales": "sales",
+        "sale": "sales",
+        "销售": "sales",
+        "销售订单": "sales",
+        "销订": "sales",
+        "purchase": "purchase",
+        "采购": "purchase",
+        "采购订单": "purchase",
+        "采订": "purchase",
+        "service": "service",
+        "服务": "service",
+        "服务订单": "service",
+    }
+    return aliases.get(text, "")
+
+
+def _normalize_order_status(value: str, allowed: tuple[str, ...]) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    for item in allowed:
+        if raw == item or raw.lower() == item.lower():
+            return item
+    aliases = {
+        "待付": "待付款",
+        "未付款": "待付款",
+        "部分付": "部分付款",
+        "已付": "已付款",
+        "付清": "已付款",
+        "取消订单": "取消",
+        "已取消订单": "已取消",
+        "完成": "已完成",
+        "到货部分": "部分到货",
+    }
+    mapped = aliases.get(raw, "")
+    if mapped in allowed:
+        return mapped
+    return ""
+
+
+def _allowed_next_statuses(current: str, transitions: dict[str, tuple[str, ...]]) -> list[str]:
+    next_statuses = list(transitions.get(current, ()))
+    return list(dict.fromkeys([current, *next_statuses]))
+
+
+def _find_orders_by_no(order_no: str) -> list[tuple[str, Any]]:
+    number = str(order_no or "").strip()
+    if not number:
+        return []
+    found: list[tuple[str, Any]] = []
+    for kind, meta in ORDER_KIND_META.items():
+        model = meta["model"]
+        exact = list(model.objects.filter(is_deleted=False, order_no=number).order_by("-updated_at", "-id")[:5])
+        rows = exact or list(
+            model.objects.filter(is_deleted=False, order_no__iexact=number).order_by("-updated_at", "-id")[:5]
+        )
+        for row in rows:
+            found.append((kind, row))
+    return found
+
+
+def _serialize_order_brief(kind: str, record) -> dict[str, Any]:
+    meta = ORDER_KIND_META[kind]
+    data = _data(record)
+    item = {
+        "id": record.id,
+        "order_no": record.order_no,
+        "status": record.status,
+        "project_id": getattr(record, "project_id", "") or "",
+        "order_type": kind,
+        "order_type_label": meta["label"],
+        "collection": meta["collection"],
+    }
+    if hasattr(record, "customer_org_id"):
+        item["customer_org_id"] = record.customer_org_id
+    if hasattr(record, "supplier_org_id"):
+        item["supplier_org_id"] = record.supplier_org_id
+    if hasattr(record, "amount"):
+        item["amount"] = str(record.amount)
+    name = data.get("customerName") or data.get("supplierName")
+    if isinstance(name, str) and name.strip():
+        item["counterparty"] = name.strip()
+    return item
+
+
+def _apply_order_status_update(*, kind: str, record, next_status: str) -> dict[str, Any]:
+    meta = ORDER_KIND_META[kind]
+    current = str(record.status or "").strip()
+    allowed = _allowed_next_statuses(current, meta["transitions"])
+    if next_status not in allowed:
+        return {
+            "block_type": "clarification",
+            "summary": "状态流转不允许",
+            "content": (
+                f"{meta['label']}「{record.order_no}」当前状态为「{current or '空'}」，"
+                f"不能改为「{next_status}」。允许：{'、'.join(allowed) or '无'}。"
+            ),
+            "data": {
+                "order": _serialize_order_brief(kind, record),
+                "allowed_statuses": allowed,
+            },
+        }
+    if current == next_status:
+        return {
+            "block_type": "tool_result",
+            "summary": f"{meta['label']}「{record.order_no}」已是「{next_status}」",
+            "content": f"{meta['label']}「{record.order_no}」当前已是「{next_status}」，无需修改。",
+            "data": {"updated": False, "order": _serialize_order_brief(kind, record)},
+        }
+
+    payload = dict(_data(record))
+    payload["id"] = record.id
+    payload["orderNo"] = record.order_no
+    payload["status"] = next_status
+    payload["updatedAt"] = timezone.now().isoformat()
+    if hasattr(record, "project_id"):
+        payload.setdefault("projectId", record.project_id)
+    if hasattr(record, "customer_org_id"):
+        payload.setdefault("customerOrgId", record.customer_org_id)
+    if hasattr(record, "supplier_org_id"):
+        payload.setdefault("supplierOrgId", record.supplier_org_id)
+    if hasattr(record, "service_id"):
+        payload.setdefault("serviceId", record.service_id)
+    if hasattr(record, "amount"):
+        payload.setdefault("amount", str(record.amount))
+        payload.setdefault("receivableAmount", str(getattr(record, "receivable_amount", record.amount)))
+        payload.setdefault("receivedAmount", str(getattr(record, "received_amount", 0)))
+
+    for field, value in _record_defaults(meta["model"], payload).items():
+        setattr(record, field, value)
+    record.is_deleted = False
+    record.deleted_at = None
+    record.deleted_by = ""
+    record.save()
+
+    brief = _serialize_order_brief(kind, record)
+    note = ""
+    if kind in {"sales", "service"} and next_status in {"部分付款", "已付款", "退款"}:
+        note = "注意：本次仅修改订单状态，不会自动生成收款/退款流水；如需记账请到后台补录。"
+    return {
+        "block_type": "tool_result",
+        "summary": f"已将{meta['label']}「{record.order_no}」状态改为「{next_status}」",
+        "content": (
+            f"已更新{meta['label']}「{record.order_no}」：{current or '空'} → {next_status}。"
+            + (f"\n{note}" if note else "")
+        ),
+        "data": {
+            "updated": True,
+            "from_status": current,
+            "to_status": next_status,
+            "order": brief,
+        },
+    }
+
+
+def _order_update_status_for_kind(kind: str, *, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
+    meta = ORDER_KIND_META[kind]
+    if not user_has_permission(user_data, meta["permission"]):
+        return {
+            "block_type": "clarification",
+            "summary": "缺少权限",
+            "content": f"修改{meta['label']}需要权限「{meta['permission']}」。",
+            "data": {"permission": meta["permission"]},
+        }
+
+    order_no = str(params.get("order_no") or params.get("orderNo") or params.get("keyword") or "").strip()
+    next_status = _normalize_order_status(str(params.get("status") or params.get("to_status") or ""), meta["allowed"])
+    if not order_no:
+        return {
+            "block_type": "clarification",
+            "summary": "缺少订单编号",
+            "content": f"请提供要修改的{meta['label']}编号。",
+            "data": {},
+        }
+    if not next_status:
+        return {
+            "block_type": "clarification",
+            "summary": "状态无效",
+            "content": f"请提供有效状态，可选：{'、'.join(meta['allowed'])}。",
+            "data": {"allowed_statuses": list(meta["allowed"])},
+        }
+
+    order_id = str(params.get("order_id") or params.get("id") or "").strip()
+    record = None
+    if order_id:
+        record = meta["model"].objects.filter(is_deleted=False, id=order_id).first()
+    if record is None:
+        matches = list(meta["model"].objects.filter(is_deleted=False, order_no=order_no).order_by("-updated_at", "-id")[:5])
+        if not matches:
+            matches = list(
+                meta["model"].objects.filter(is_deleted=False, order_no__iexact=order_no).order_by("-updated_at", "-id")[:5]
+            )
+        if len(matches) == 1:
+            record = matches[0]
+        elif not matches:
+            return {
+                "block_type": "clarification",
+                "summary": "未找到订单",
+                "content": f"未找到{meta['label']}编号「{order_no}」。",
+                "data": {},
+            }
+        else:
+            return {
+                "block_type": "clarification",
+                "summary": "匹配到多条",
+                "content": f"编号「{order_no}」匹配到多条{meta['label']}，请提供明确的订单 id。",
+                "data": {"candidates": [_serialize_order_brief(kind, row) for row in matches]},
+            }
+
+    assert record is not None
+    return _apply_order_status_update(kind=kind, record=record, next_status=next_status)
+
+
+def _sales_order_update_status(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
+    return _order_update_status_for_kind("sales", params=params, user_data=user_data)
+
+
+def _purchase_order_update_status(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
+    return _order_update_status_for_kind("purchase", params=params, user_data=user_data)
+
+
+def _service_order_update_status(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
+    return _order_update_status_for_kind("service", params=params, user_data=user_data)
+
+
+def _order_update_status(*, params: dict[str, Any], user_data: dict) -> dict[str, Any]:
+    """按订单编号自动识别销售/采购/服务订单并改状态；权限按命中类型校验。"""
+    order_no = str(params.get("order_no") or params.get("orderNo") or params.get("keyword") or "").strip()
+    kind = _normalize_order_kind(str(params.get("order_type") or params.get("type") or ""))
+    status_raw = str(params.get("status") or params.get("to_status") or "").strip()
+    if not order_no:
+        return {
+            "block_type": "clarification",
+            "summary": "缺少订单编号",
+            "content": "请提供订单编号，例如：把订单 SO-001 状态改为已付款。",
+            "data": {},
+        }
+    if not status_raw:
+        return {
+            "block_type": "clarification",
+            "summary": "缺少目标状态",
+            "content": "请提供目标状态（如：已付款 / 已下单 / 已完成）。",
+            "data": {},
+        }
+
+    if kind:
+        return _order_update_status_for_kind(kind, params={**params, "order_no": order_no, "status": status_raw}, user_data=user_data)
+
+    matches = _find_orders_by_no(order_no)
+    if not matches:
+        return {
+            "block_type": "clarification",
+            "summary": "未找到订单",
+            "content": f"未找到订单编号「{order_no}」（已查销售/采购/服务订单）。",
+            "data": {},
+        }
+    if len(matches) > 1:
+        return {
+            "block_type": "clarification",
+            "summary": "匹配到多类订单",
+            "content": "同一编号在多类订单中命中，请指定 order_type（sales/purchase/service）后再改。",
+            "data": {
+                "candidates": [_serialize_order_brief(kind_name, row) for kind_name, row in matches],
+            },
+        }
+
+    hit_kind, record = matches[0]
+    meta = ORDER_KIND_META[hit_kind]
+    next_status = _normalize_order_status(status_raw, meta["allowed"])
+    if not next_status:
+        return {
+            "block_type": "clarification",
+            "summary": "状态无效",
+            "content": f"{meta['label']}可选状态：{'、'.join(meta['allowed'])}。",
+            "data": {"allowed_statuses": list(meta["allowed"]), "order": _serialize_order_brief(hit_kind, record)},
+        }
+    if not user_has_permission(user_data, meta["permission"]):
+        return {
+            "block_type": "clarification",
+            "summary": "缺少权限",
+            "content": f"修改{meta['label']}需要权限「{meta['permission']}」。",
+            "data": {"permission": meta["permission"], "order": _serialize_order_brief(hit_kind, record)},
+        }
+    return _apply_order_status_update(kind=hit_kind, record=record, next_status=next_status)
+
+
 def _resolve_invoice(*, invoice_id: str = "", invoice_no: str = "") -> InvoiceRecord | None:
     if invoice_id:
         found = InvoiceRecord.objects.filter(id=invoice_id, is_deleted=False).first()
@@ -1023,6 +1365,63 @@ def register() -> None:
             permission="serviceOrder.view",
             risk_level="read",
             handler=_service_order_search,
+        )
+    )
+    order_status_schema = {
+        "type": "object",
+        "properties": {
+            "order_no": {"type": "string", "description": "订单编号"},
+            "status": {"type": "string", "description": "目标状态"},
+            "order_id": {"type": "string", "description": "可选，精确订单 id"},
+            "order_type": {
+                "type": "string",
+                "description": "可选：sales|purchase|service（或销售/采购/服务）",
+            },
+        },
+        "required": ["order_no", "status"],
+    }
+    register_tool(
+        ToolDefinition(
+            name="erp.order.update_status",
+            description="按订单编号修改销售/采购/服务订单状态（需对应 manage 权限；需确认；不自动生成收款流水）",
+            input_schema=order_status_schema,
+            permission="salesOrder.manage|purchaseOrder.manage|serviceOrder.manage",
+            risk_level="write",
+            requires_confirmation=True,
+            handler=_order_update_status,
+        )
+    )
+    register_tool(
+        ToolDefinition(
+            name="erp.sales_order.update_status",
+            description="按销售订单编号修改状态（需 salesOrder.manage；需确认）",
+            input_schema=order_status_schema,
+            permission="salesOrder.manage",
+            risk_level="write",
+            requires_confirmation=True,
+            handler=_sales_order_update_status,
+        )
+    )
+    register_tool(
+        ToolDefinition(
+            name="erp.purchase_order.update_status",
+            description="按采购订单编号修改状态（需 purchaseOrder.manage；需确认）",
+            input_schema=order_status_schema,
+            permission="purchaseOrder.manage",
+            risk_level="write",
+            requires_confirmation=True,
+            handler=_purchase_order_update_status,
+        )
+    )
+    register_tool(
+        ToolDefinition(
+            name="erp.service_order.update_status",
+            description="按服务订单编号修改状态（需 serviceOrder.manage；需确认）",
+            input_schema=order_status_schema,
+            permission="serviceOrder.manage",
+            risk_level="write",
+            requires_confirmation=True,
+            handler=_service_order_update_status,
         )
     )
     register_tool(

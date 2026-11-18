@@ -62,7 +62,8 @@ def confirm_action(
     tool = get_tool(record.tool_name)
     if not tool:
         raise ToolExecutionError("unknown_tool", "工具未注册", status=404)
-    if not user_has_permission(user_data, tool.permission):
+    permission_options = [part.strip() for part in str(tool.permission or "").split("|") if part.strip()]
+    if permission_options and not any(user_has_permission(user_data, item) for item in permission_options):
         raise ToolExecutionError("forbidden", f"缺少业务权限：{tool.permission}", status=403)
 
     # 清空 token，避免重复提交；真正执行走 confirmed=True

@@ -149,9 +149,10 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
                 "3. 查询销售/采购/服务订单或 ERP 商品\n"
                 "4. 查询客户到期时间、某客户购买的商品订单\n"
                 "5. 按项目编号查开票状态，例如：2692… 查询该项目的开票状态\n"
-                "6. 打开后台功能，例如：打开销售订单管理\n"
-                "7. 查看采集/定时任务状态（只读）\n"
-                "8. 删除发票（需点击确认后执行；已确认发票不可删）\n"
+                "6. 按订单编号修改订单状态（需对应权限，确认后执行）\n"
+                "7. 打开后台功能，例如：打开销售订单管理\n"
+                "8. 查看采集/定时任务状态（只读）\n"
+                "9. 删除发票（需点击确认后执行；已确认发票不可删）\n"
                 "其他删除订单/用户等写操作暂不开放。"
             ),
         }
@@ -169,6 +170,11 @@ def route_intent(message: str, context: dict[str, Any] | None = None) -> dict[st
             "needs_clarification": False,
             "reason": "invoice_delete",
         }
+
+    # 按订单编号改状态（写操作，工具层强制确认 + 业务权限）
+    order_status_update = _extract_order_status_update(text)
+    if order_status_update:
+        return order_status_update
 
     # 明确拒绝其他危险写操作（避免落到模糊澄清）
     if _has_any(text, ("删除", "作废", "销毁")) and _has_any(text, ("订单", "公告", "用户", "账号")):
@@ -829,6 +835,89 @@ def _order_params(text: str) -> dict[str, Any]:
     if keyword:
         params["keyword"] = keyword
     return params
+
+
+_ORDER_STATUS_WORDS = (
+    "待付款",
+    "部分付款",
+    "已付款",
+    "退款",
+    "取消",
+    "草稿",
+    "待下单",
+    "已下单",
+    "部分到货",
+    "已完成",
+    "已取消",
+)
+
+
+def _extract_order_status_update(text: str) -> dict[str, Any] | None:
+    """识别「把订单 XXX 状态改为已付款」类意图。"""
+    if not _has_any(text, ("订单", "销订", "采订")):
+        return None
+    if not _has_any(text, ("改", "修改", "更新", "调整", "设为", "设置为", "改为", "改成", "变更")):
+        return None
+    if not _has_any(text, ("状态", *_ORDER_STATUS_WORDS)):
+        return None
+
+    order_no = ""
+    patterns = (
+        r"(?:订单|订单号|订单编号|编号)\s*[：:＃#]?\s*([A-Za-z0-9][A-Za-z0-9\-_/]{3,})",
+        r"把\s*([A-Za-z0-9][A-Za-z0-9\-_/]{3,})\s*(?:这个)?(?:销售|采购|服务)?订单",
+        r"([A-Za-z0-9][A-Za-z0-9\-_/]{3,})\s*(?:销售|采购|服务)?订单.{0,12}(?:状态|改为|改成|设为)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            order_no = match.group(1).strip()
+            break
+    if not order_no:
+        return None
+
+    status = ""
+    for word in sorted(_ORDER_STATUS_WORDS, key=len, reverse=True):
+        if word in text:
+            status = word
+            break
+    if not status:
+        status_match = re.search(r"(?:状态)?\s*(?:改为|改成|改成|设为|设置为|调整为|变更为)\s*([^\s，,。；;]+)", text)
+        if status_match:
+            status = status_match.group(1).strip()
+    if not status:
+        return {
+            "intent": "clarification",
+            "tool_name": None,
+            "params": {"order_no": order_no},
+            "confidence": 0.7,
+            "needs_clarification": True,
+            "reason": "order_status_missing_target",
+            "clarification": f"请说明订单「{order_no}」要改成什么状态。",
+        }
+
+    order_type = ""
+    tool_name = "erp.order.update_status"
+    if _has_any(text, ("销售订单", "销订", "销售")):
+        order_type = "sales"
+        tool_name = "erp.sales_order.update_status"
+    elif _has_any(text, ("采购订单", "采订")) or ("采购" in text and "采购公告" not in text):
+        order_type = "purchase"
+        tool_name = "erp.purchase_order.update_status"
+    elif _has_any(text, ("服务订单", "服务")):
+        order_type = "service"
+        tool_name = "erp.service_order.update_status"
+
+    params: dict[str, Any] = {"order_no": order_no, "status": status}
+    if order_type:
+        params["order_type"] = order_type
+    return {
+        "intent": tool_name,
+        "tool_name": tool_name,
+        "params": params,
+        "confidence": 0.9,
+        "needs_clarification": False,
+        "reason": "order_status_update",
+    }
 
 
 def _extract_customer_name(text: str) -> str:

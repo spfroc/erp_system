@@ -28,6 +28,33 @@ def _preview_copy(tool_name: str, description: str, params: dict[str, Any]) -> t
         description = f"删除{label}"
         content = f"即将删除{label}。请确认后执行（已确认状态的发票不可删除）。"
         return content, description
+    if tool_name in {
+        "erp.order.update_status",
+        "erp.sales_order.update_status",
+        "erp.purchase_order.update_status",
+        "erp.service_order.update_status",
+    }:
+        order_no = str(params.get("order_no") or params.get("orderNo") or "").strip()
+        status = str(params.get("status") or params.get("to_status") or "").strip()
+        order_type = str(params.get("order_type") or params.get("type") or "").strip()
+        type_label = {
+            "sales": "销售订单",
+            "purchase": "采购订单",
+            "service": "服务订单",
+            "销售": "销售订单",
+            "采购": "采购订单",
+            "服务": "服务订单",
+        }.get(order_type, "订单")
+        target = f"{type_label}「{order_no}」" if order_no else type_label
+        description = f"修改{target}状态为「{status}」" if status else f"修改{target}状态"
+        content = (
+            f"即将把{target}状态改为「{status}」。请确认后执行。"
+            if status
+            else f"即将修改{target}状态。请确认后执行。"
+        )
+        if tool_name in {"erp.sales_order.update_status", "erp.service_order.update_status", "erp.order.update_status"}:
+            content += "仅改状态，不会自动生成收款/退款流水。"
+        return content, description
     description = description or tool_name
     return f"即将执行「{description}」，请确认后继续。", description
 
@@ -71,7 +98,8 @@ def execute_tool(
     if not tool:
         raise ToolExecutionError("unknown_tool", f"未注册工具：{tool_name}", status=404)
 
-    if not user_has_permission(user_data, tool.permission):
+    permission_options = [part.strip() for part in str(tool.permission or "").split("|") if part.strip()]
+    if permission_options and not any(user_has_permission(user_data, item) for item in permission_options):
         raise ToolExecutionError("forbidden", f"缺少业务权限：{tool.permission}", status=403)
 
     cleaned = _validate_params(tool.input_schema or {}, params or {})

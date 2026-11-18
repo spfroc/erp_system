@@ -50,13 +50,58 @@ function buildApplyScript(homeConfig) {
 <script>
 (function () {
   var cfg = window.__OFFICIAL_HOME_CONFIG__;
-  if (!cfg || !cfg.contact) return;
+  if (!cfg) return;
   var c = cfg.contact || {};
   var footer = cfg.footer || {};
   var beian = cfg.beian || {};
 
   function setText(el, text) {
     if (el && text != null && String(text) !== "") el.textContent = String(text);
+  }
+
+  function ensureBrandStyle() {
+    if (document.getElementById("official-brand-style")) return;
+    var style = document.createElement("style");
+    style.id = "official-brand-style";
+    style.textContent =
+      ".logo{display:inline-flex;align-items:baseline;flex-wrap:nowrap;gap:0;}" +
+      ".logo .logo-brand{font-size:inherit;font-weight:inherit;color:inherit;line-height:1;}" +
+      ".logo .logo-sep{margin:0 .32em;font-size:.62em;font-weight:500;opacity:.55;line-height:1;}" +
+      ".logo .logo-sub{font-size:.58em;font-weight:500;opacity:.72;letter-spacing:.02em;line-height:1.2;}";
+    document.head.appendChild(style);
+  }
+
+  function applyBrand() {
+    var brand = String(cfg.brand || "").trim();
+    if (!brand) return;
+    var sub = String(cfg.brandSubtitle || "").trim();
+    var sep = String(cfg.brandSeparator || "·").trim() || "·";
+    ensureBrandStyle();
+    document.querySelectorAll("a.logo, h1.logo, .logo").forEach(function (el) {
+      if (!el || el.closest && el.closest("footer")) return;
+      var html = '<span class="logo-brand"></span>';
+      if (sub) {
+        html += '<span class="logo-sep"></span><span class="logo-sub"></span>';
+      }
+      el.innerHTML = html;
+      setText(el.querySelector(".logo-brand"), brand);
+      if (sub) {
+        setText(el.querySelector(".logo-sep"), sep);
+        setText(el.querySelector(".logo-sub"), sub);
+      }
+    });
+  }
+
+  function applyHero() {
+    var title = String(cfg.heroTitle || "").trim();
+    var subtitle = String(cfg.heroSubtitle || "").trim();
+    if (!title && !subtitle) return;
+    var box = document.querySelector(".hero-content") || document.querySelector(".hero .container") || document.querySelector(".hero");
+    if (!box) return;
+    var h1 = box.querySelector("h1");
+    var p = box.querySelector("p");
+    if (title) setText(h1, title);
+    if (subtitle) setText(p, subtitle);
   }
 
   function applySideBar() {
@@ -212,6 +257,8 @@ function buildApplyScript(homeConfig) {
   }
 
   function run() {
+    applyBrand();
+    applyHero();
     applySideBar();
     applyIndustries();
     applyInquiryPlatforms();
@@ -255,14 +302,51 @@ function applyServerContactHtml(html, homeConfig) {
   return next;
 }
 
+function buildBrandInnerHtml(homeConfig) {
+  const brand = String(homeConfig.brand || "").trim();
+  if (!brand) return "";
+  const sub = String(homeConfig.brandSubtitle || "").trim();
+  const sep = String(homeConfig.brandSeparator || "·").trim() || "·";
+  let inner = `<span class="logo-brand">${escapeHtml(brand)}</span>`;
+  if (sub) {
+    inner += `<span class="logo-sep">${escapeHtml(sep)}</span><span class="logo-sub">${escapeHtml(sub)}</span>`;
+  }
+  return inner;
+}
+
+function applyServerBrandHtml(html, homeConfig) {
+  const inner = buildBrandInnerHtml(homeConfig);
+  if (!inner) return html;
+  // 首屏即写入导航品牌，避免仅依赖客户端脚本；跳过 footer 内 logo
+  return html.replace(/<(a|h1)(\s+[^>]*\bclass=(["'])[^"']*\blogo\b[^"']*\3[^>]*)>([\s\S]*?)<\/\1>/gi, (all, tag, attrs) => {
+    if (/footer/i.test(attrs)) return all;
+    return `<${tag}${attrs}>${inner}</${tag}>`;
+  });
+}
+
+function applyServerBrandStyle(html) {
+  if (/id=["']official-brand-style["']/.test(html)) return html;
+  const style =
+    `<style id="official-brand-style">` +
+    `.logo{display:inline-flex;align-items:baseline;flex-wrap:nowrap;gap:0;}` +
+    `.logo .logo-brand{font-size:inherit;font-weight:inherit;color:inherit;line-height:1;}` +
+    `.logo .logo-sep{margin:0 .32em;font-size:.62em;font-weight:500;opacity:.55;line-height:1;}` +
+    `.logo .logo-sub{font-size:.58em;font-weight:500;opacity:.72;letter-spacing:.02em;line-height:1.2;}` +
+    `</style>`;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${style}\n</head>`);
+  return style + html;
+}
+
 export function injectHomeConfigIntoHtml(html, homeConfig) {
   if (!html || !homeConfig) return html;
-  const withContact = applyServerContactHtml(html, homeConfig);
+  let next = applyServerContactHtml(html, homeConfig);
+  next = applyServerBrandHtml(next, homeConfig);
+  next = applyServerBrandStyle(next);
   const script = buildApplyScript(homeConfig);
-  if (/<\/body>/i.test(withContact)) {
-    return withContact.replace(/<\/body>/i, `${script}\n</body>`);
+  if (/<\/body>/i.test(next)) {
+    return next.replace(/<\/body>/i, `${script}\n</body>`);
   }
-  return `${withContact}\n${script}`;
+  return `${next}\n${script}`;
 }
 
 export function homeConfigMetaComment(homeConfig) {
