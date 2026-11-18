@@ -28,6 +28,7 @@ const HOST_TO_SITE = {
   "qinghuicai.cn": "qinghuicai",
   "preview.qlyc.co": "qlyc",
   "yizhichan.qlyc.co": "yizhichan",
+  "preview.yizhichan.co": "yizhichan",
   "preview.qinghuicai.cn": "qinghuicai",
   "portal.qlyc.co": "portal",
 };
@@ -35,6 +36,7 @@ const HOST_TO_SITE = {
 const PREVIEW_CONFIG_HOST = {
   "preview.qlyc.co": "www.qlyc.co",
   "yizhichan.qlyc.co": "www.yizhichan.co",
+  "preview.yizhichan.co": "www.yizhichan.co",
   "preview.qinghuicai.cn": "www.qinghuicai.cn",
 };
 

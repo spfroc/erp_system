@@ -124,7 +124,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=prod.host
       # priority 高于历史安全快照容器，避免抢走 preview / 门户流量
-      - traefik.http.routers.yzc-official.rule=Host(`preview.qlyc.co`) || Host(`yizhichan.qlyc.co`) || Host(`preview.qinghuicai.cn`)
+      - traefik.http.routers.yzc-official.rule=Host(`preview.qlyc.co`) || Host(`yizhichan.qlyc.co`) || Host(`preview.yizhichan.co`) || Host(`preview.qinghuicai.cn`)
       - traefik.http.routers.yzc-official.priority=20000
       - traefik.http.routers.yzc-official.entrypoints=websecure
       - traefik.http.routers.yzc-official.tls.certresolver=letsencrypt
