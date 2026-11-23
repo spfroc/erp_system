@@ -31,6 +31,8 @@ from .notice_views import (
     query_crawled_notices,
 )
 from . import wechat_mp
+from .notices import clamp_public_publish_date_from
+
 PORTAL_COOKIE = "portal_session"
 PORTAL_SALT = "portal-account"
 PORTAL_MAX_AGE = 60 * 60 * 12
@@ -1039,6 +1041,11 @@ def public_crawled_notices(request):
     site_id = (request.GET.get("siteId") or "").strip()
     notice_kind = (request.GET.get("noticeKind") or "").strip()
     notice_kinds = (request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip()
+    # 官网壹采寻源 / 首页田字格：默认且最多看近三个月
+    publish_date_from = clamp_public_publish_date_from(
+        request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or ""
+    )
+    publish_date_to = (request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip()
     try:
         payload = query_crawled_notices(
             page=page,
@@ -1048,8 +1055,8 @@ def public_crawled_notices(request):
             notice_kind=notice_kind,
             notice_kinds=notice_kinds,
             site_ids=None,
-            publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
-            publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
+            publish_date_from=publish_date_from,
+            publish_date_to=publish_date_to,
             buyer_name=(request.GET.get("buyerName") or "").strip(),
             project_code=(request.GET.get("projectCode") or "").strip(),
             project_name=(request.GET.get("projectName") or "").strip(),
@@ -1071,6 +1078,7 @@ def public_crawled_notices(request):
                 "total": 0,
                 "page": page,
                 "page_size": page_size,
+                "publishDateFrom": publish_date_from,
             },
             status=503,
         )
@@ -1079,6 +1087,7 @@ def public_crawled_notices(request):
         "total": payload.get("total") or 0,
         "page": payload.get("page") or page,
         "page_size": payload.get("page_size") or page_size,
+        "publishDateFrom": publish_date_from,
         "sites": site_options(None),
         "noticeKinds": PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"],
     }

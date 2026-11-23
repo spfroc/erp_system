@@ -91,6 +91,16 @@ class PortalAccountTests(TestCase):
         self.assertIn("items", body)
         self.assertLessEqual(body.get("page_size") or 0, 50)
         self.assertLessEqual(len(body.get("items") or []), 50)
+        self.assertTrue(str(body.get("publishDateFrom") or "").startswith("20"))
+
+    def test_clamp_public_publish_date_from_keeps_recent_window(self):
+        from apps.data_store.notices import clamp_public_publish_date_from, public_notice_min_publish_date
+
+        floor = public_notice_min_publish_date()
+        self.assertEqual(clamp_public_publish_date_from(""), floor.isoformat())
+        self.assertEqual(clamp_public_publish_date_from("2000-01-01"), floor.isoformat())
+        self.assertEqual(clamp_public_publish_date_from(floor.isoformat()), floor.isoformat())
+        self.assertEqual(clamp_public_publish_date_from("2099-01-01"), "2099-01-01")
 
     def test_login_cookie_shares_parent_domain_for_official_sites(self):
         client = Client()

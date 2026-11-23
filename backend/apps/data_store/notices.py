@@ -2,14 +2,46 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 import re
 import uuid
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from urllib.request import Request, urlopen
 
 from django.utils import timezone
+
+PUBLIC_NOTICE_LOOKBACK_MONTHS = 3
+
+
+def public_notice_min_publish_date(*, months: int = PUBLIC_NOTICE_LOOKBACK_MONTHS) -> date:
+    """官网公开寻源列表默认最早发布日：近 N 个自然月。"""
+    today = timezone.localdate()
+    month = today.month - max(1, int(months or PUBLIC_NOTICE_LOOKBACK_MONTHS))
+    year = today.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    day = min(today.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def clamp_public_publish_date_from(raw: str | None = "") -> str:
+    """公开列表 publishDateFrom：缺省或早于窗口时钳制到近三个月起点。"""
+    floor = public_notice_min_publish_date()
+    text = str(raw or "").strip()
+    if not text:
+        return floor.isoformat()
+    try:
+        parts = text[:10].split("-")
+        requested = date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except Exception:
+        return floor.isoformat()
+    if requested < floor:
+        return floor.isoformat()
+    return requested.isoformat()
 
 from .models import NoticeCollectionRunRecord, NoticeCollectionSourceRecord, NoticeRecord, WebsiteLeadRecord
 
@@ -333,6 +365,7 @@ def _list_public_notices_from_crawler(
     page_size: int,
     search: str,
     notice_kind: str,
+    publish_date_from: str = "",
 ) -> dict[str, Any] | None:
     """优先读爬虫公告；表不存在或不可用时返回 None，走 CMS 兜底。"""
     try:
@@ -348,6 +381,7 @@ def _list_public_notices_from_crawler(
             search=search,
             notice_kind=notice_kind if notice_kind and notice_kind != "全部" else "",
             site_ids=None,
+            publish_date_from=clamp_public_publish_date_from(publish_date_from),
         )
     except (ProgrammingError, OperationalError):
         return None
@@ -397,11 +431,13 @@ def list_public_notices(
 ) -> dict[str, Any]:
     page = max(1, int(page or 1))
     page_size = min(50, max(1, int(page_size or 20)))
+    publish_from = clamp_public_publish_date_from("")
     crawled = _list_public_notices_from_crawler(
         page=page,
         page_size=page_size,
         search=search,
         notice_kind=notice_kind,
+        publish_date_from=publish_from,
     )
     if crawled is not None:
         return crawled
@@ -423,6 +459,7 @@ def list_public_notices(
             | Q(notice_kind__icontains=keyword)
             | Q(data__content__icontains=keyword)
         )
+    queryset = queryset.filter(published_at__gte=publish_from)
     total = queryset.count()
     rows = queryset.order_by("-published_at", "-updated_at", "-id")[(page - 1) * page_size : page * page_size]
     return {
@@ -432,6 +469,7 @@ def list_public_notices(
         "page_size": page_size,
         "kinds": PUBLIC_NOTICE_KINDS,
         "source": "cms",
+        "publishDateFrom": publish_from,
     }
 
 

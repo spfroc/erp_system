@@ -467,6 +467,25 @@
     if (max) params.set("budgetMax", max);
   }
 
+  function publishDateFromDefault() {
+    // 与后端公开列表一致：近三个自然月
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = now.getMonth() + 1 - 3;
+    while (m <= 0) {
+      m += 12;
+      y -= 1;
+    }
+    var day = Math.min(now.getDate(), new Date(y, m, 0).getDate());
+    return (
+      String(y) +
+      "-" +
+      String(m).padStart(2, "0") +
+      "-" +
+      String(day).padStart(2, "0")
+    );
+  }
+
   function buildQuery() {
     var tab = currentTab();
     var params = new URLSearchParams({
@@ -492,6 +511,7 @@
     else if (tab.progress) params.set("progress", tab.progress);
     applyBudgetRange(params);
     if (state.sort) params.set("sort", state.sort);
+    params.set("publishDateFrom", publishDateFromDefault());
     return params;
   }
 
