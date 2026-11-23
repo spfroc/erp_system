@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateDashboardMetrics, projectPaidAmount, projectPendingInvoiceAmount, projectReceivedAmount, projectSalesAmount } from "./dashboardMetrics";
+import {
+  calculateDashboardMetrics,
+  projectPaidAmount,
+  projectPendingInvoiceAmount,
+  projectPurchaseAmount,
+  projectReceivedAmount,
+  projectSalesAmount,
+} from "./dashboardMetrics";
 import { seedData } from "./seed";
 
 describe("dashboard metrics", () => {
+  it("coerces string purchase amounts instead of concatenating into huge costs", () => {
+    const data = {
+      ...seedData,
+      purchaseOrders: [
+        { ...seedData.purchaseOrders[0], id: "po-a", projectId: "pj-1", amount: "162027" as unknown as number, status: "已下单" as const },
+        { ...seedData.purchaseOrders[0], id: "po-b", projectId: "pj-1", amount: "20880" as unknown as number, status: "已下单" as const },
+        { ...seedData.purchaseOrders[0], id: "po-c", projectId: "pj-1", amount: "999" as unknown as number, status: "已取消" as const },
+      ],
+    };
+    expect(projectPurchaseAmount(data, "pj-1")).toBe(182907);
+  });
+
   it("includes service orders and excludes refunded orders from sales amount", () => {
     const data = {
       ...seedData,

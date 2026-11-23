@@ -205,7 +205,7 @@ export function buildGroupedPurchaseOrders(
     orderIndex += 1;
   });
   const projects = sourceData.projects.map((item) => item.id === project.id
-    ? { ...item, totalCost: item.totalCost + totalAmount, updatedAt: now, purchaseStatus: "待采购" as const }
+    ? { ...item, totalCost: (Number(item.totalCost) || 0) + totalAmount, updatedAt: now, purchaseStatus: "待采购" as const }
     : item);
   return {
     data: {
@@ -254,13 +254,13 @@ export function appendProductsToPurchaseOrder(
   const nextPurchaseOrders = sourceData.purchaseOrders.map((item) => item.id === order.id
     ? {
         ...item,
-        amount: item.amount + addedAmount,
+        amount: (Number(item.amount) || 0) + addedAmount,
         note: extraNote || item.note,
         updatedAt: now,
       }
     : item);
   const projects = sourceData.projects.map((item) => item.id === project.id
-    ? { ...item, totalCost: item.totalCost + addedAmount, updatedAt: now, purchaseStatus: "待采购" as const }
+    ? { ...item, totalCost: (Number(item.totalCost) || 0) + addedAmount, updatedAt: now, purchaseStatus: "待采购" as const }
     : item);
   return {
     data: {

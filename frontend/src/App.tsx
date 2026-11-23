@@ -2747,8 +2747,8 @@ async function deletePurchaseOrderRecord(params: {
   const nextPurchaseOrders = data.purchaseOrders.filter((item) => item.id !== order.id);
   const nextProjectItems = data.projectItems.filter((item) => item.purchaseOrderId !== order.id);
   const nextCost = nextPurchaseOrders
-    .filter((item) => item.projectId === order.projectId)
-    .reduce((sum, item) => sum + item.amount, 0);
+    .filter((item) => item.projectId === order.projectId && item.status !== "已取消")
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const nextProjects = data.projects.map((item) => item.id === order.projectId
     ? { ...item, totalCost: nextCost, updatedAt: today() }
     : item);
@@ -7453,9 +7453,20 @@ function Projects({
             {filteredPage.items.map((project) => {
               const rowCustomerName = data.organizations.find((org) => org.id === project.customerOrgId)?.name ?? "";
               const orderStatusLines = productProjectOrderStatusLines(data, project);
-              const salesAmount = projectSalesAmount(data, project.id) || Number(project.totalAmount) || 0;
+              const liveSales = projectSalesAmount(data, project.id);
+              const liveCost = projectPurchaseAmount(data, project.id);
+              // 有订单时以订单合计为准，避免旧 totalCost 字符串拼接残留成天文数字
+              const hasPurchaseOrders = data.purchaseOrders.some(
+                (order) => order.projectId === project.id && order.status !== "已取消",
+              );
+              const hasSalesOrders = data.salesOrders.some(
+                (order) => order.projectId === project.id && order.status !== "取消" && order.status !== "退款",
+              ) || data.serviceOrders.some(
+                (order) => order.projectId === project.id && order.status !== "取消" && order.status !== "退款",
+              );
+              const salesAmount = hasSalesOrders ? liveSales : (Number(project.totalAmount) || liveSales || 0);
               const receivedAmount = projectReceivedAmount(data, project.id);
-              const costAmount = projectPurchaseAmount(data, project.id) || Number(project.totalCost) || 0;
+              const costAmount = hasPurchaseOrders ? liveCost : (Number(project.totalCost) || liveCost || 0);
               const paidAmount = projectPaidAmount(data, project.id);
               const grossProfit = salesAmount - costAmount;
               const grossMarginText = salesAmount > 0

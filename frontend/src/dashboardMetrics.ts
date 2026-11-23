@@ -1,4 +1,5 @@
 import type { AppData, Project } from "./types";
+import { roundMoney } from "./financeBackfill";
 
 const TERMINAL_PROJECT_STATUSES = new Set([
   "已完成",
@@ -19,14 +20,19 @@ export function isTerminalProject(project: Project) {
   return TERMINAL_PROJECT_STATUSES.has(project.status);
 }
 
+function moneyNumber(value: unknown) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 export function projectSalesAmount(data: AppData, projectId: string) {
   const sales = data.salesOrders
     .filter((order) => order.projectId === projectId && order.status !== "取消" && order.status !== "退款")
-    .reduce((sum, order) => sum + order.amount, 0);
+    .reduce((sum, order) => sum + moneyNumber(order.amount), 0);
   const services = data.serviceOrders
     .filter((order) => order.projectId === projectId && order.status !== "取消" && order.status !== "退款")
-    .reduce((sum, order) => sum + order.amount, 0);
-  return sales + services;
+    .reduce((sum, order) => sum + moneyNumber(order.amount), 0);
+  return roundMoney(sales + services);
 }
 
 function countsTowardReceived(status?: string) {
@@ -34,19 +40,22 @@ function countsTowardReceived(status?: string) {
 }
 
 export function projectPurchaseAmount(data: AppData, projectId: string) {
-  return data.purchaseOrders
-    .filter((order) => order.projectId === projectId && order.status !== "已取消")
-    .reduce((sum, order) => sum + order.amount, 0);
+  // 必须 Number()：接口/旧数据里 amount 可能是字符串，直接 + 会拼成天文数字成本
+  return roundMoney(
+    data.purchaseOrders
+      .filter((order) => order.projectId === projectId && order.status !== "已取消")
+      .reduce((sum, order) => sum + moneyNumber(order.amount), 0),
+  );
 }
 
 export function projectReceivedAmount(data: AppData, projectId: string) {
   const fromSales = data.salesOrders
     .filter((order) => order.projectId === projectId && countsTowardReceived(order.status))
-    .reduce((sum, order) => sum + (Number(order.receivedAmount) || 0), 0);
+    .reduce((sum, order) => sum + moneyNumber(order.receivedAmount), 0);
   const fromService = data.serviceOrders
     .filter((order) => order.projectId === projectId && countsTowardReceived(order.status))
-    .reduce((sum, order) => sum + (Number(order.receivedAmount) || 0), 0);
-  return fromSales + fromService;
+    .reduce((sum, order) => sum + moneyNumber(order.receivedAmount), 0);
+  return roundMoney(fromSales + fromService);
 }
 
 export function projectPaidAmount(data: AppData, projectId: string) {
