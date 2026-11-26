@@ -2305,6 +2305,102 @@ nav button:hover {
   border-top: 1px solid #e8eef2;
 }
 
+.portal-perm-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portal-perm-tree-group {
+  border: 1px solid #e8eef2;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.portal-perm-tree-parent,
+.portal-perm-tree-child {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.portal-perm-tree-parent {
+  background: #f3f7f4;
+  border-bottom: 1px solid #e8eef2;
+}
+
+.portal-perm-tree-parent:hover,
+.portal-perm-tree-child:hover {
+  background: #eef5f0;
+}
+
+.portal-perm-tree-parent input[type="checkbox"],
+.portal-perm-tree-child input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  margin: 3px 0 0;
+  padding: 0;
+  flex: 0 0 16px;
+  accent-color: #1f7a4d;
+}
+
+.portal-perm-tree-parent > span,
+.portal-perm-tree-child > span {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.portal-perm-tree-parent > span strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.portal-perm-tree-child > span strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: #0f172a;
+}
+
+.portal-perm-tree-parent > span em,
+.portal-perm-tree-child > span em {
+  color: #64748b;
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.portal-perm-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.portal-perm-tree-child {
+  padding-left: 36px;
+  border-top: 1px solid #f0f4f7;
+}
+
+.portal-perm-tree-child:first-child {
+  border-top: 0;
+}
+
+.portal-perm-tree-parent:has(input:disabled),
+.portal-perm-tree-child:has(input:disabled) {
+  opacity: 0.72;
+  cursor: default;
+}
+
 .panel-title-buttons .notice-title-search {
   width: min(360px, 100%);
   min-width: min(240px, 100%);
@@ -6532,6 +6628,24 @@ nav button:hover {
   outline: 0;
 }
 
+/* 商品弹窗内复选框不要吃满宽/40px 高，否则权限包勾选会撑破布局 */
+.product-form input[type="checkbox"],
+.product-form input[type="radio"],
+.product-create-modal input[type="checkbox"],
+.product-create-modal input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  flex: 0 0 16px;
+  accent-color: #1f7a4d;
+}
+
 .product-create-actions {
   display: flex;
   flex-wrap: wrap;
@@ -6548,7 +6662,8 @@ nav button:hover {
 }
 
 .product-modal-form textarea,
-.product-platform-options {
+.product-platform-options,
+.product-entitlement-box {
   grid-column: 1 / -1;
 }
 
@@ -6562,6 +6677,87 @@ nav button:hover {
   padding: 10px;
   border: 1px solid #d8e0e8;
   border-radius: 8px;
+}
+
+.product-entitlement-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #c4a15a;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.product-entitlement-head {
+  display: grid;
+  gap: 4px;
+}
+
+.product-entitlement-head strong {
+  color: #241c14;
+}
+
+.product-entitlement-head span {
+  color: #74685a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.product-entitlement-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: #53606f;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.product-entitlement-toggle input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+.product-platform-options.role-checkboxes,
+.product-entitlement-options.role-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.product-platform-options.role-checkboxes label,
+.product-entitlement-options.role-checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: #1d232a;
+  font-size: 14px;
+}
+
+.product-entitlement-options {
+  background: #ffffff;
+  border: 1px solid #eadfce;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.product-entitlement-tree {
+  background: #ffffff;
+  border: 1px solid #eadfce;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.product-entitlement-tree .portal-perm-tree-group {
+  border-color: #eadfce;
+}
+
+.product-entitlement-tree .portal-perm-tree-parent {
+  background: #fff8eb;
 }
 
 .transaction-form {
@@ -7092,6 +7288,144 @@ nav button:hover {
   gap: 8px;
   min-height: 32px;
   line-height: 1.35;
+}
+
+.admin-perm-tree {
+  display: grid;
+  gap: 14px;
+  max-height: min(58vh, 640px);
+  overflow: auto;
+  padding: 2px;
+}
+
+.admin-perm-section {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-perm-section-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #eef3f0;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-perm-section-modules {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-perm-module {
+  border: 1px solid #e8eef2;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.admin-perm-parent,
+.admin-perm-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.admin-perm-parent {
+  background: #f3f7f4;
+  border-bottom: 1px solid #e8eef2;
+}
+
+.admin-perm-parent:hover,
+.admin-perm-child:hover {
+  background: #eef5f0;
+}
+
+.admin-perm-parent input[type="checkbox"],
+.admin-perm-child input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  margin: 3px 0 0;
+  padding: 0;
+  flex: 0 0 16px;
+  accent-color: #1f7a4d;
+}
+
+.admin-perm-parent > span,
+.admin-perm-child > span {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.admin-perm-parent > span strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.admin-perm-child > span strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: #0f172a;
+}
+
+.admin-perm-parent > span em,
+.admin-perm-child > span em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.admin-perm-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-perm-child {
+  padding-left: 36px;
+  border-top: 1px solid #f0f4f7;
+}
+
+.admin-perm-child:first-child {
+  border-top: 0;
+}
+
+.permission-module-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.permission-module-cell strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.permission-module-cell em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.permission-module-cell em.permission-leaf-indent {
+  padding-left: 14px;
+}
+
+.permission-row.permission-module-head {
+  background: #f7faf8;
 }
 
 .role-permission-list {

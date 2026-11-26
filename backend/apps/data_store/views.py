@@ -525,12 +525,17 @@ def _collection_public_data(collection: str, record) -> dict:
         if getattr(record, "current_status", ""):
             data.setdefault("currentStatus", record.current_status)
     if collection == "customerAccounts":
+        from .portal import effective_portal_permissions, org_portal_entitlements
+
         data.setdefault("id", record.id)
         data["name"] = getattr(record, "name", "") or data.get("name") or ""
         data["phone"] = getattr(record, "phone", "") or data.get("phone") or ""
         data["customerName"] = getattr(record, "customer_name", "") or data.get("customerName") or ""
         data["customerOrgId"] = getattr(record, "customer_org_id", "") or data.get("customerOrgId") or ""
         data["status"] = getattr(record, "status", "") or data.get("status") or "启用"
+        org_id = str(data.get("customerOrgId") or "").strip()
+        data["orgEntitlements"] = org_portal_entitlements(org_id)
+        data["permissions"] = effective_portal_permissions(record)
         wechat = data.get("wechat") if isinstance(data.get("wechat"), dict) else {}
         openid = str(wechat.get("openid") or "").strip()
         data["wechatBound"] = bool(openid)
@@ -776,6 +781,28 @@ def _require_permission(request, permission: str):
 def _collection_permission(collection: str, action: str) -> str:
     permissions = COLLECTION_PERMISSIONS.get(collection, {})
     return permissions.get(action, "user.manage")
+
+
+def _apply_product_entitlement_guard(user_data: dict | None, data: dict, existing_data: dict | None) -> dict:
+    """仅 product.entitlement.manage 可改服务商品绑定的门户权限；普通商品管理员保存时保留原值。"""
+    from .portal import normalize_portal_permissions
+
+    existing = existing_data if isinstance(existing_data, dict) else {}
+    can_edit = _has_permission(user_data, "product.entitlement.manage")
+    if can_edit:
+        if "portalEntitlements" in data:
+            raw = data.get("portalEntitlements")
+            if raw is None:
+                # 显式清空 = 恢复未配置（兼容旧「全开」）
+                data.pop("portalEntitlements", None)
+            else:
+                data["portalEntitlements"] = normalize_portal_permissions(raw)
+        return data
+    if "portalEntitlements" in existing:
+        data["portalEntitlements"] = existing.get("portalEntitlements")
+    else:
+        data.pop("portalEntitlements", None)
+    return data
 
 
 def _customer_account_conflict(data: dict, existing) -> JsonResponse | None:
@@ -2446,6 +2473,8 @@ def collection_items(request, collection):
 
     existing = model.objects.filter(id=data["id"]).first()
     data = _preserve_sensitive_fields(collection, data, existing.data if existing else None)
+    if collection == "products":
+        data = _apply_product_entitlement_guard(user_data, data, existing.data if existing else None)
     if collection == "customerAccounts":
         conflict = _customer_account_conflict(data, existing)
         if conflict:
@@ -2529,6 +2558,8 @@ def collection_item(request, collection, record_id):
     data = {**_column_json_from_record(record), **existing_data, **incoming} if request.method == "PATCH" else incoming
     data["id"] = record.id
     data = _preserve_sensitive_fields(collection, data, record.data)
+    if collection == "products":
+        data = _apply_product_entitlement_guard(user_data, data, existing_data)
     if collection == "libraryContacts" and "communicationRecords" not in incoming and "records" not in incoming:
         # 列表页可能剥离了跟进记录；未显式提交时保留库内原值，避免误清空。
         if existing_data.get("communicationRecords"):
@@ -3728,3 +3759,24 @@ def sms_center_records(request):
     if error:
         return JsonResponse({"detail": error, "configured": False}, status=400)
     return JsonResponse({"data": data, "configured": True})
+
+
+@require_http_methods(["GET"])
+def customer_org_portal_entitlements(request, org_id: str):
+    """管理端：查询客户企业当前有效服务商品对应的门户权限并集。"""
+    _, permission_error = _require_permission(request, "customerAccount.view")
+    if permission_error:
+        return permission_error
+    from .portal import org_active_service_product_ids, org_has_active_service_project, org_portal_entitlements
+
+    org = str(org_id or "").strip()
+    return JsonResponse(
+        {
+            "data": {
+                "orgId": org,
+                "hasActiveService": org_has_active_service_project(org),
+                "serviceProductIds": org_active_service_product_ids(org),
+                "orgEntitlements": org_portal_entitlements(org),
+            }
+        }
+    )

@@ -3,7 +3,15 @@ import { X } from "lucide-react";
 import { SearchableSelect } from "./App";
 import { createCollectionItem, createId, patchCollectionItem, queryCollection, AuthExpiredError } from "./db";
 import { CopyableLine, Pagination, SearchField } from "./listUi";
+import { PortalPermissionTree } from "./PortalPermissionTree";
+import {
+  PORTAL_PERMISSION_OPTIONS,
+  PORTAL_SITE_OPTIONS,
+  type PortalPermission,
+} from "./portalPermissions";
 import type { Organization, PermissionKey } from "./types";
+
+export { PORTAL_PERMISSION_OPTIONS, PORTAL_SITE_OPTIONS, type PortalPermission };
 
 type CanAccess = (permission: PermissionKey) => boolean;
 
@@ -13,25 +21,6 @@ function apiUrl(path: string) {
   return url.toString();
 }
 
-export const PORTAL_PERMISSION_OPTIONS = [
-  { id: "portal.notice.view", label: "公告列表", hint: "登录后可检索、筛选已采集公告" },
-  { id: "portal.stats.view", label: "数据统计", hint: "查看总量、平台分布、成交标签分析与近两周趋势" },
-  { id: "portal.notice.subscribe", label: "订阅消息", hint: "门户按标签/地区/关键词等订阅，微信服务号每日汇总推送" },
-  { id: "portal.order.view", label: "企业订单", hint: "查看本企业销售/服务订单" },
-  { id: "portal.invoice.view", label: "企业发票", hint: "查看本企业作为买方的发票" },
-  { id: "portal.contract.view", label: "企业合同", hint: "查看本企业相关合同附件" },
-  { id: "portal.account.view", label: "查看企业账号", hint: "查看同企业可登录门户的账号" },
-  { id: "portal.account.manage", label: "管理企业账号", hint: "新增/编辑/停用同企业门户账号" },
-] as const;
-
-export const PORTAL_SITE_OPTIONS = [
-  { id: "sd-ggzyjyzx", label: "山东网上商城" },
-  { id: "jd-quan-yicai", label: "京东泉易采" },
-  { id: "jd-qing-huicai", label: "京东青慧采" },
-] as const;
-
-export type PortalPermission = (typeof PORTAL_PERMISSION_OPTIONS)[number]["id"];
-
 export interface CustomerAccount {
   id: string;
   name: string;
@@ -40,6 +29,8 @@ export interface CustomerAccount {
   customerOrgId?: string;
   status: "启用" | "停用";
   permissions: PortalPermission[];
+  /** 企业当前有效服务商品的权限并集；账号权限不可超出此范围 */
+  orgEntitlements?: PortalPermission[];
   /** null/undefined = 不限制；[] = 无平台；有值 = 白名单 */
   allowedSiteIds?: string[] | null;
   subscription?: { enabled?: boolean; keywords?: string };
@@ -61,7 +52,8 @@ const emptyForm = {
   customerOrgId: "",
   customerName: "",
   status: "启用" as "启用" | "停用",
-  permissions: ["portal.notice.view"] as PortalPermission[],
+  permissions: PORTAL_PERMISSION_OPTIONS.map((item) => item.id) as PortalPermission[],
+  orgEntitlements: PORTAL_PERMISSION_OPTIONS.map((item) => item.id) as PortalPermission[],
   siteScope: "all" as "all" | "limited",
   allowedSiteIds: [] as string[],
 };
@@ -178,6 +170,26 @@ export function CustomerAccountsPanel({
     return item.customerName || (item.customerOrgId ? "未匹配企业" : "未绑定企业");
   }
 
+  async function loadOrgEntitlements(orgId: string): Promise<PortalPermission[]> {
+    if (!orgId) return PORTAL_PERMISSION_OPTIONS.map((item) => item.id);
+    try {
+      const response = await fetch(apiUrl(`/api/customer-orgs/${encodeURIComponent(orgId)}/portal-entitlements/`), {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (response.status === 401) throw new AuthExpiredError();
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "加载企业权限包失败");
+      const caps = Array.isArray(body?.data?.orgEntitlements) ? body.data.orgEntitlements : [];
+      return caps.filter((id: string): id is PortalPermission =>
+        PORTAL_PERMISSION_OPTIONS.some((item) => item.id === id),
+      );
+    } catch (error) {
+      if (error instanceof AuthExpiredError) throw error;
+      return PORTAL_PERMISSION_OPTIONS.map((item) => item.id);
+    }
+  }
+
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
@@ -188,6 +200,7 @@ export function CustomerAccountsPanel({
     setEditing(item);
     const limited = Array.isArray(item.allowedSiteIds);
     const orgId = item.customerOrgId || "";
+    const caps = (item.orgEntitlements || PORTAL_PERMISSION_OPTIONS.map((opt) => opt.id)) as PortalPermission[];
     setForm({
       name: item.name,
       phone: item.phone,
@@ -196,10 +209,26 @@ export function CustomerAccountsPanel({
       customerName: (orgId && orgNameById.get(orgId)) || item.customerName || "",
       status: item.status,
       permissions: item.permissions || [],
+      orgEntitlements: caps,
       siteScope: limited ? "limited" : "all",
       allowedSiteIds: limited ? [...(item.allowedSiteIds || [])] : PORTAL_SITE_OPTIONS.map((site) => site.id),
     });
     setShowForm(true);
+    if (orgId) {
+      void loadOrgEntitlements(orgId)
+        .then((nextCaps) => {
+          setForm((current) => ({
+            ...current,
+            orgEntitlements: nextCaps,
+            permissions: current.permissions.filter((id) => nextCaps.includes(id)),
+          }));
+        })
+        .catch((error) => {
+          if (!(error instanceof AuthExpiredError)) {
+            onNotice({ type: "error", message: error instanceof Error ? error.message : "加载企业权限包失败" });
+          }
+        });
+    }
   }
 
   function selectOrg(orgId: string) {
@@ -209,15 +238,19 @@ export function CustomerAccountsPanel({
       customerOrgId: orgId,
       customerName: org?.name || "",
     }));
-  }
-
-  function togglePermission(id: PortalPermission) {
-    setForm((current) => ({
-      ...current,
-      permissions: current.permissions.includes(id)
-        ? current.permissions.filter((item) => item !== id)
-        : [...current.permissions, id],
-    }));
+    void loadOrgEntitlements(orgId)
+      .then((caps) => {
+        setForm((current) => ({
+          ...current,
+          orgEntitlements: caps,
+          permissions: (current.permissions.length ? current.permissions : caps).filter((id) => caps.includes(id)),
+        }));
+      })
+      .catch((error) => {
+        if (!(error instanceof AuthExpiredError)) {
+          onNotice({ type: "error", message: error instanceof Error ? error.message : "加载企业权限包失败" });
+        }
+      });
   }
 
   function toggleSite(id: string) {
@@ -296,6 +329,7 @@ export function CustomerAccountsPanel({
     }
     setSaving(true);
     try {
+      const permissions = form.permissions.filter((id) => form.orgEntitlements.includes(id));
       const payload: CustomerAccount & { password?: string } = {
         id: editing?.id || createId("portal-user"),
         name: form.name.trim(),
@@ -303,9 +337,9 @@ export function CustomerAccountsPanel({
         customerName,
         customerOrgId: form.customerOrgId,
         status: form.status,
-        permissions: form.permissions,
+        permissions,
         allowedSiteIds: form.siteScope === "all" ? null : form.allowedSiteIds,
-        subscription: editing?.subscription || { enabled: form.permissions.includes("portal.notice.subscribe"), keywords: "" },
+        subscription: editing?.subscription || { enabled: permissions.includes("portal.notice.subscribe"), keywords: "" },
         createdAt: editing?.createdAt || new Date().toISOString(),
       };
       if (form.password.trim()) payload.password = form.password.trim();
@@ -379,7 +413,7 @@ export function CustomerAccountsPanel({
                 )}
               </span>
               <span>{item.phone}</span>
-              <span>{PORTAL_PERMISSION_OPTIONS.filter((option) => item.permissions?.includes(option.id)).map((option) => option.label).join("、") || "—"}</span>
+              <span>{PORTAL_PERMISSION_OPTIONS.filter((option) => !("treeHidden" in option && option.treeHidden) && item.permissions?.includes(option.id)).map((option) => option.label).join("、") || "—"}</span>
               <span>{siteScopeLabel(item)}</span>
               <span>{wechatStatusLabel(item)}</span>
               <span>{item.status}</span>
@@ -508,20 +542,15 @@ export function CustomerAccountsPanel({
                 </select>
               </label>
               <fieldset className="portal-permission-fieldset">
-                <legend>统计平台权限</legend>
-                {PORTAL_PERMISSION_OPTIONS.map((option) => (
-                  <label key={option.id} className="portal-permission-option">
-                    <input
-                      type="checkbox"
-                      checked={form.permissions.includes(option.id)}
-                      onChange={() => togglePermission(option.id)}
-                    />
-                    <span>
-                      <strong>{option.label}</strong>
-                      <em>{option.hint}</em>
-                    </span>
-                  </label>
-                ))}
+                <legend>门户权限</legend>
+                <p className="muted" style={{ margin: "0 0 8px" }}>
+                  树状勾选：父级为模块，子级为具体能力。可勾选范围由企业有效服务商品权限包决定。
+                </p>
+                <PortalPermissionTree
+                  selected={form.permissions}
+                  allowedIds={form.orgEntitlements}
+                  onChange={(next) => setForm((current) => ({ ...current, permissions: next as PortalPermission[] }))}
+                />
               </fieldset>
               <fieldset className="portal-permission-fieldset">
                 <legend>可查看平台</legend>

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -1171,6 +1172,217 @@ def _stats_parsed_queryset(*, notice_kinds: list[str] | None = None):
     return qs.filter(notice_raw_id__in=NoticeRaw.objects.filter(kind_q).values("id"))
 
 
+def _stats_sql_wall(dt: datetime) -> str:
+    if timezone.is_aware(dt):
+        dt = timezone.localtime(dt)
+    return dt.replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _build_result_stats_sql_fast(
+    *,
+    period: str,
+    start: datetime,
+    end: datetime,
+    site_ids: list[str] | None,
+    span_detail: str = "",
+) -> dict:
+    """无省份/采购人/成交类型筛选时：一次 JOIN 扫描 + 内存聚合，避免多次全表 GROUP BY。"""
+    site_sql = ""
+    params: list[Any] = [DEAL_KIND_UNKNOWN, _stats_sql_wall(start), _stats_sql_wall(end)]
+    if site_ids is not None:
+        if not site_ids:
+            return {
+                "period": period,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "startDate": start.date().isoformat(),
+                "endDate": (end.date() - timedelta(days=1)).isoformat(),
+                "noticeCount": 0,
+                "dealAmount": "0.00",
+                "buyerCount": 0,
+                "goodsCount": 0,
+                "byDealKind": [{"dealKind": kind, "count": 0, "amount": "0.00"} for kind in DEAL_KINDS],
+                "byNoticeKind": [],
+                "byProvince": [],
+                "byRegion": [],
+                "byBuyer": [],
+                "noticeKinds": [],
+                "maxSpanDays": STATS_MAX_SPAN_DAYS,
+                **({"detail": span_detail} if span_detail else {}),
+            }
+        placeholders = ",".join(["%s"] * len(site_ids))
+        site_sql = f" AND p.site_id IN ({placeholders})"
+        params.extend(site_ids)
+
+    def money(value: Any) -> str:
+        return f"{Decimal(value or 0).quantize(Decimal('0.01'))}"
+
+    amount_expr = (
+        "CASE WHEN p.deal_amount IS NULL OR p.deal_amount < 0 OR p.deal_amount > 1000000000 "
+        "THEN 0 ELSE p.deal_amount END"
+    )
+    notice_count = 0
+    deal_amount = Decimal("0")
+    by_notice: dict[str, list] = defaultdict(lambda: [0, Decimal("0")])
+    deal_map: dict[str, dict] = {
+        kind: {"dealKind": kind, "count": 0, "amount": Decimal("0")} for kind in DEAL_KINDS
+    }
+    by_province_map: dict[str, dict] = {}
+    by_region_map: dict[str, list] = defaultdict(lambda: [0, Decimal("0")])
+    by_buyer_map: dict[tuple[str, str, str], list] = defaultdict(lambda: [0, Decimal("0")])
+    buyers: set[str] = set()
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT COALESCE(NULLIF(TRIM(p.notice_kind), ''), '未分类'), "
+            f"{amount_expr}, "
+            f"COALESCE(NULLIF(TRIM(t.deal_kind), ''), %s), "
+            f"COALESCE(NULLIF(TRIM(bp.province), ''), ''), "
+            f"COALESCE(NULLIF(TRIM(bp.city), ''), ''), "
+            f"COALESCE(NULLIF(TRIM(bp.district), ''), ''), "
+            f"COALESCE(NULLIF(TRIM(p.region_name), ''), '未分区'), "
+            f"COALESCE(NULLIF(TRIM(bp.buyer_name), ''), NULLIF(TRIM(p.buyer_name), ''), ''), "
+            f"COALESCE(bp.org_type, ''), "
+            f"COALESCE(bp.nature, '') "
+            f"FROM notice_parsed p "
+            f"LEFT JOIN notice_result_tag t ON t.notice_raw_id = p.notice_raw_id "
+            f"LEFT JOIN notice_buyer_profile bp ON bp.id = t.buyer_profile_id "
+            f"WHERE p.publish_time >= %s AND p.publish_time < %s{site_sql}",
+            params,
+        )
+        for kind, amt, dk, province, city, district, region_fallback, buyer_name, org_type, nature in cursor:
+            amt_dec = Decimal(amt or 0)
+            notice_count += 1
+            deal_amount += amt_dec
+            kind_label = str(kind or "未分类")
+            by_notice[kind_label][0] += 1
+            by_notice[kind_label][1] += amt_dec
+            dk_label = str(dk or DEAL_KIND_UNKNOWN)
+            if dk_label not in deal_map:
+                deal_map[dk_label] = {"dealKind": dk_label, "count": 0, "amount": Decimal("0")}
+            deal_map[dk_label]["count"] += 1
+            deal_map[dk_label]["amount"] += amt_dec
+
+            province_label = str(province or "") or "未分区"
+            city_label = str(city or "") or "省级"
+            bucket = by_province_map.setdefault(
+                province_label,
+                {"province": province_label, "count": 0, "amount": Decimal("0"), "cities": {}},
+            )
+            bucket["count"] += 1
+            bucket["amount"] += amt_dec
+            city_bucket = bucket["cities"].setdefault(
+                city_label,
+                {"city": city_label, "count": 0, "amount": Decimal("0")},
+            )
+            city_bucket["count"] += 1
+            city_bucket["amount"] += amt_dec
+
+            region_label = "".join(part for part in (province, city, district) if part) or str(
+                region_fallback or "未分区"
+            )
+            by_region_map[region_label][0] += 1
+            by_region_map[region_label][1] += amt_dec
+
+            buyer_label = str(buyer_name or "").strip()
+            if buyer_label:
+                buyers.add(buyer_label)
+                buyer_key = (buyer_label, str(org_type or ""), str(nature or ""))
+                by_buyer_map[buyer_key][0] += 1
+                by_buyer_map[buyer_key][1] += amt_dec
+
+        goods_params = [_stats_sql_wall(start), _stats_sql_wall(end)]
+        goods_site_sql = ""
+        if site_ids is not None:
+            goods_placeholders = ",".join(["%s"] * len(site_ids))
+            goods_site_sql = f" AND p.site_id IN ({goods_placeholders})"
+            goods_params.extend(site_ids)
+        cursor.execute(
+            f"SELECT COUNT(*) FROM notice_product_tag pt "
+            f"WHERE EXISTS ("
+            f"  SELECT 1 FROM notice_parsed p "
+            f"  WHERE p.notice_raw_id = pt.notice_raw_id "
+            f"    AND p.publish_time >= %s AND p.publish_time < %s{goods_site_sql}"
+            f")",
+            goods_params,
+        )
+        goods_count = int((cursor.fetchone() or [0])[0] or 0)
+        if goods_count == 0:
+            cursor.execute(
+                f"SELECT COUNT(*) FROM notice_goods g "
+                f"WHERE EXISTS ("
+                f"  SELECT 1 FROM notice_parsed p "
+                f"  WHERE p.notice_raw_id = g.notice_raw_id "
+                f"    AND p.publish_time >= %s AND p.publish_time < %s{goods_site_sql}"
+                f")",
+                goods_params,
+            )
+            goods_count = int((cursor.fetchone() or [0])[0] or 0)
+
+    by_notice_kind = [
+        {"noticeKind": kind, "count": cnt, "amount": money(amt)}
+        for kind, (cnt, amt) in sorted(by_notice.items(), key=lambda item: item[1][0], reverse=True)
+    ]
+    by_region = [
+        {"region": region, "count": cnt, "amount": money(amt)}
+        for region, (cnt, amt) in sorted(by_region_map.items(), key=lambda item: item[1][1], reverse=True)[:30]
+    ]
+    by_buyer = [
+        {
+            "buyerName": name,
+            "orgType": org,
+            "nature": nature,
+            "count": cnt,
+            "amount": money(amt),
+        }
+        for (name, org, nature), (cnt, amt) in sorted(
+            by_buyer_map.items(), key=lambda item: item[1][1], reverse=True
+        )[:30]
+    ]
+    deal_kind_order = {kind: index for index, kind in enumerate(DEAL_KINDS)}
+    province_rows = []
+    for item in sorted(by_province_map.values(), key=lambda entry: entry["count"], reverse=True):
+        cities = [
+            {"city": city["city"], "count": city["count"], "amount": money(city["amount"])}
+            for city in sorted(item["cities"].values(), key=lambda entry: entry["count"], reverse=True)
+        ]
+        province_rows.append(
+            {
+                "province": item["province"],
+                "count": item["count"],
+                "amount": money(item["amount"]),
+                "cities": cities,
+            }
+        )
+    result = {
+        "period": period,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "startDate": start.date().isoformat(),
+        "endDate": (end.date() - timedelta(days=1)).isoformat(),
+        "noticeCount": int(notice_count or 0),
+        "dealAmount": money(deal_amount),
+        "buyerCount": len(buyers),
+        "goodsCount": goods_count,
+        "noticeKinds": [],
+        "maxSpanDays": STATS_MAX_SPAN_DAYS,
+        "byDealKind": [
+            {"dealKind": item["dealKind"], "count": item["count"], "amount": money(item["amount"])}
+            for item in sorted(
+                deal_map.values(),
+                key=lambda entry: (deal_kind_order.get(entry["dealKind"], 99), -entry["count"]),
+            )
+        ],
+        "byNoticeKind": by_notice_kind,
+        "byProvince": province_rows,
+        "byRegion": by_region,
+        "byBuyer": by_buyer,
+    }
+    if span_detail:
+        result["detail"] = span_detail
+    return result
+
+
 def build_result_stats(
     *,
     period: str,
@@ -1210,6 +1422,24 @@ def build_result_stats(
     deal_kind = deal_kind.strip()
     if deal_kind and deal_kind not in DEAL_KINDS:
         deal_kind = ""
+    # 门户默认「近30天 / 无额外筛选」走 SQL 聚合快路径
+    if (
+        not province
+        and not buyer
+        and not deal_kind
+        and not (start_date_from or "").strip()
+        and not (start_date_to or "").strip()
+        and not (end_date_from or "").strip()
+        and not (end_date_to or "").strip()
+        and not [kind for kind in (notice_kinds or []) if kind and kind != "全部"]
+    ):
+        return _build_result_stats_sql_fast(
+            period=period,
+            start=start,
+            end=end,
+            site_ids=site_ids,
+            span_detail=span_detail,
+        )
     parsed_qs = _stats_parsed_queryset(notice_kinds=notice_kinds).filter(publish_time__gte=start, publish_time__lt=end)
     start_bounds = _inclusive_day_bounds(start_date_from, start_date_to)
     if start_bounds:

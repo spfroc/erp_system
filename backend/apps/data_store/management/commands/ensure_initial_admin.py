@@ -28,6 +28,7 @@ class Command(BaseCommand):
                     "permissions": [
                         "dashboard.view", "project.view", "project.create", "project.edit",
                         "entity.view", "entity.create", "product.view", "product.manage",
+                        "product.entitlement.manage",
                         "purchase.manage", "serviceOrder.view", "serviceOrder.manage",
                         "salesOrder.view", "salesOrder.manage", "purchaseOrder.view", "purchaseOrder.manage",
                         "finance.view", "finance.manage", "invoice.manage",
@@ -46,7 +47,8 @@ class Command(BaseCommand):
                         "customerAccount.view", "customerAccount.manage",
                         "portal.notice.view", "portal.notice.subscribe", "portal.stats.view",
                         "portal.order.view", "portal.invoice.view", "portal.contract.view",
-                        "portal.account.view", "portal.account.manage",
+                        "portal.account.view", "portal.account.create", "portal.account.edit",
+                        "portal.account.delete", "portal.account.manage",
                         "menu.view", "menu.manage",
                         "lead.manage", "sensitive.view", "profit.view",
                         "dev.ops.view", "dev.ops.manage",

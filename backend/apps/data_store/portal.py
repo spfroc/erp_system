@@ -5,8 +5,11 @@ import html
 import json
 import os
 import secrets
+import threading
+import time
 import uuid
 from urllib.parse import quote, urlencode
+from typing import Any, Callable
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, identify_hasher, is_password_usable, make_password
@@ -46,22 +49,222 @@ PORTAL_PERMISSIONS = (
     "portal.invoice.view",
     "portal.contract.view",
     "portal.account.view",
-    "portal.account.manage",
+    "portal.account.create",
+    "portal.account.edit",
+    "portal.account.delete",
+    "portal.account.manage",  # 兼容旧数据：蕴含 view/create/edit/delete
 )
-PORTAL_PLATFORM_DEFAULT_PERMISSIONS = (
-    "portal.notice.view",
-    "portal.notice.subscribe",
+PORTAL_ACCOUNT_ACTION_PERMISSIONS = (
+    "portal.account.create",
+    "portal.account.edit",
+    "portal.account.delete",
 )
+PORTAL_PLATFORM_DEFAULT_PERMISSIONS = tuple(PORTAL_PERMISSIONS)
 SERVICE_PROJECT_INACTIVE_STATUSES = frozenset({"服务到期结束", "项目终止"})
+# 兼容：服务商品未配置 portalEntitlements 时，有效服务项目仍按全部门户权限开放
+PORTAL_ACTIVE_SERVICE_DEFAULT_PERMISSIONS = tuple(PORTAL_PERMISSIONS)
+PORTAL_BASELINE_PERMISSIONS = ("portal.notice.view", "portal.notice.subscribe")
 
 
 def normalize_portal_permissions(value) -> list[str]:
     if not isinstance(value, list):
         return []
     allowed = set(PORTAL_PERMISSIONS)
-    return [item for item in value if item in allowed]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in value:
+        key = str(item or "").strip()
+        if key in allowed and key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    return ordered
 
 
+def expand_portal_permissions(value) -> list[str]:
+    """规范化并展开 manage → view/create/edit/delete；任一写操作蕴含 view。"""
+    perms = set(normalize_portal_permissions(value))
+    if "portal.account.manage" in perms:
+        perms.update({"portal.account.view", *PORTAL_ACCOUNT_ACTION_PERMISSIONS})
+    elif perms.intersection(PORTAL_ACCOUNT_ACTION_PERMISSIONS):
+        perms.add("portal.account.view")
+    return [key for key in PORTAL_PERMISSIONS if key in perms]
+
+
+def portal_permission_granted(perms, permission: str) -> bool:
+    expanded = set(expand_portal_permissions(list(perms) if not isinstance(perms, list) else perms))
+    if not permission:
+        return True
+    if permission in expanded:
+        return True
+    if permission.endswith(".view"):
+        manage_key = permission[: -len(".view")] + ".manage"
+        if manage_key in expanded:
+            return True
+    if permission in PORTAL_ACCOUNT_ACTION_PERMISSIONS and "portal.account.manage" in expanded:
+        return True
+    return False
+
+
+def _product_configured_entitlements(product_data: dict | None) -> list[str] | None:
+    """None = 未配置（兼容旧商品按全开）；list = 已配置的权限包（可为空）。"""
+    if not isinstance(product_data, dict) or "portalEntitlements" not in product_data:
+        return None
+    return normalize_portal_permissions(product_data.get("portalEntitlements"))
+
+
+def iter_active_service_projects(customer_org_id: str):
+    org_id = str(customer_org_id or "").strip()
+    if not org_id:
+        return
+    today = timezone.localdate()
+    qs = ProjectRecord.objects.filter(
+        is_deleted=False,
+        customer_org_id=org_id,
+    ).filter(Q(type="服务项目") | Q(data__type="服务项目"))
+    for project in qs.only("id", "status", "type", "data").iterator(chunk_size=100):
+        status = str(project.status or (project.data or {}).get("status") or "").strip()
+        if status in SERVICE_PROJECT_INACTIVE_STATUSES:
+            continue
+        end = _parse_service_end_date((project.data or {}).get("serviceEndDate"))
+        if end is None or end < today:
+            continue
+        yield project
+
+
+def org_active_service_product_ids(customer_org_id: str) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for project in iter_active_service_projects(customer_org_id):
+        product_id = str((project.data or {}).get("serviceProductId") or "").strip()
+        if product_id and product_id not in seen:
+            seen.add(product_id)
+            ids.append(product_id)
+    return ids
+
+
+_ORG_ENTITLEMENT_CACHE: dict[str, tuple[float, list[str]]] = {}
+_ORG_ENTITLEMENT_TTL_SEC = 60.0
+_ORG_ACTIVE_CACHE: dict[str, tuple[float, bool]] = {}
+
+
+def _cache_get(cache: dict[str, tuple[float, object]], key: str, ttl: float):
+    hit = cache.get(key)
+    if not hit:
+        return None
+    expires, value = hit
+    if expires < time.monotonic():
+        cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(cache: dict[str, tuple[float, object]], key: str, value, ttl: float) -> None:
+    cache[key] = (time.monotonic() + ttl, value)
+    if len(cache) > 512:
+        now = time.monotonic()
+        stale = [k for k, (exp, _) in cache.items() if exp < now]
+        for k in stale[:256]:
+            cache.pop(k, None)
+
+
+def org_portal_entitlements(customer_org_id: str) -> list[str]:
+    """组织因有效期内服务商品获得的权限并集；无有效项目则仅基线公告权限。"""
+    org_id = str(customer_org_id or "").strip()
+    if not org_id:
+        return list(PORTAL_BASELINE_PERMISSIONS)
+    cached = _cache_get(_ORG_ENTITLEMENT_CACHE, org_id, _ORG_ENTITLEMENT_TTL_SEC)
+    if isinstance(cached, list):
+        return list(cached)
+
+    product_ids: list[str] = []
+    seen: set[str] = set()
+    has_active = False
+    for project in iter_active_service_projects(org_id):
+        has_active = True
+        product_id = str((project.data or {}).get("serviceProductId") or "").strip()
+        if product_id and product_id not in seen:
+            seen.add(product_id)
+            product_ids.append(product_id)
+
+    if not has_active:
+        result = list(PORTAL_BASELINE_PERMISSIONS)
+        _cache_set(_ORG_ENTITLEMENT_CACHE, org_id, result, _ORG_ENTITLEMENT_TTL_SEC)
+        _cache_set(_ORG_ACTIVE_CACHE, org_id, False, _ORG_ENTITLEMENT_TTL_SEC)
+        return result
+
+    _cache_set(_ORG_ACTIVE_CACHE, org_id, True, _ORG_ENTITLEMENT_TTL_SEC)
+    if not product_ids:
+        # 有有效项目但未挂商品时，仍按旧行为全开
+        result = list(PORTAL_ACTIVE_SERVICE_DEFAULT_PERMISSIONS)
+        _cache_set(_ORG_ENTITLEMENT_CACHE, org_id, result, _ORG_ENTITLEMENT_TTL_SEC)
+        return result
+
+    from .models import ProductRecord
+
+    union: set[str] = set()
+    saw_unconfigured = False
+    products = {
+        str(row.id): (row.data if isinstance(row.data, dict) else {})
+        for row in ProductRecord.objects.filter(id__in=product_ids, is_deleted=False).only("id", "data")
+    }
+    for product_id in product_ids:
+        configured = _product_configured_entitlements(products.get(product_id))
+        if configured is None:
+            saw_unconfigured = True
+            continue
+        union.update(configured)
+    if saw_unconfigured:
+        # 任一未配置商品 → 兼容旧套餐：全部门户权限
+        result = list(PORTAL_ACTIVE_SERVICE_DEFAULT_PERMISSIONS)
+    elif not union:
+        result = list(PORTAL_BASELINE_PERMISSIONS)
+    else:
+        result = expand_portal_permissions([key for key in PORTAL_PERMISSIONS if key in union])
+    _cache_set(_ORG_ENTITLEMENT_CACHE, org_id, result, _ORG_ENTITLEMENT_TTL_SEC)
+    return list(result)
+
+
+def clamp_portal_permissions_to_org(permissions, customer_org_id: str) -> list[str]:
+    caps = set(org_portal_entitlements(customer_org_id))
+    return [item for item in normalize_portal_permissions(permissions) if item in caps]
+
+
+def default_portal_permissions_for_org(customer_org_id: str) -> list[str]:
+    """新建客户账号默认权限：取组织有效服务商品权限并集。"""
+    return org_portal_entitlements(customer_org_id)
+
+
+def ensure_active_service_portal_defaults(
+    record: CustomerAccountRecord,
+    *,
+    has_active_service: bool | None = None,
+) -> CustomerAccountRecord:
+    """有有效服务项目时开放全部平台公告；不再强制把账号权限改成全开。"""
+    org_id = str(record.customer_org_id or (record.data or {}).get("customerOrgId") or "").strip()
+    active = org_has_active_service_project(org_id) if has_active_service is None else bool(has_active_service)
+    if not active:
+        return record
+    data = dict(record.data or {})
+    if "allowedSiteIds" not in data:
+        return record
+    data.pop("allowedSiteIds", None)
+    record.data = data
+    record.save(update_fields=["data", "updated_at"])
+    return record
+
+
+def effective_portal_permissions(
+    record: CustomerAccountRecord,
+    *,
+    org_caps: list[str] | None = None,
+) -> list[str]:
+    org_id = str(record.customer_org_id or (record.data or {}).get("customerOrgId") or "").strip()
+    caps = expand_portal_permissions(list(org_caps) if org_caps is not None else org_portal_entitlements(org_id))
+    assigned = normalize_portal_permissions((record.data or {}).get("permissions"))
+    if not assigned:
+        return list(caps)
+    cap_set = set(caps)
+    return expand_portal_permissions([item for item in assigned if item in cap_set])
 def _known_site_ids() -> set[str]:
     known = set(SITE_LABELS.keys())
     try:
@@ -124,7 +327,15 @@ def account_site_scope(account: dict) -> list[str] | None:
     return normalize_allowed_site_ids(account.get("allowedSiteIds"))
 
 
-def public_account(record: CustomerAccountRecord) -> dict:
+def public_account(
+    record: CustomerAccountRecord,
+    *,
+    org_caps: list[str] | None = None,
+    has_active_service: bool | None = None,
+    skip_ensure: bool = False,
+) -> dict:
+    if not skip_ensure:
+        record = ensure_active_service_portal_defaults(record, has_active_service=has_active_service)
     data = dict(record.data or {})
     data.pop("password", None)
     data["id"] = record.id
@@ -133,14 +344,19 @@ def public_account(record: CustomerAccountRecord) -> dict:
     data["customerName"] = record.customer_name or data.get("customerName") or ""
     data["customerOrgId"] = record.customer_org_id or data.get("customerOrgId") or ""
     data["status"] = record.status or data.get("status") or "启用"
-    data["permissions"] = normalize_portal_permissions(data.get("permissions"))
+    org_id = str(data["customerOrgId"] or "").strip()
+    caps = list(org_caps) if org_caps is not None else org_portal_entitlements(org_id)
+    data["orgEntitlements"] = caps
+    data["permissions"] = effective_portal_permissions(record, org_caps=caps)
     subscription = normalize_subscription(
         data.get("subscription") if isinstance(data.get("subscription"), dict) else {}
     )
-    # 兼容旧前端：keywords 仍可为字符串
+    # keywords 为数组；keywordsText 兼容旧表单
     data["subscription"] = {
         **subscription,
-        "keywords": subscription.get("keywordsText") or " ".join(subscription.get("keywords") or []),
+        "keywords": list(subscription.get("keywords") or []),
+        "keywordsText": subscription.get("keywordsText")
+        or " ".join(subscription.get("keywords") or []),
     }
     wechat = data.get("wechat") if isinstance(data.get("wechat"), dict) else {}
     openid = str(wechat.get("openid") or "").strip()
@@ -158,7 +374,13 @@ def public_account(record: CustomerAccountRecord) -> dict:
 
 
 def account_defaults(payload: dict) -> dict:
+    org_id = str(payload.get("customerOrgId") or "").strip()
     permissions = normalize_portal_permissions(payload.get("permissions"))
+    if org_id:
+        if not permissions:
+            permissions = default_portal_permissions_for_org(org_id)
+        else:
+            permissions = clamp_portal_permissions_to_org(permissions, org_id)
     subscription = normalize_subscription(
         payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
     )
@@ -167,7 +389,7 @@ def account_defaults(payload: dict) -> dict:
         "permissions": permissions,
         "subscription": {
             **subscription,
-            "keywords": subscription.get("keywordsText") or " ".join(subscription.get("keywords") or []),
+            "keywords": list(subscription.get("keywords") or []),
         },
         "status": (payload.get("status") or "启用").strip() or "启用",
     }
@@ -241,21 +463,17 @@ def org_has_active_service_project(customer_org_id: str) -> bool:
     org_id = str(customer_org_id or "").strip()
     if not org_id:
         return False
-    today = timezone.localdate()
-    qs = ProjectRecord.objects.filter(
-        is_deleted=False,
-        customer_org_id=org_id,
-    ).filter(Q(type="服务项目") | Q(data__type="服务项目"))
-    for project in qs.only("id", "status", "type", "data").iterator(chunk_size=100):
-        status = str(project.status or (project.data or {}).get("status") or "").strip()
-        if status in SERVICE_PROJECT_INACTIVE_STATUSES:
-            continue
-        end = _parse_service_end_date((project.data or {}).get("serviceEndDate"))
-        if end is None:
-            continue
-        if end >= today:
-            return True
-    return False
+    cached = _cache_get(_ORG_ACTIVE_CACHE, org_id, _ORG_ENTITLEMENT_TTL_SEC)
+    if isinstance(cached, bool):
+        return cached
+    # 顺带填充权限缓存，避免列表页重复扫项目表
+    org_portal_entitlements(org_id)
+    cached = _cache_get(_ORG_ACTIVE_CACHE, org_id, _ORG_ENTITLEMENT_TTL_SEC)
+    if isinstance(cached, bool):
+        return cached
+    active = any(True for _ in iter_active_service_projects(org_id))
+    _cache_set(_ORG_ACTIVE_CACHE, org_id, active, _ORG_ENTITLEMENT_TTL_SEC)
+    return active
 
 
 def find_platform_account_for_login(account_name: str, password: str) -> PlatformAccountRecord | None:
@@ -334,8 +552,8 @@ def resolve_portal_account_for_platform(platform_account: PlatformAccountRecord)
         "customerName": customer_name,
         "customerOrgId": org_id,
         "status": "启用",
-        "permissions": list(PORTAL_PLATFORM_DEFAULT_PERMISSIONS),
-        "subscription": {"enabled": False, "keywords": ""},
+        "permissions": default_portal_permissions_for_org(org_id),
+        "subscription": {"enabled": False, "keywords": []},
         "platformAccountId": pa_id,
         "loginSource": "platformAccount",
     }
@@ -500,15 +718,9 @@ def require_portal(request, permission: str | None = None):
     if not record:
         return None, JsonResponse({"detail": "请先登录客户控制台。"}, status=401)
     account = public_account(record)
-    perms = set(account["permissions"] or [])
-    if permission and permission not in perms:
-        # manage 蕴含 view（如 portal.account.manage → portal.account.view）
-        implied = False
-        if permission.endswith(".view"):
-            manage_key = permission[: -len(".view")] + ".manage"
-            implied = manage_key in perms
-        if not implied:
-            return None, JsonResponse({"detail": "当前账号没有这项权限。", "permission": permission}, status=403)
+    perms = account.get("permissions") or []
+    if permission and not portal_permission_granted(perms, permission):
+        return None, JsonResponse({"detail": "当前账号没有这项权限。", "permission": permission}, status=403)
     return record, None
 
 
@@ -1095,6 +1307,78 @@ def public_crawled_notices(request):
     return JsonResponse(body)
 
 
+# 默认首屏：硬 TTL 保底；软 TTL 过期后先返回旧值再后台刷新（抗长时间闲置后首屏）
+PORTAL_NOTICES_DEFAULT_CACHE_SECONDS = 1800
+PORTAL_NOTICES_SOFT_SECONDS = 120
+
+
+def _portal_swr_unpack(raw: Any, *, soft_seconds: int) -> tuple[dict | None, bool]:
+    """返回 (data, is_stale)。兼容旧版直接存 dict 的缓存。"""
+    if not isinstance(raw, dict):
+        return None, False
+    if "data" in raw and isinstance(raw.get("data"), dict) and "ts" in raw:
+        data = raw["data"]
+        age = time.time() - float(raw.get("ts") or 0)
+        return data, age > soft_seconds
+    # 旧格式：整包即业务数据，视为已过软 TTL，触发后台刷新
+    return raw, True
+
+
+def _portal_swr_pack(data: dict) -> dict:
+    return {"ts": time.time(), "data": data}
+
+
+def _portal_swr_get_or_build(
+    cache_key: str,
+    *,
+    hard_seconds: int,
+    soft_seconds: int,
+    builder: Callable[[], dict],
+    lock_ttl: int = 120,
+) -> dict:
+    """硬缓存未命中同步计算；软过期则立刻返回旧值并单飞后台重建。"""
+    packed = cache.get(cache_key)
+    data, stale = _portal_swr_unpack(packed, soft_seconds=soft_seconds)
+    if data is not None and not stale:
+        return data
+
+    lock_key = f"{cache_key}:lock"
+
+    if data is not None and stale:
+        if cache.add(lock_key, "1", lock_ttl):
+
+            def _refresh() -> None:
+                try:
+                    fresh = builder()
+                    cache.set(cache_key, _portal_swr_pack(fresh), hard_seconds)
+                except Exception:
+                    pass
+                finally:
+                    cache.delete(lock_key)
+
+            threading.Thread(target=_refresh, daemon=True).start()
+        return data
+
+    # 硬未命中：单飞，避免并发冷启动打爆库
+    if cache.add(lock_key, "1", lock_ttl):
+        try:
+            fresh = builder()
+            cache.set(cache_key, _portal_swr_pack(fresh), hard_seconds)
+            return fresh
+        finally:
+            cache.delete(lock_key)
+
+    for _ in range(80):
+        time.sleep(0.1)
+        packed = cache.get(cache_key)
+        data, _ = _portal_swr_unpack(packed, soft_seconds=soft_seconds)
+        if data is not None:
+            return data
+    fresh = builder()
+    cache.set(cache_key, _portal_swr_pack(fresh), hard_seconds)
+    return fresh
+
+
 @require_http_methods(["GET"])
 def portal_notices(request):
     record, error = require_portal(request, "portal.notice.view")
@@ -1104,25 +1388,93 @@ def portal_notices(request):
     scope = account_site_scope(account)
     page = int(request.GET.get("page") or 1)
     page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 50)
-    try:
-        payload = query_crawled_notices(
-            page=page,
-            page_size=page_size,
-            search=(request.GET.get("search") or "").strip(),
-            site_id=(request.GET.get("siteId") or "").strip(),
-            notice_kind=(request.GET.get("noticeKind") or "").strip(),
-            notice_kinds=(request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip(),
-            site_ids=scope,
-            publish_date_from=(request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip(),
-            publish_date_to=(request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip(),
-            buyer_name=(request.GET.get("buyerName") or "").strip(),
-            project_code=(request.GET.get("projectCode") or "").strip(),
-            project_name=(request.GET.get("projectName") or "").strip(),
-            region_name=(request.GET.get("regionName") or request.GET.get("region") or "").strip(),
-            progress=(request.GET.get("progress") or "").strip(),
-            procurement_mode=(request.GET.get("procurementMode") or request.GET.get("procurement_mode") or "").strip(),
-            sort=(request.GET.get("sort") or request.GET.get("orderBy") or "").strip(),
+    search = (request.GET.get("search") or "").strip()
+    site_id = (request.GET.get("siteId") or "").strip()
+    notice_kind = (request.GET.get("noticeKind") or "").strip()
+    notice_kinds = (request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip()
+    publish_date_from = (request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip()
+    publish_date_to = (request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip()
+    buyer_name = (request.GET.get("buyerName") or "").strip()
+    project_code = (request.GET.get("projectCode") or "").strip()
+    project_name = (request.GET.get("projectName") or "").strip()
+    region_name = (request.GET.get("regionName") or request.GET.get("region") or "").strip()
+    progress = (request.GET.get("progress") or "").strip()
+    procurement_mode = (request.GET.get("procurementMode") or request.GET.get("procurement_mode") or "").strip()
+    sort = (request.GET.get("sort") or request.GET.get("orderBy") or "").strip()
+    # 默认首屏（无筛选）跨 worker 缓存 + SWR，躲开闲置后冷 COUNT
+    default_first_page = (
+        page == 1
+        and page_size == 20
+        and not any(
+            [
+                search,
+                site_id,
+                notice_kind,
+                notice_kinds,
+                publish_date_from,
+                publish_date_to,
+                buyer_name,
+                project_code,
+                project_name,
+                region_name,
+                progress,
+                procurement_mode,
+                sort,
+            ]
         )
+    )
+    scope_key = "all" if scope is None else ",".join(scope)
+    list_cache_key = f"portal_notices_default_v2:{scope_key}" if default_first_page else ""
+
+    def _build_notice_payload() -> dict:
+        try:
+            body = query_crawled_notices(
+                page=page,
+                page_size=page_size,
+                search=search,
+                site_id=site_id,
+                notice_kind=notice_kind,
+                notice_kinds=notice_kinds,
+                site_ids=scope,
+                publish_date_from=publish_date_from,
+                publish_date_to=publish_date_to,
+                buyer_name=buyer_name,
+                project_code=project_code,
+                project_name=project_name,
+                region_name=region_name,
+                progress=progress,
+                procurement_mode=procurement_mode,
+                sort=sort,
+            )
+        except (ProgrammingError, OperationalError) as exc:
+            raise exc
+        body["sites"] = site_options(scope)
+        body["noticeKinds"] = PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"]
+        return body
+
+    if list_cache_key:
+        try:
+            payload = _portal_swr_get_or_build(
+                list_cache_key,
+                hard_seconds=PORTAL_NOTICES_DEFAULT_CACHE_SECONDS,
+                soft_seconds=PORTAL_NOTICES_SOFT_SECONDS,
+                builder=_build_notice_payload,
+            )
+            return JsonResponse(payload)
+        except (ProgrammingError, OperationalError):
+            return JsonResponse(
+                {
+                    "detail": "公告数据暂时不可用，请稍后重试或联系管理员。",
+                    "items": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                status=503,
+            )
+
+    try:
+        payload = _build_notice_payload()
     except (ProgrammingError, OperationalError):
         # 勿吞成空列表：前端会当成「无数据」，掩盖缺列/索引等真实故障
         return JsonResponse(
@@ -1135,8 +1487,6 @@ def portal_notices(request):
             },
             status=503,
         )
-    payload["sites"] = site_options(scope)
-    payload["noticeKinds"] = PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"]
     return JsonResponse(payload)
 
 
@@ -1160,20 +1510,33 @@ def portal_notice_detail(request, notice_id: int):
         return JsonResponse({"detail": "公告表尚未创建"}, status=503)
 
 
-def _serialize_inbox_item(row: PortalNoticeInbox) -> dict:
+def _serialize_inbox_item(row: PortalNoticeInbox, *, highlight_terms: list[str] | None = None) -> dict:
+    title = row.title or ""
+    project_name = row.project_name or ""
+    buyer_name = row.buyer_name or ""
+    region_name = row.region_name or ""
+    terms = [str(item or "").strip() for item in (highlight_terms or []) if str(item or "").strip()]
+    matched = []
+    haystack = f"{title}\n{project_name}\n{buyer_name}\n{region_name}".lower()
+    for term in terms:
+        if term.lower() in haystack and term not in matched:
+            matched.append(term)
+            if len(matched) >= 8:
+                break
     return {
         "id": row.id,
         "noticeId": row.notice_raw_id,
         "digestDate": row.digest_date.isoformat() if row.digest_date else "",
-        "title": row.title or "",
-        "projectName": row.project_name or "",
-        "buyerName": row.buyer_name or "",
-        "regionName": row.region_name or "",
+        "title": title,
+        "projectName": project_name,
+        "buyerName": buyer_name,
+        "regionName": region_name,
         "siteId": row.site_id or "",
         "siteLabel": SITE_LABELS.get(row.site_id or "", row.site_id or ""),
         "isRead": bool(row.is_read),
         "readAt": row.read_at.isoformat() if row.read_at else "",
         "createdAt": row.created_at.isoformat() if row.created_at else "",
+        "matchedKeywords": matched,
     }
 
 
@@ -1186,19 +1549,34 @@ def portal_messages(request):
     page = max(int(request.GET.get("page") or 1), 1)
     page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 100)
     unread_only = str(request.GET.get("unread") or "").strip().lower() in {"1", "true", "yes"}
+    search = (request.GET.get("search") or "").strip()
     qs = PortalNoticeInbox.objects.filter(customer_account_id=record.id).order_by("-created_at", "-id")
     if unread_only:
         qs = qs.filter(is_read=False)
+    if search:
+        qs = qs.filter(
+            Q(title__icontains=search)
+            | Q(project_name__icontains=search)
+            | Q(buyer_name__icontains=search)
+            | Q(region_name__icontains=search)
+            | Q(site_id__icontains=search)
+        )
     total = qs.count()
     unread_total = PortalNoticeInbox.objects.filter(customer_account_id=record.id, is_read=False).count()
     rows = list(qs[(page - 1) * page_size : page * page_size])
+    account = public_account(record)
+    sub = account.get("subscription") if isinstance(account.get("subscription"), dict) else {}
+    highlight_terms = list(sub.get("keywords") or [])
+    if search:
+        highlight_terms = [search, *highlight_terms]
     return JsonResponse(
         {
-            "items": [_serialize_inbox_item(row) for row in rows],
+            "items": [_serialize_inbox_item(row, highlight_terms=highlight_terms) for row in rows],
             "total": total,
             "unreadTotal": unread_total,
             "page": page,
             "page_size": page_size,
+            "search": search,
         }
     )
 
@@ -1370,7 +1748,7 @@ def portal_subscription(request):
     data = dict(record.data or {})
     data["subscription"] = {
         "enabled": normalized["enabled"],
-        "keywords": normalized.get("keywordsText") or " ".join(normalized.get("keywords") or []),
+        "keywords": list(normalized.get("keywords") or []),
         "contentTags": normalized.get("contentTags") or [],
         "regions": normalized.get("regions") or [],
         "buyers": normalized.get("buyers") or [],
@@ -1391,17 +1769,50 @@ def portal_subscription_options(request):
     from .notice_dict import KIND_ORG_TYPE, list_dict_names
     from .notice_tag_models import NoticeResultTag
 
-    content_tags = list(
-        NoticeResultTag.objects.exclude(content_tag="")
-        .values("content_tag")
-        .annotate(total=Count("id"))
-        .order_by("-total", "content_tag")
-        .values_list("content_tag", flat=True)[:40]
-    )
-    # 兜底常用标签，避免库空时无法勾选
-    for item in ("印刷", "运维服务", "办公用品", "空调", "LED屏幕", "车辆加油", "宣传项目", "家具", "计算机"):
-        if item not in content_tags:
-            content_tags.append(item)
+    cache_key = "portal_subscription_content_tags_v1"
+    content_tags = cache.get(cache_key)
+    if not isinstance(content_tags, list) or not content_tags:
+        # 全量去重标签（按使用频次排序）；门户用搜索筛选，不再截断到几十个
+        content_tags = list(
+            NoticeResultTag.objects.exclude(content_tag="")
+            .values("content_tag")
+            .annotate(total=Count("id"))
+            .order_by("-total", "content_tag")
+            .values_list("content_tag", flat=True)
+        )
+        # 兜底：库空或极冷门时仍可勾选常用项
+        for item in (
+            "车辆",
+            "汽车",
+            "公务用车",
+            "新能源汽车",
+            "充电桩",
+            "车辆加油",
+            "油卡",
+            "ETC",
+            "车辆维保",
+            "车辆保险",
+            "车辆租赁",
+            "客车",
+            "货车",
+            "轿车",
+            "轮胎",
+            "汽配",
+            "汽车配件",
+            "洗车",
+            "停车",
+            "印刷",
+            "运维服务",
+            "办公用品",
+            "空调",
+            "LED屏幕",
+            "宣传项目",
+            "家具",
+            "计算机",
+        ):
+            if item not in content_tags:
+                content_tags.append(item)
+        cache.set(cache_key, content_tags, 300)
     provinces = [
         "山东省",
         "北京市",
@@ -1490,7 +1901,9 @@ PORTAL_WECHAT_LOGIN_SALT = "portal-wechat-login"
 PORTAL_WECHAT_NEXT_TABS = {"messages", "subscription", "notices", "home", "account"}
 PORTAL_WX_SCAN_TTL = 180
 PORTAL_WX_SCAN_PREFIX = "psl_"
+PORTAL_WX_BIND_PREFIX = "psb_"
 PORTAL_WX_SCAN_CACHE_PREFIX = "portal_wx_scan:"
+PORTAL_WX_BIND_CACHE_PREFIX = "portal_wx_bind:"
 
 
 def _portal_home_base() -> str:
@@ -1500,6 +1913,10 @@ def _portal_home_base() -> str:
 
 def _wx_scan_cache_key(ticket: str) -> str:
     return f"{PORTAL_WX_SCAN_CACHE_PREFIX}{ticket}"
+
+
+def _wx_bind_cache_key(ticket: str) -> str:
+    return f"{PORTAL_WX_BIND_CACHE_PREFIX}{ticket}"
 
 
 def _complete_portal_scan_login(*, ticket: str, openid: str) -> str:
@@ -1523,15 +1940,40 @@ def _complete_portal_scan_login(*, ticket: str, openid: str) -> str:
     return "ok"
 
 
+def _complete_portal_scan_bind(*, ticket: str, openid: str) -> str:
+    """PC 订阅页扫码绑定：将 openid 绑到 ticket 对应账号。"""
+    ticket = str(ticket or "").strip()
+    openid = str(openid or "").strip()
+    if not ticket or not openid:
+        return "fail"
+    key = _wx_bind_cache_key(ticket)
+    current = cache.get(key)
+    if not isinstance(current, dict) or current.get("status") not in {"pending", "conflict", "fail"}:
+        return "expired" if not current else str(current.get("status") or "expired")
+    account_id = str(current.get("account_id") or "").strip()
+    record = CustomerAccountRecord.objects.filter(id=account_id, is_deleted=False).first()
+    if not record or (record.status or "") != "启用":
+        cache.set(key, {"status": "fail", "account_id": account_id}, PORTAL_WX_SCAN_TTL)
+        return "fail"
+    existing = _find_account_by_openid(openid)
+    if existing and existing.id != record.id:
+        cache.set(key, {"status": "conflict", "account_id": account_id}, PORTAL_WX_SCAN_TTL)
+        return "conflict"
+    _set_account_wechat(record, openid=openid, follow_status="subscribed")
+    cache.set(key, {"status": "ok", "account_id": str(record.id)}, PORTAL_WX_SCAN_TTL)
+    return "ok"
+
+
 def _portal_scan_result_page(*, status: str) -> HttpResponse:
     """手机扫码确认后的提示页（不在手机上写 PC 会话）。"""
     status = (status or "fail").strip() or "fail"
     messages = {
-        "ok": ("登录成功", "请返回电脑，页面将自动进入系统。"),
+        "ok": ("操作成功", "请返回电脑，页面将自动继续。"),
         "unbound": ("尚未绑定", "当前微信未绑定会员账号。请先用手机号登录，在「订阅」页绑定微信后再扫码。"),
         "disabled": ("账号不可用", "该账号已停用，请联系管理员。"),
+        "conflict": ("绑定冲突", "该微信已绑定其他账号，请换号扫码或先解绑。"),
         "expired": ("二维码已失效", "请返回电脑刷新二维码后重试。"),
-        "fail": ("登录失败", "请返回电脑刷新二维码，或使用手机号登录。"),
+        "fail": ("操作失败", "请返回电脑刷新二维码后重试。"),
     }
     if status not in messages:
         status = "fail"
@@ -1785,6 +2227,106 @@ def portal_wechat_scan_login_status(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def portal_wechat_scan_bind_start(request):
+    """PC 订阅页：签发扫码绑定 ticket，返回临时二维码。"""
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    if not wechat_mp.mp_configured():
+        return JsonResponse({"detail": "微信服务号尚未配置，请联系管理员。"}, status=503)
+    if public_account(record).get("wechatBound"):
+        return JsonResponse({"detail": "当前账号已绑定微信。", "wechatBound": True}, status=400)
+    ticket = secrets.token_urlsafe(16)
+    scene = f"{PORTAL_WX_BIND_PREFIX}{ticket}"
+    cache.set(
+        _wx_bind_cache_key(ticket),
+        {"status": "pending", "account_id": str(record.id)},
+        PORTAL_WX_SCAN_TTL,
+    )
+    qr = wechat_mp.create_temp_scene_qrcode(scene_str=scene, expire_seconds=PORTAL_WX_SCAN_TTL)
+    qr_image_url = str((qr or {}).get("qrImageUrl") or "").strip()
+    mode = "scene"
+    scan_url = ""
+    if not qr_image_url:
+        origin = ""
+        redirect = wechat_mp.oauth_redirect_uri()
+        if redirect and "/api/" in redirect:
+            origin = redirect.split("/api/", 1)[0].rstrip("/")
+        if origin:
+            scan_url = f"{origin}/api/portal/wechat/scan-bind/authorize/?ticket={quote(ticket)}"
+            qr_image_url = (
+                "https://api.qrserver.com/v1/create-qr-code/"
+                f"?size=220x220&margin=8&data={quote(scan_url, safe='')}"
+            )
+            mode = "oauth"
+        else:
+            cache.delete(_wx_bind_cache_key(ticket))
+            return JsonResponse({"detail": "无法创建绑定二维码，请稍后重试。"}, status=503)
+    return JsonResponse(
+        {
+            "ticket": ticket,
+            "expiresIn": PORTAL_WX_SCAN_TTL,
+            "qrImageUrl": qr_image_url,
+            "mode": mode,
+            "scanUrl": scan_url,
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def portal_wechat_scan_bind_authorize(request):
+    """回退模式：手机微信打开后走 snsapi_base，再完成绑定。"""
+    ticket = (request.GET.get("ticket") or "").strip()
+    data = cache.get(_wx_bind_cache_key(ticket)) if ticket else None
+    if not ticket or not isinstance(data, dict):
+        return _portal_scan_result_page(status="expired")
+    if data.get("status") == "ok":
+        return _portal_scan_result_page(status="ok")
+    if data.get("status") not in {"pending", "conflict", "fail"}:
+        return _portal_scan_result_page(status="expired")
+    if not wechat_mp.mp_configured():
+        return _portal_scan_result_page(status="fail")
+    state = signing.dumps(
+        {"purpose": "scan_bind", "ticket": ticket, "ts": timezone.now().timestamp()},
+        salt=PORTAL_WECHAT_LOGIN_SALT,
+    )
+    url = wechat_mp.build_oauth_url(state=state, scope="snsapi_base")
+    if not url:
+        return _portal_scan_result_page(status="fail")
+    return _portal_js_redirect_page(
+        title="微信授权中",
+        hint="正在绑定账号…",
+        target=url,
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def portal_wechat_scan_bind_status(request):
+    """PC 轮询扫码绑定结果。"""
+    record, error = require_portal(request, "portal.notice.subscribe")
+    if error:
+        return error
+    ticket = (request.GET.get("ticket") or "").strip()
+    if not ticket:
+        return JsonResponse({"status": "expired"})
+    key = _wx_bind_cache_key(ticket)
+    data = cache.get(key)
+    if not isinstance(data, dict):
+        return JsonResponse({"status": "expired"})
+    if str(data.get("account_id") or "") != str(record.id):
+        return JsonResponse({"status": "fail"})
+    status = str(data.get("status") or "pending")
+    if status != "ok":
+        return JsonResponse({"status": status})
+    cache.delete(key)
+    refreshed = CustomerAccountRecord.objects.filter(id=record.id, is_deleted=False).first() or record
+    return JsonResponse({"status": "ok", "data": public_account(refreshed)})
+
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def wechat_mp_oauth_callback(request):
     try:
@@ -1816,12 +2358,16 @@ def wechat_mp_oauth_callback(request):
                 )
             return _portal_bind_result_page(status="fail")
 
-        # —— 登录类 state：静默登录 / PC 扫码 ——
+        # —— 登录类 state：静默登录 / PC 扫码登录 / PC 扫码绑定 ——
         if login_payload is not None:
             purpose = str((login_payload or {}).get("purpose") or "login").strip() or "login"
             if purpose == "scan_login":
                 ticket = str((login_payload or {}).get("ticket") or "").strip()
                 status = _complete_portal_scan_login(ticket=ticket, openid=openid)
+                return _portal_scan_result_page(status=status)
+            if purpose == "scan_bind":
+                ticket = str((login_payload or {}).get("ticket") or "").strip()
+                status = _complete_portal_scan_bind(ticket=ticket, openid=openid)
                 return _portal_scan_result_page(status=status)
 
             next_tab = _normalize_portal_next((login_payload or {}).get("next") or "messages")
@@ -1869,13 +2415,16 @@ def wechat_mp_callback(request):
     event_name = (event.get("Event") or "").lower()
     openid = (event.get("FromUserName") or "").strip()
     if msg_type == "event" and openid:
-        # 临时场景码扫码 / 带参关注 → PC 扫码登录
+        # 临时场景码扫码 / 带参关注 → PC 扫码登录或绑定
         if event_name in {"scan", "subscribe"}:
             event_key = (event.get("EventKey") or "").strip()
             scene = event_key[8:] if event_key.startswith("qrscene_") else event_key
             if scene.startswith(PORTAL_WX_SCAN_PREFIX):
                 ticket = scene[len(PORTAL_WX_SCAN_PREFIX) :]
                 _complete_portal_scan_login(ticket=ticket, openid=openid)
+            elif scene.startswith(PORTAL_WX_BIND_PREFIX):
+                ticket = scene[len(PORTAL_WX_BIND_PREFIX) :]
+                _complete_portal_scan_bind(ticket=ticket, openid=openid)
 
         record = _find_account_by_openid(openid)
         if record:
@@ -1905,7 +2454,8 @@ def portal_stats_view(request):
     return portal_stats(request)
 
 
-PORTAL_STATS_CACHE_SECONDS = 60  # short TTL; LocMem per-process on one
+PORTAL_STATS_CACHE_SECONDS = 1800  # 硬 TTL；配合 SWR 抗闲置首屏
+PORTAL_STATS_SOFT_SECONDS = 180
 
 
 def _portal_stats_cache_key(
@@ -1922,10 +2472,12 @@ def _portal_stats_cache_key(
     buyer: str,
     deal_kind: str,
 ) -> str:
+    # 全量站点视角下统计与账号无关，跨账号共享缓存，避免重复 8s 计算
     scope_part = "all" if effective_scope is None else ",".join(sorted(effective_scope))
+    account_part = "*" if effective_scope is None else str(account_id)
     raw = "|".join(
         [
-            str(account_id),
+            account_part,
             scope_part,
             period,
             start_date,
@@ -1938,7 +2490,7 @@ def _portal_stats_cache_key(
             deal_kind,
         ]
     )
-    return "portal_stats:" + hashlib.md5(raw.encode("utf-8")).hexdigest()
+    return "portal_stats_v2:" + hashlib.md5(raw.encode("utf-8")).hexdigest()
 
 
 def portal_stats(request):
@@ -1985,81 +2537,91 @@ def portal_stats(request):
         buyer=buyer,
         deal_kind=deal_kind,
     )
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return JsonResponse({"data": cached})
 
-    sites = site_options(scope)
-    need_site_maps = include_sites and len(sites) > 1
-    if include_notice:
-        stats = build_notice_stats(
-            site_ids=effective_scope,
-            start=range_start,
-            end=range_end,
-            with_site_maps=need_site_maps,
-        )
-    else:
-        stats = {
-            **_empty_notice_stats(effective_scope, start=range_start, end=range_end),
-            "sites": sites,
+    def _with_account_fields(body: dict) -> dict:
+        return {
+            **body,
+            "customerName": account["customerName"] or account["name"],
+            "subscriptionEnabled": account["subscription"]["enabled"],
+            "allowedSiteIds": account.get("allowedSiteIds"),
+            "siteScope": account.get("siteScope") or "all",
         }
-    site_maps = stats.pop("_siteMaps", None) if isinstance(stats, dict) else None
 
-    tag_stats = (
-        safe_stats(
-            period=period,
-            province=province,
-            buyer=buyer,
-            deal_kind=deal_kind,
-            site_ids=effective_scope,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        if include_tags
-        else {}
-    )
-    payload = {
-        "customerName": account["customerName"] or account["name"],
-        "subscriptionEnabled": account["subscription"]["enabled"],
-        "allowedSiteIds": account.get("allowedSiteIds"),
-        "siteScope": account.get("siteScope") or "all",
-        "period": period,
-        **stats,
-        "tagStats": tag_stats,
-    }
-    # 首页：附带各可查看平台的独立统计（单平台时复用主汇总，避免二次全量查询）
-    if include_sites:
-        if len(sites) <= 1:
-            payload["siteStats"] = [
-                {
-                    "siteId": site["id"],
-                    "label": site["label"],
-                    "publicNoticeTotal": stats.get("publicNoticeTotal", 0),
-                    "todayCount": stats.get("todayCount", 0),
-                    "weekCount": stats.get("weekCount", 0),
-                    "purchaseAmount": stats.get("purchaseAmount", 0),
-                    "dealAmount": stats.get("dealAmount", 0),
-                    "lastMonthPurchaseAmount": stats.get("lastMonthPurchaseAmount", 0),
-                    "lastMonthDealAmount": stats.get("lastMonthDealAmount", 0),
-                    "monthlyDeal": stats.get("monthlyDeal") or [],
-                    "daily": stats.get("daily") or [],
-                    "bySite": stats.get("bySite") or [],
-                    "byKind": stats.get("byKind") or [],
-                    "startDate": stats.get("startDate"),
-                    "endDate": stats.get("endDate"),
-                }
-                for site in sites
-            ]
-        else:
-            payload["siteStats"] = build_site_metric_stats(
-                sites,
+    def _build_stats_payload() -> dict:
+        sites = site_options(scope)
+        need_site_maps = include_sites and len(sites) > 1
+        if include_notice:
+            stats = build_notice_stats(
+                site_ids=effective_scope,
                 start=range_start,
                 end=range_end,
-                range_counts=(site_maps or {}).get("range_counts"),
-                today_counts=(site_maps or {}).get("today_counts"),
-                week_counts=(site_maps or {}).get("week_counts"),
-                purchase_map=(site_maps or {}).get("purchase_map"),
-                deal_map=(site_maps or {}).get("deal_map"),
+                with_site_maps=need_site_maps,
             )
-    cache.set(cache_key, payload, PORTAL_STATS_CACHE_SECONDS)
-    return JsonResponse({"data": payload})
+        else:
+            stats = {
+                **_empty_notice_stats(effective_scope, start=range_start, end=range_end),
+                "sites": sites,
+            }
+        site_maps = stats.pop("_siteMaps", None) if isinstance(stats, dict) else None
+
+        tag_stats = (
+            safe_stats(
+                period=period,
+                province=province,
+                buyer=buyer,
+                deal_kind=deal_kind,
+                site_ids=effective_scope,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            if include_tags
+            else {}
+        )
+        body = {
+            "period": period,
+            **stats,
+            "tagStats": tag_stats,
+        }
+        # 首页：附带各可查看平台的独立统计（单平台时复用主汇总，避免二次全量查询）
+        if include_sites:
+            if len(sites) <= 1:
+                body["siteStats"] = [
+                    {
+                        "siteId": site["id"],
+                        "label": site["label"],
+                        "publicNoticeTotal": stats.get("publicNoticeTotal", 0),
+                        "todayCount": stats.get("todayCount", 0),
+                        "weekCount": stats.get("weekCount", 0),
+                        "purchaseAmount": stats.get("purchaseAmount", 0),
+                        "dealAmount": stats.get("dealAmount", 0),
+                        "lastMonthPurchaseAmount": stats.get("lastMonthPurchaseAmount", 0),
+                        "lastMonthDealAmount": stats.get("lastMonthDealAmount", 0),
+                        "monthlyDeal": stats.get("monthlyDeal") or [],
+                        "daily": stats.get("daily") or [],
+                        "bySite": stats.get("bySite") or [],
+                        "byKind": stats.get("byKind") or [],
+                        "startDate": stats.get("startDate"),
+                        "endDate": stats.get("endDate"),
+                    }
+                    for site in sites
+                ]
+            else:
+                body["siteStats"] = build_site_metric_stats(
+                    sites,
+                    start=range_start,
+                    end=range_end,
+                    range_counts=(site_maps or {}).get("range_counts"),
+                    today_counts=(site_maps or {}).get("today_counts"),
+                    week_counts=(site_maps or {}).get("week_counts"),
+                    purchase_map=(site_maps or {}).get("purchase_map"),
+                    deal_map=(site_maps or {}).get("deal_map"),
+                )
+        return body
+
+    payload = _portal_swr_get_or_build(
+        cache_key,
+        hard_seconds=PORTAL_STATS_CACHE_SECONDS,
+        soft_seconds=PORTAL_STATS_SOFT_SECONDS,
+        builder=_build_stats_payload,
+    )
+    return JsonResponse({"data": _with_account_fields(payload)})

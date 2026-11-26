@@ -103,6 +103,11 @@ export interface Product {
   area?: string;
   description?: string;
   platformIds?: string[];
+  /**
+   * 服务类商品绑定的门户权限包（页面/菜单/操作/数据权限）。
+   * 仅 kind=虚拟服务 有意义；未配置时兼容旧逻辑（有效服务项目按全部门户权限开放）。
+   */
+  portalEntitlements?: string[] | null;
   /** 项目内直接添加的商品，不进入商品及价格体系。 */
   source?: "catalog" | "project";
   sourceProjectId?: string;
@@ -810,6 +815,7 @@ export type PermissionKey =
   | "entity.create"
   | "product.view"
   | "product.manage"
+  | "product.entitlement.manage"
   | "purchase.manage"
   | "serviceOrder.view"
   | "serviceOrder.manage"
@@ -855,6 +861,9 @@ export type PermissionKey =
   | "portal.invoice.view"
   | "portal.contract.view"
   | "portal.account.view"
+  | "portal.account.create"
+  | "portal.account.edit"
+  | "portal.account.delete"
   | "portal.account.manage"
   | "wechatMp.view"
   | "wechatMp.manage"

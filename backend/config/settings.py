@@ -201,6 +201,11 @@ CELERY_BEAT_SCHEDULE = {
         # 每天 18:00（CELERY_TIMEZONE / TIME_ZONE）
         "schedule": crontab(hour=18, minute=0),
     },
+    # 预热门户公告首屏 / 近30天统计，避免闲置后首屏冷查 5～10s
+    "warm-portal-hot-paths": {
+        "task": "apps.data_store.portal_warm_tasks.warm_portal_hot_paths",
+        "schedule": 300.0,
+    },
 }
 
 # 微信认证服务号（公众平台 AppID/AppSecret，非开放平台）

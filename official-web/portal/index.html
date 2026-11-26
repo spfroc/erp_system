@@ -4,10 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light only" />
-  <meta name="theme-color" content="#f3eee4" />
+  <meta name="theme-color" content="#f4f6f8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>壹采科技数据服务平台</title>
   <style>
-    :root {
+    /* 默认：简约灰（与 assist 管理后台一致）；可选 classic 经典绿 */
+    :root,
+    [data-theme="admin"] {
+      --green: #1f7a4d;
+      --green-dark: #17613c;
+      --gold: #64748b;
+      --ink: #1d232a;
+      --muted: #53606f;
+      --line: #d8e0e8;
+      --line-strong: #c5d0db;
+      --card: #ffffff;
+      --page-bg: #f4f6f8;
+      --workspace-bg: #f4f6f8;
+      --topbar-bg: rgba(255, 255, 255, .92);
+      --side-from: #0f172a;
+      --side-to: #1e293b;
+      --side-text: #cbd5e1;
+      --side-active: #ffffff;
+      --login-panel-bg: linear-gradient(165deg, #eef2f6 0%, #e2e8f0 100%);
+      --body-bg: #eef2f6;
+      --shadow: 0 12px 28px rgba(15, 23, 42, .08);
+      --chart-1: #334155;
+      --chart-2: #1f7a4d;
+      --chart-3: #0f766e;
+      --chart-4: #b45309;
+      --chart-5: #1d4ed8;
+      --chart-6: #be123c;
+      --chart-7: #64748b;
+      --chart-axis: #94a3b8;
+      --chart-split: #e2e8f0;
+      --control-h: 36px;
+      --control-radius: 10px;
+      --control-font: 14px;
+      --control-pad-x: 12px;
+      --danger: #b42318;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-top: env(safe-area-inset-top, 0px);
+    }
+    [data-theme="classic"] {
       --green: #1b6844;
       --green-dark: #124a30;
       --gold: #c4a15a;
@@ -16,20 +56,35 @@
       --line: #eadfce;
       --line-strong: #e4d5be;
       --card: #fffdf8;
+      --page-bg: #e9efe9;
+      --workspace-bg: #f3eee4;
+      --topbar-bg: rgba(255,250,242,.78);
+      --side-from: #1b5340;
+      --side-to: #10261e;
+      --side-text: #d9cbb6;
+      --side-active: #ffffff;
+      --login-panel-bg:
+        radial-gradient(circle at 85% 8%, rgba(196,161,90,.18), transparent 34%),
+        radial-gradient(circle at 8% 92%, rgba(27,104,68,.16), transparent 40%),
+        linear-gradient(165deg, #f4f7f3 0%, #e5eee6 100%);
+      --body-bg: #e9efe9;
       --shadow: 0 12px 28px rgba(62, 42, 16, .08);
-      --control-h: 36px;
-      --control-radius: 10px;
-      --control-font: 14px;
-      --control-pad-x: 12px;
+      --chart-1: #1f8a56;
+      --chart-2: #e0b15a;
+      --chart-3: #2a9d8f;
+      --chart-4: #e07a4c;
+      --chart-5: #3d6b8a;
+      --chart-6: #c45c6a;
+      --chart-7: #8d9a84;
+      --chart-axis: #74685a;
+      --chart-split: #f3eadc;
       --danger: #a33b2b;
-      --safe-bottom: env(safe-area-inset-bottom, 0px);
-      --safe-top: env(safe-area-inset-top, 0px);
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { height: 100%; margin: 0; overflow: hidden; color-scheme: light only; }
     body {
-      color: var(--ink); background: #e9efe9;
+      color: var(--ink); background: var(--body-bg);
       font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-text-size-adjust: 100%;
       text-size-adjust: 100%;
@@ -42,10 +97,7 @@
     .login-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .login-panel {
       display: flex; align-items: center; justify-content: center; padding: 40px 24px;
-      background:
-        radial-gradient(circle at 85% 8%, rgba(196,161,90,.18), transparent 34%),
-        radial-gradient(circle at 8% 92%, rgba(27,104,68,.16), transparent 40%),
-        linear-gradient(165deg, #f4f7f3 0%, #e5eee6 100%);
+      background: var(--login-panel-bg);
     }
     .login-card {
       width: min(400px, 100%);
@@ -167,16 +219,16 @@
       white-space: nowrap;
     }
     .primary, a.primary {
-      width: auto; margin: 0; color: #f7f4ec; border: 0;
-      background: linear-gradient(180deg, #2f7d52, #1b5c3b);
-      box-shadow: 0 8px 16px rgba(36, 48, 38, .12);
+      width: auto; margin: 0; color: #fff; border: 0;
+      background: linear-gradient(180deg, var(--green), var(--green-dark));
+      box-shadow: 0 8px 16px color-mix(in srgb, var(--green-dark) 18%, transparent);
     }
-    .primary:hover, a.primary:hover { background: linear-gradient(180deg, #286b47, #164c31); }
+    .primary:hover, a.primary:hover { filter: brightness(0.95); }
     .ghost, a.ghost {
-      background: #fffdf8; color: var(--ink); border: 1px solid var(--line-strong);
+      background: var(--card); color: var(--ink); border: 1px solid var(--line-strong);
       box-shadow: none;
     }
-    .ghost:hover, a.ghost:hover { border-color: #d7a441; color: #8d6412; background: #fffdf8; }
+    .ghost:hover, a.ghost:hover { border-color: var(--green); color: var(--green-dark); background: var(--card); }
     .danger-btn {
       color: #fff; border: 0;
       background: linear-gradient(180deg, #c45a48, #a33b2b);
@@ -186,8 +238,135 @@
     .login-card .primary { width: 100%; margin-top: 6px; }
     .error { color: var(--danger); min-height: 1.2em; font-size: 13px; }
     .muted { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+    .subscription-card { max-width: 860px !important; }
     .subscription-card h3 { margin: 18px 0 8px; font-size: 16px; }
     .subscription-card h3:first-child { margin-top: 0; }
+    .subscription-tabs {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px;
+    }
+    .subscription-tabs button {
+      height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-strong);
+      background: #fff; color: var(--ink); font-size: 13px;
+    }
+    .subscription-tabs button.active {
+      background: rgba(27,104,68,.12); border-color: var(--green); color: var(--green-dark); font-weight: 650;
+    }
+    .subscription-tab-panel { display: none; }
+    .subscription-tab-panel.active { display: grid; gap: 12px; }
+    .subscription-summary {
+      margin: 0 0 12px; border-radius: 12px;
+      background: #f7f2e8; border: 1px solid rgba(234,223,206,.95); color: var(--muted); font-size: 13px; line-height: 1.55;
+      overflow: hidden;
+    }
+    .subscription-summary > summary {
+      list-style: none; cursor: pointer; padding: 10px 12px;
+      display: flex; align-items: flex-start; gap: 8px; user-select: none;
+    }
+    .subscription-summary > summary::-webkit-details-marker { display: none; }
+    .subscription-summary > summary .summary-main { flex: 1; min-width: 0; }
+    .subscription-summary > summary .summary-toggle {
+      flex: none; color: var(--green-dark); font-size: 12px; font-weight: 650; white-space: nowrap;
+      padding-top: 1px;
+    }
+    .subscription-summary strong { color: var(--ink); font-weight: 650; }
+    .subscription-summary-body {
+      display: grid; gap: 10px; padding: 0 12px 12px; border-top: 1px solid rgba(234,223,206,.9);
+      margin-top: 0; padding-top: 10px;
+    }
+    .subscription-summary-row {
+      display: grid; grid-template-columns: 72px 1fr; gap: 8px; align-items: start;
+    }
+    .subscription-summary-row > dt {
+      margin: 0; color: var(--muted); font-size: 12px; line-height: 28px; font-weight: 650;
+    }
+    .subscription-summary-row > dd {
+      margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0;
+    }
+    .subscription-summary-row .summary-chip {
+      display: inline-flex; align-items: center; max-width: 100%;
+      padding: 4px 10px; border-radius: 999px; background: #fff; border: 1px solid rgba(234,223,206,.95);
+      color: var(--ink); font-size: 12px; line-height: 1.3; word-break: break-word;
+    }
+    .subscription-summary-row .summary-empty { color: var(--muted); font-size: 12px; line-height: 28px; }
+    .keyword-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .keyword-add-row input { flex: 1 1 180px; min-width: 0; }
+    .keyword-add-row .ghost { flex: none; }
+    .keyword-chips, .selected-tag-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; min-height: 8px; }
+    .keyword-chip, .selected-tag-chip {
+      display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 12px;
+      border-radius: 999px; background: rgba(27,104,68,.1); color: var(--green-dark); font-size: 13px;
+    }
+    .keyword-chip button, .selected-tag-chip button {
+      width: 18px; height: 18px; border: 0; border-radius: 50%; background: rgba(15,80,48,.12);
+      color: var(--green-dark); line-height: 18px; padding: 0; font-size: 12px;
+    }
+    .tag-picker {
+      display: grid; gap: 10px;
+    }
+    .tag-picker-search {
+      margin: 0; display: block;
+    }
+    .tag-picker-search input {
+      width: 100%; margin: 0;
+    }
+    .tag-picker-body {
+      border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; overflow: hidden;
+    }
+    .tag-picker-list {
+      max-height: 320px; overflow: auto; display: grid; gap: 0;
+    }
+    .tag-picker-list button {
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+      text-align: left; border: 0; border-bottom: 1px solid #f6efe4; border-radius: 0;
+      background: transparent; padding: 10px 12px; color: var(--ink); font-size: 13px;
+    }
+    .tag-picker-list button:hover { background: #fbf3df; }
+    .tag-picker-list button.active { background: rgba(27,104,68,.08); color: var(--green-dark); font-weight: 650; }
+    .tag-picker-list button em {
+      font-style: normal; font-size: 12px; color: var(--muted); font-weight: 500;
+    }
+    .tag-picker-list button.active em { color: var(--green-dark); }
+    .tag-picker-empty { padding: 16px 12px; color: var(--muted); font-size: 13px; }
+    .tag-picker-pager {
+      display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+      padding: 10px 12px; border-top: 1px solid #f0e6d6; background: #fcfaf6; color: var(--muted); font-size: 12px;
+      line-height: 1.2;
+    }
+    .tag-picker-pager > span[data-role="summary"] {
+      display: inline-flex; align-items: center; min-height: var(--control-h);
+    }
+    .tag-picker-pager .pager-actions {
+      display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    .tag-picker-pager .pager-actions > label {
+      display: inline-flex; align-items: center; gap: 6px; margin: 0; margin-bottom: 0; padding: 0;
+      min-height: var(--control-h); height: var(--control-h); line-height: var(--control-h);
+      color: var(--muted); font-size: 12px; white-space: nowrap;
+    }
+    .tag-picker-pager .pager-actions > .ghost,
+    .tag-picker-pager .ghost {
+      height: var(--control-h); min-height: var(--control-h); padding: 0 10px; font-size: 12px; margin: 0;
+      line-height: 1; box-sizing: border-box;
+    }
+    /* 覆盖全局 input/select 的 height / margin-top，保证与按钮同高 */
+    .tag-picker-pager .pager-actions input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+    .tag-picker-pager .pager-actions select {
+      width: auto; min-width: 64px; height: var(--control-h); min-height: var(--control-h); max-height: var(--control-h);
+      margin: 0; margin-top: 0; padding: 0 8px; font-size: 12px; line-height: 1.2;
+      box-sizing: border-box; vertical-align: middle;
+    }
+    .tag-picker-pager .pager-actions input[type="number"] { width: 64px; }
+    .bind-qr-modal { text-align: center; }
+    .bind-qr-modal .qr-box {
+      position: relative; width: 220px; height: 220px; margin: 12px auto;
+      border: 1px solid var(--line); border-radius: 16px; background: #fff; overflow: hidden;
+    }
+    .bind-qr-modal .qr-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .bind-qr-modal .qr-mask {
+      position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+      background: rgba(255,253,248,.92); color: var(--ink); font-size: 14px; font-weight: 650;
+    }
+    .bind-qr-modal .qr-mask[hidden] { display: none !important; }
     .chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .chip {
       height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-strong);
@@ -195,32 +374,79 @@
     }
     .chip.active { background: rgba(27,104,68,.12); border-color: var(--green); color: var(--green-dark); font-weight: 600; }
     .row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+    .invoice-status {
+      display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px;
+      border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap;
+      background: #f6f0e6; color: var(--muted);
+    }
+    .invoice-status.is-pending { background: #fbf3df; color: #8a6414; }
+    .invoice-status.is-confirmed { background: #e8f5ee; color: #0f6b40; }
+    .invoice-status.is-void { background: #f7e8e4; color: #a33b2b; }
+    .mark-hit {
+      background: #ffe08a; color: #5c4308; border-radius: 3px; padding: 0 2px; font-weight: 700;
+    }
+    .message-layout-toggle {
+      display: inline-flex; gap: 0; border: 1px solid var(--line-strong); border-radius: 999px; overflow: hidden; background: #fff;
+    }
+    .message-layout-toggle button {
+      height: 36px; padding: 0 12px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 13px;
+    }
+    .message-layout-toggle button.active { background: rgba(27,104,68,.12); color: var(--green-dark); font-weight: 650; }
+    .message-list.is-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+    }
+    .message-list.is-grid .message-item {
+      grid-template-columns: 10px 1fr; grid-template-rows: auto auto;
+    }
+    .message-list.is-grid .message-side { grid-column: 2; justify-self: start; }
+    .message-toolbar .search-inline { flex: 1 1 200px; min-width: 160px; margin: 0; }
+    .message-toolbar .search-inline input { width: 100%; }
 
     .app { height: 100%; display: grid; grid-template-columns: 228px 1fr; overflow: hidden; }
     .side {
-      color: #f4ecdf;
+      color: var(--side-text);
       padding: 22px 14px;
       display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-      background:
-        radial-gradient(circle at 20% 0%, rgba(215,164,65,.28), transparent 34%),
-        linear-gradient(180deg, #1b5340 0%, #10261e 100%);
+      background: linear-gradient(180deg, var(--side-from) 0%, var(--side-to) 100%);
     }
-    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px 20px; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; }
-    .brand-mark { width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(145deg, #f3d48a, #c9963a); color: #173226; box-shadow: none; }
-    .nav { display: flex; flex-direction: column; gap: 6px; }
-    .nav button { display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; color: #d9cbb6; border: 0; border-radius: 12px; padding: 11px 12px; }
-    .nav button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .45; }
-    .nav button:hover { background: rgba(255,255,255,.07); color: #fff; }
-    .nav button.active { background: linear-gradient(90deg, rgba(215,164,65,.28), rgba(255,255,255,.05)); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
-    .nav button.active::before { background: var(--gold); opacity: 1; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px 20px; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; color: var(--side-active); }
+    .brand-mark { width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(145deg, var(--green), var(--green-dark)); color: #fff; box-shadow: none; }
+    [data-theme="classic"] .brand-mark { background: linear-gradient(145deg, #f3d48a, #c9963a); color: #173226; }
+    .nav { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; overflow: auto; padding-bottom: 12px; }
+    .nav-item, .nav-group-toggle, .nav-child {
+      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+      background: transparent; color: var(--side-text); border: 0; border-radius: 12px; padding: 11px 12px;
+    }
+    .nav-item::before, .nav-child::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .45; flex: 0 0 8px;
+    }
+    .nav-item:hover, .nav-group-toggle:hover, .nav-child:hover { background: rgba(255,255,255,.07); color: var(--side-active); }
+    .nav-item.active, .nav-child.active {
+      background: rgba(255,255,255,.1); color: var(--side-active); box-shadow: inset 3px 0 0 var(--green);
+    }
+    [data-theme="classic"] .nav-item.active,
+    [data-theme="classic"] .nav-child.active {
+      background: linear-gradient(90deg, rgba(215,164,65,.28), rgba(255,255,255,.05)); box-shadow: inset 3px 0 0 var(--gold);
+    }
+    .nav-item.active::before, .nav-child.active::before { background: var(--green); opacity: 1; }
+    [data-theme="classic"] .nav-item.active::before,
+    [data-theme="classic"] .nav-child.active::before { background: var(--gold); }
+    .nav-group { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+    .nav-group-toggle {
+      justify-content: space-between; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+      color: color-mix(in srgb, var(--side-text) 82%, #fff); padding: 10px 12px 6px; cursor: pointer;
+    }
+    .nav-group-toggle .nav-caret { font-size: 10px; opacity: .75; transition: transform .15s ease; }
+    .nav-group.is-open > .nav-group-toggle .nav-caret { transform: rotate(90deg); }
+    .nav-children { display: none; flex-direction: column; gap: 2px; padding: 0 0 4px; }
+    .nav-group.is-open > .nav-children { display: flex; }
+    .nav-child { padding: 9px 12px 9px 28px; font-size: 13px; }
+    .nav-child::before { width: 6px; height: 6px; flex-basis: 6px; }
     .workspace {
       min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
-      background:
-        radial-gradient(circle at 100% 0%, rgba(215,164,65,.16), transparent 28%),
-        radial-gradient(circle at 0% 100%, rgba(21,122,69,.08), transparent 32%),
-        #f3eee4;
+      background: var(--workspace-bg);
     }
-    .topbar { height: 64px; flex: 0 0 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; background: rgba(255,250,242,.78); border-bottom: 1px solid rgba(80, 56, 24, .08); backdrop-filter: blur(12px); }
+    .topbar { height: 64px; flex: 0 0 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; background: var(--topbar-bg); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
     .topbar h2 { margin: 0; font-size: 18px; font-weight: 750; }
     .topbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
     .msg-bell {
@@ -229,7 +455,7 @@
       box-shadow: 0 6px 16px rgba(62, 42, 16, .06); cursor: pointer;
     }
     .msg-bell:hover { border-color: #d7a441; color: #8d6412; }
-    .msg-bell.active { border-color: #1f8a56; color: #0f6b40; background: #f3faf6; }
+    .msg-bell.active { border-color: var(--green); color: var(--green-dark); background: color-mix(in srgb, var(--green) 10%, #fff); }
     .msg-bell svg { width: 20px; height: 20px; display: block; }
     .msg-bell-badge {
       position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
@@ -239,18 +465,44 @@
     .msg-bell-badge[hidden] { display: none !important; }
     .user-menu { position: relative; }
     .user-trigger { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 5px; color: var(--ink); box-shadow: 0 6px 16px rgba(62, 42, 16, .06); }
-    .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(145deg, #1f8f58, #0d4e30); color: #f6dc9a; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(145deg, var(--green), var(--green-dark)); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
     .caret { font-size: 10px; color: var(--muted); }
-    .dropdown { position: absolute; right: 0; top: calc(100% + 8px); width: 168px; background: #fffdf8; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 36px rgba(48, 32, 12, .14); padding: 6px; z-index: 5; }
+    .dropdown { position: absolute; right: 0; top: calc(100% + 8px); width: 196px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 5; }
     .dropdown button { width: 100%; text-align: left; background: transparent; border: 0; border-radius: 10px; padding: 9px 10px; color: var(--ink); }
-    .dropdown button:hover { background: #f6efe2; }
+    .dropdown button:hover { background: color-mix(in srgb, var(--line) 55%, #fff); }
     .dropdown button.danger { color: var(--danger); }
+    .dropdown .theme-row {
+      display: grid; gap: 4px; padding: 8px 10px 6px; border-top: 1px solid var(--line); margin-top: 4px;
+    }
+    .dropdown .theme-row span { color: var(--muted); font-size: 12px; }
+    .dropdown .theme-row .theme-options { display: flex; gap: 6px; }
+    .dropdown .theme-row .theme-options button {
+      flex: 1; text-align: center; padding: 6px 4px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+    }
+    .dropdown .theme-row .theme-options button.active {
+      border-color: var(--green); color: var(--green-dark); background: color-mix(in srgb, var(--green) 12%, #fff); font-weight: 650;
+    }
     .content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 16px 20px; }
     #panel.stats-panel { overflow: auto; display: block; width: 100%; }
     #panel.stats-panel > .charts { height: 320px; flex: none; }
     #panel.stats-panel > .charts .chart { height: 280px; flex: none; }
+    #panel.subscription-panel,
+    #panel.enterprise-panel {
+      overflow: auto; display: block; width: 100%;
+      -webkit-overflow-scrolling: touch;
+    }
+    #panel.message-panel {
+      overflow: hidden; display: flex; flex-direction: column; min-height: 0;
+    }
     .home-intro { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-    .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; padding: 12px; background: rgba(255,253,248,.72); border: 1px solid rgba(234,223,206,.9); border-radius: 16px; }
+    .frame-insights {
+      margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--line-strong);
+      border-radius: 12px; background: #fff;
+    }
+    .frame-insights h3 { margin: 0 0 8px; font-size: 15px; font-weight: 750; }
+    .frame-insights ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink); font-size: 13px; line-height: 1.55; }
+    .frame-insights li::marker { color: var(--green); }
+    .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
     .stats-filters .segmented { flex: none; }
     .stats-custom-range { display: inline-flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
     .stats-custom-range label { margin: 0; min-width: 0; color: var(--muted); font-size: 12px; }
@@ -290,31 +542,31 @@
       border-radius: 999px; font-size: var(--control-font); line-height: 1;
     }
     .segmented button:hover { border-color: #d7a441; color: #8d6412; }
-    .segmented button.active { background: #1f8a56; border-color: #1f8a56; color: #fff; }
+    .segmented button.active { background: var(--green); border-color: var(--green); color: #fff; }
     .segmented button.active:hover { color: #fff; }
     .metrics { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
     .metric, .card { background: var(--card); border: 1px solid rgba(234, 223, 206, .9); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); }
     .metric { position: relative; overflow: hidden; padding-left: 18px; }
     .metric::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
-    .metric.tone-jade::before { background: #1f8a56; }
-    .metric.tone-gold::before { background: #d7a441; }
-    .metric.tone-coral::before { background: #d86a45; }
-    .metric.tone-teal::before { background: #2a9d8f; }
-    .metric.tone-ink::before { background: #3d6b8a; }
+    .metric.tone-jade::before { background: var(--chart-1); }
+    .metric.tone-gold::before { background: var(--chart-2); }
+    .metric.tone-coral::before { background: var(--chart-4); }
+    .metric.tone-teal::before { background: var(--chart-3); }
+    .metric.tone-ink::before { background: var(--chart-5); }
     .metric span { color: var(--muted); font-size: 13px; }
     .metric strong { display: block; margin-top: 8px; font-size: 24px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .metric.amount strong { font-size: clamp(14px, 1.35vw, 18px); letter-spacing: -0.01em; overflow: visible; text-overflow: unset; }
-    .metric.tone-jade strong { color: #0f6b40; }
-    .metric.tone-gold strong { color: #8d6412; }
-    .metric.tone-coral strong { color: #b24b2c; }
-    .metric.tone-teal strong { color: #1d756c; }
-    .metric.tone-ink strong { color: #2d5570; }
+    .metric.tone-jade strong { color: var(--chart-1); }
+    .metric.tone-gold strong { color: var(--chart-2); }
+    .metric.tone-coral strong { color: var(--chart-4); }
+    .metric.tone-teal strong { color: var(--chart-3); }
+    .metric.tone-ink strong { color: var(--chart-5); }
     .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; width: 100%; }
     .charts:has(> :only-child) { grid-template-columns: 1fr; }
     .charts > .card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
     .chart { width: 100%; min-height: 0; }
     .charts > .card > h3 { margin: 0 0 4px; font-size: 15px; flex: none; display: flex; align-items: center; gap: 8px; }
-    .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, #1f8a56, #d7a441); }
+    .charts > .card > h3::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, var(--chart-1), var(--chart-2)); }
     .toolbar {
       flex: none;
       display: grid;
@@ -580,18 +832,47 @@
     .pager { flex: none; display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 13px; gap: 10px; }
     .pager div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pager .ghost { margin: 0; }
+    .pager .page-num.active {
+      background: rgba(27,104,68,.12); border-color: var(--green); color: var(--green-dark); font-weight: 650;
+    }
+    .pager .pager-ellipsis { color: var(--muted); padding: 0 2px; }
+    .pager .pager-jump {
+      display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 12px;
+      white-space: nowrap;
+    }
+    .pager .pager-jump input[type="number"] {
+      width: 64px; min-width: 64px; height: var(--control-h); min-height: var(--control-h);
+      margin: 0; padding: 0 8px; font-size: 12px; box-sizing: border-box;
+    }
     .profile { display: grid; grid-template-columns: 120px 1fr; gap: 0; max-width: 640px; }
     .profile dt, .profile dd { margin: 0; padding: 12px 0; border-bottom: 1px solid #f0e6d6; }
     .profile dt { color: var(--muted); }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .tag { background: #fbf3df; color: #8a6414; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
     .empty { color: var(--muted); padding: 28px 0; }
-    .enterprise-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .enterprise-table th, .enterprise-table td { padding: 10px 8px; border-bottom: 1px solid #f0e6d6; text-align: left; vertical-align: top; }
+    .enterprise-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .enterprise-table th, .enterprise-table td {
+      padding: 10px 8px; border-bottom: 1px solid #f0e6d6; text-align: left; vertical-align: top;
+      min-width: 0; box-sizing: border-box;
+    }
     .enterprise-table th { color: var(--muted); font-weight: 600; }
     .enterprise-table tr.clickable { cursor: pointer; }
     .enterprise-table tr.clickable:hover { background: #fbf3df; }
     .enterprise-table .mono { font-variant-numeric: tabular-nums; }
+    .enterprise-table .invoice-status-cell { width: 4.5em; white-space: nowrap; }
+    .enterprise-table .col-name { width: 16%; word-break: break-word; overflow-wrap: anywhere; }
+    .enterprise-table .col-phone { width: 8.5em; white-space: nowrap; }
+    .enterprise-table .col-party { width: 16%; word-break: break-word; overflow-wrap: anywhere; }
+    .enterprise-table .col-project { width: auto; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
+    .enterprise-table .col-amount { width: 7em; white-space: nowrap; }
+    .enterprise-table .col-actions {
+      width: 5.5em; white-space: nowrap; text-align: left; vertical-align: middle;
+    }
+    .enterprise-table .col-actions .option-actions,
+    .enterprise-table td.col-actions.option-actions {
+      white-space: nowrap;
+    }
+    .enterprise-table .col-actions .copy-link { white-space: nowrap; display: inline-block; }
     .enterprise-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: flex-end; align-items: center; }
     .enterprise-actions .primary, .enterprise-actions .ghost, .enterprise-actions .danger-btn { width: auto; margin: 0; }
     .enterprise-form { display: grid; gap: 10px; max-width: 520px; }
@@ -600,6 +881,23 @@
       border: 1px solid var(--line-strong); border-radius: var(--control-radius); padding: 10px 12px; margin: 0;
     }
     .enterprise-form fieldset legend { padding: 0 4px; color: var(--muted); font-size: 12px; }
+    .portal-perm-tree { display: grid; gap: 8px; }
+    .portal-perm-tree-group {
+      border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: #fff;
+    }
+    .portal-perm-tree-parent,
+    .portal-perm-tree-child {
+      display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; cursor: pointer;
+    }
+    .portal-perm-tree-parent { background: #f3f7f4; border-bottom: 1px solid var(--line); }
+    .portal-perm-tree-parent span,
+    .portal-perm-tree-child span { display: grid; gap: 2px; line-height: 1.35; }
+    .portal-perm-tree-parent strong { font-size: 13px; }
+    .portal-perm-tree-parent em,
+    .portal-perm-tree-child em { color: var(--muted); font-style: normal; font-size: 12px; }
+    .portal-perm-tree-children { display: grid; }
+    .portal-perm-tree-child { padding-left: 34px; border-top: 1px solid #f0f4f7; }
+    .portal-perm-tree-child:first-child { border-top: 0; }
     form.card .primary, form.card .ghost { width: auto; margin: 0; }
     form.card { display: grid; gap: 12px; align-content: start; }
     form.card > label { margin: 0; }
@@ -607,7 +905,11 @@
       display: flex; align-items: center; gap: 8px; margin: 0;
       min-height: var(--control-h); color: var(--ink); font-size: var(--control-font);
     }
-    .option-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .option-actions { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; }
+    .option-actions .copy-link {
+      color: var(--green); text-decoration: none; font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap;
+    }
+    .option-actions .copy-link:hover { color: var(--green-dark); text-decoration: underline; }
     .option-actions .copy-link.danger { color: var(--danger); }
     .option-actions .copy-link.danger:hover { color: #8f2f22; }
     .boot {
@@ -631,7 +933,7 @@
     .menu-toggle { display: none; background: #fff; border: 1px solid var(--line-strong); border-radius: var(--control-radius); width: var(--control-h); height: var(--control-h); align-items: center; justify-content: center; flex-direction: column; gap: 5px; padding: 0; }
     .menu-toggle span { display: block; width: 18px; height: 2px; background: var(--ink); border-radius: 2px; }
     .side-backdrop { display: none; }
-    .table-scroll { overflow: auto; -webkit-overflow-scrolling: touch; }
+    .table-scroll { overflow-x: hidden; overflow-y: visible; width: 100%; max-width: 100%; }
     .table-scroll-hint { display: none; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
     @media (max-width: 960px) {
       .menu-toggle { display: inline-flex; }
@@ -658,9 +960,12 @@
       .app.side-open .side-backdrop { opacity: 1; pointer-events: auto; }
       .brand { padding: 2px 8px 16px; }
       .nav { flex-direction: column; width: 100%; }
-      .nav button { min-height: 44px; padding: 12px; font-size: 15px; }
-      .table-scroll-hint { display: block; }
-      .enterprise-table { min-width: 640px; }
+      .nav-item, .nav-group-toggle, .nav-child { min-height: 44px; padding: 12px; font-size: 15px; }
+      .nav-child { padding-left: 28px; font-size: 14px; }
+      .table-scroll-hint { display: none; }
+      .enterprise-table { min-width: 0; width: 100%; }
+      .enterprise-table .col-phone { width: 7.5em; }
+      .enterprise-table .col-actions { width: 4.8em; }
       .content {
         padding: 12px 12px calc(16px + var(--safe-bottom));
       }
@@ -872,7 +1177,7 @@
         <button type="button" class="menu-toggle" id="menu-toggle" aria-label="打开菜单"><span></span><span></span><span></span></button>
         <h2 id="title">公告列表</h2>
         <div class="topbar-actions">
-          <button id="msg-bell" class="msg-bell" type="button" hidden aria-label="查看消息" title="消息">
+          <button id="msg-bell" class="msg-bell" type="button" hidden aria-label="查看我的订阅" title="我的订阅">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 3a6 6 0 0 0-6 6v2.2c0 .7-.2 1.4-.6 2L4.2 15.4c-.5.7 0 1.6.8 1.6h14c.8 0 1.3-.9.8-1.6L18.6 13.2c-.4-.6-.6-1.3-.6-2V9a6 6 0 0 0-6-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
               <path d="M9.5 18.5a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -887,6 +1192,13 @@
             </button>
             <div id="dropdown" class="dropdown" hidden>
               <button type="button" data-go="account">用户中心</button>
+              <div class="theme-row">
+                <span>界面主题</span>
+                <div class="theme-options">
+                  <button type="button" data-theme-set="admin">简约灰</button>
+                  <button type="button" data-theme-set="classic">经典绿</button>
+                </div>
+              </div>
               <button id="logout" class="danger" type="button">退出登录</button>
             </div>
           </div>
@@ -948,8 +1260,26 @@
       endDate: todayYmd,
       dealKind: "",
       province: "",
-      buyer: "",
     };
+    const PORTAL_THEME_KEY = "portal_theme";
+    function currentPortalTheme() {
+      const saved = localStorage.getItem(PORTAL_THEME_KEY);
+      return saved === "classic" ? "classic" : "admin";
+    }
+    function applyPortalTheme(theme, { refresh = false } = {}) {
+      const next = theme === "classic" ? "classic" : "admin";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem(PORTAL_THEME_KEY, next);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", next === "classic" ? "#f3eee4" : "#f4f6f8");
+      document.querySelectorAll("[data-theme-set]").forEach((button) => {
+        button.classList.toggle("active", button.getAttribute("data-theme-set") === next);
+      });
+      if (refresh && me && (tab === "stats" || tab === "home")) {
+        openTab(tab);
+      }
+    }
+    applyPortalTheme(currentPortalTheme());
     let noticeDetail = null;
     let noticeRequest = 0;
     let noticeSearchTimer = 0;
@@ -991,30 +1321,69 @@
     }
     const TAB_STORAGE_KEY = "portal_active_tab";
 
-    const MENUS = [
-      ["home", "首页", "portal.stats.view"],
-      ["notices", "公告列表", "portal.notice.view"],
-      ["stats", "数据统计", "portal.stats.view"],
-      ["subscription", "订阅", "portal.notice.subscribe"],
-      ["orders", "企业订单", "portal.order.view"],
-      ["invoices", "企业发票", "portal.invoice.view"],
-      ["contracts", "企业合同", "portal.contract.view"],
-      ["accounts", "企业账号", "portal.account.view"],
+    const NAV_TREE = [
+      { id: "home", label: "首页", permission: "portal.stats.view", tab: "home" },
+      {
+        id: "sourcing",
+        label: "壹采寻源",
+        children: [
+          { id: "subscription", label: "商机订阅", permission: "portal.notice.subscribe", tab: "subscription" },
+          { id: "notices", label: "商机寻源", permission: "portal.notice.view", tab: "notices" },
+        ],
+      },
+      {
+        id: "analytics",
+        label: "数据分析",
+        children: [
+          { id: "stats", label: "数据统计", permission: "portal.stats.view", tab: "stats" },
+          { id: "frameBoard", label: "框采实时看板", permission: "portal.stats.view", tab: "frameBoard" },
+          { id: "analyticsMore", label: "数据分析相关", permission: "portal.stats.view", tab: "analyticsMore", placeholder: true },
+        ],
+      },
+      {
+        id: "enterprise",
+        label: "企业管理",
+        children: [
+          { id: "orders", label: "服务项目", permission: "portal.order.view", tab: "orders" },
+          { id: "invoices", label: "发票管理", permission: "portal.invoice.view", tab: "invoices" },
+          { id: "contracts", label: "合同管理", permission: "portal.contract.view", tab: "contracts" },
+          { id: "accounts", label: "账号管理", permission: "portal.account.view", tab: "accounts" },
+        ],
+      },
     ];
+    function flattenNavLeaves() {
+      const leaves = [];
+      NAV_TREE.forEach((node) => {
+        if (node.children) leaves.push(...node.children);
+        else leaves.push(node);
+      });
+      return leaves;
+    }
     const PERMISSION_LABELS = {
-      "portal.notice.view": "公告列表",
+      "portal.notice.view": "商机寻源",
       "portal.stats.view": "数据统计",
-      "portal.notice.subscribe": "订阅",
-      "portal.order.view": "企业订单",
-      "portal.invoice.view": "企业发票",
-      "portal.contract.view": "企业合同",
-      "portal.account.view": "查看企业账号",
-      "portal.account.manage": "管理企业账号",
+      "portal.notice.subscribe": "商机订阅",
+      "portal.order.view": "服务项目",
+      "portal.invoice.view": "发票管理",
+      "portal.contract.view": "合同管理",
+      "portal.account.view": "查看",
+      "portal.account.create": "新增",
+      "portal.account.edit": "编辑",
+      "portal.account.delete": "删除",
+      "portal.account.manage": "企业账号",
     };
+    const PERMISSION_GROUPS = [
+      { title: "公告与数据", hint: "公告检索、统计与订阅推送", ids: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe"] },
+      { title: "企业业务", hint: "订单、发票、合同只读查看", ids: ["portal.order.view", "portal.invoice.view", "portal.contract.view"] },
+      { title: "企业账号", hint: "同企业门户账号的查看与增删改", ids: ["portal.account.view", "portal.account.create", "portal.account.edit", "portal.account.delete"] },
+    ];
+    const ACCOUNT_ACTION_IDS = ["portal.account.view", "portal.account.create", "portal.account.edit", "portal.account.delete"];
     let enterpriseQuery = { orders: { page: 1, search: "" }, invoices: { page: 1, search: "" }, contracts: { page: 1, search: "" }, accounts: { page: 1, search: "" } };
-    let messageQuery = { page: 1, unread: false };
+    let messageQuery = { page: 1, unread: false, search: "", layout: localStorage.getItem("portal_message_layout") === "grid" ? "grid" : "list" };
     let messageRequest = 0;
     let unreadBadgeCount = 0;
+    let wechatBindPollTimer = 0;
+    let wechatBindTicket = "";
 
     function canViewMessages() {
       return hasPortalPerm("portal.notice.subscribe");
@@ -1315,6 +1684,53 @@
       setLoginTab(preferWechat ? "wechat" : "password");
     }
 
+    function visibleNavLeaves(perms) {
+      return flattenNavLeaves().filter((item) => !item.permission || perms.has(item.permission));
+    }
+
+    function renderSideNav(perms) {
+      const nav = document.getElementById("nav");
+      nav.innerHTML = "";
+      NAV_TREE.forEach((node) => {
+        if (node.children) {
+          const children = node.children.filter((item) => !item.permission || perms.has(item.permission));
+          if (!children.length) return;
+          const group = document.createElement("div");
+          group.className = "nav-group is-open";
+          group.dataset.group = node.id;
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "nav-group-toggle";
+          toggle.innerHTML = "<span></span><span class='nav-caret'>›</span>";
+          toggle.querySelector("span").textContent = node.label;
+          toggle.onclick = () => group.classList.toggle("is-open");
+          const list = document.createElement("div");
+          list.className = "nav-children";
+          children.forEach((item) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nav-child";
+            button.textContent = item.label;
+            button.dataset.tab = item.tab;
+            button.onclick = () => openTab(item.tab);
+            list.appendChild(button);
+          });
+          group.appendChild(toggle);
+          group.appendChild(list);
+          nav.appendChild(group);
+          return;
+        }
+        if (node.permission && !perms.has(node.permission)) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "nav-item";
+        button.textContent = node.label;
+        button.dataset.tab = node.tab;
+        button.onclick = () => openTab(node.tab);
+        nav.appendChild(button);
+      });
+    }
+
     function showApp(account) {
       stopWechatScanLogin();
       me = account;
@@ -1324,36 +1740,38 @@
       const name = account.customerName || account.name || "客户";
       document.getElementById("who").textContent = name;
       document.getElementById("avatar").textContent = name.slice(0, 1);
-      const perms = new Set(account.permissions || []);
-      if (perms.has("portal.account.manage")) perms.add("portal.account.view");
-      const allowed = MENUS.filter((item) => perms.has(item[2]));
-      const nav = document.getElementById("nav");
-      nav.innerHTML = "";
-      allowed.forEach((item) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = item[1];
-        button.dataset.tab = item[0];
-        button.onclick = () => openTab(item[0]);
-        nav.appendChild(button);
-      });
+      const perms = expandPortalPerms(account.permissions || []);
+      const allowed = visibleNavLeaves(perms);
+      renderSideNav(perms);
       const bindStatus = readWechatBindStatus();
       const saved = readSavedTab();
       const preferred = bindStatus ? "subscription" : (saved || "home");
-      const known = new Set(allowed.map((item) => item[0]));
+      const known = new Set(allowed.map((item) => item.tab));
       known.add("account");
       if (perms.has("portal.notice.subscribe")) known.add("messages");
       syncMessageBell(preferred);
       void refreshMessageBadge();
-      const next = known.has(preferred) ? preferred : (allowed[0] ? allowed[0][0] : "account");
+      const next = known.has(preferred) ? preferred : (allowed[0] ? allowed[0].tab : "account");
       openTab(next);
     }
 
     function markNav() {
-      document.querySelectorAll("#nav button").forEach((button) => {
+      document.querySelectorAll("#nav [data-tab]").forEach((button) => {
         button.classList.toggle("active", button.dataset.tab === tab);
       });
+      document.querySelectorAll("#nav .nav-group").forEach((group) => {
+        const hasActive = Boolean(group.querySelector(".nav-child.active"));
+        if (hasActive) group.classList.add("is-open");
+      });
       syncMessageBell(tab);
+    }
+
+    function renderPlaceholder(panel, title, tip) {
+      panel.innerHTML =
+        '<div class="card" style="max-width:720px">' +
+        "<h3></h3><p class='muted'></p></div>";
+      panel.querySelector("h3").textContent = title;
+      panel.querySelector("p").textContent = tip || "功能建设中，敬请期待。";
     }
 
     async function openTab(id) {
@@ -1364,21 +1782,25 @@
       disposeCharts();
       const titles = {
         home: "首页",
-        messages: "消息",
-        notices: "公告列表",
+        messages: "我的订阅",
+        notices: "商机寻源",
         stats: "数据统计",
-        subscription: "订阅",
-        orders: "企业订单",
-        invoices: "企业发票",
-        contracts: "企业合同",
-        accounts: "企业账号",
+        subscription: "商机订阅",
+        orders: "服务项目",
+        invoices: "发票管理",
+        contracts: "合同管理",
+        accounts: "账号管理",
+        frameBoard: "框采实时看板",
+        analyticsMore: "数据分析相关",
         account: "用户中心",
       };
       document.getElementById("title").textContent = titles[id] || "";
       const panel = document.getElementById("panel");
-      panel.classList.toggle("stats-panel", id === "stats" || id === "home");
+      panel.classList.toggle("stats-panel", id === "stats" || id === "home" || id === "frameBoard");
       panel.classList.toggle("message-panel", id === "messages");
       panel.classList.toggle("notice-panel", id === "notices");
+      panel.classList.toggle("subscription-panel", id === "subscription");
+      panel.classList.toggle("enterprise-panel", ["orders", "invoices", "contracts", "accounts", "account"].includes(id));
       panel.innerHTML = '<p class="empty">加载中…</p>';
       try {
         if (id === "home") await renderHome(panel);
@@ -1390,6 +1812,8 @@
         else if (id === "invoices") await renderInvoices(panel);
         else if (id === "contracts") await renderContracts(panel);
         else if (id === "accounts") await renderAccounts(panel);
+        else if (id === "frameBoard") await renderFrameBoard(panel);
+        else if (id === "analyticsMore") renderPlaceholder(panel, "数据分析相关", "更多分析能力规划中，具体能力后续确定。");
         else renderAccount(panel);
       } catch (error) {
         panel.innerHTML = '<p class="error"></p>';
@@ -1397,10 +1821,25 @@
       }
     }
 
+    function expandPortalPerms(list) {
+      const perms = new Set(list || []);
+      if (perms.has("portal.account.manage")) {
+        perms.add("portal.account.view");
+        perms.add("portal.account.create");
+        perms.add("portal.account.edit");
+        perms.add("portal.account.delete");
+      } else if (
+        perms.has("portal.account.create") ||
+        perms.has("portal.account.edit") ||
+        perms.has("portal.account.delete")
+      ) {
+        perms.add("portal.account.view");
+      }
+      return perms;
+    }
+
     function hasPortalPerm(id) {
-      const perms = new Set(me?.permissions || []);
-      if (perms.has("portal.account.manage")) perms.add("portal.account.view");
-      return perms.has(id);
+      return expandPortalPerms(me?.permissions || []).has(id);
     }
 
     function bindEnterpriseSearch(toolbar, key, onSearch) {
@@ -1422,22 +1861,97 @@
       };
     }
 
-    function fillEnterprisePager(pager, key, body, reload) {
-      const total = body.total || 0;
-      const page = body.page || 1;
-      const pageSize = body.page_size || 20;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    function nearbyPageNumbers(current, totalPages, radius = 2) {
+      const total = Math.max(1, totalPages || 1);
+      const cur = Math.min(Math.max(1, current || 1), total);
+      const pages = new Set([1, total]);
+      for (let i = cur - radius; i <= cur + radius; i += 1) {
+        if (i >= 1 && i <= total) pages.add(i);
+      }
+      return [...pages].sort((a, b) => a - b);
+    }
+
+    function fillPortalListPager(pager, {
+      page,
+      total,
+      pageSize,
+      onPageChange,
+      showPageSize = false,
+      pageSizeOptions = [10, 20, 50, 100],
+      onPageSizeChange,
+    }) {
+      const current = Math.max(1, Number(page) || 1);
+      const size = Math.max(1, Number(pageSize) || 20);
+      const totalCount = Math.max(0, Number(total) || 0);
+      const totalPages = Math.max(1, Math.ceil(totalCount / size) || 1);
+      const pages = nearbyPageNumbers(current, totalPages, 2);
+      let pageBtns = "";
+      let prev = 0;
+      pages.forEach((num) => {
+        if (prev && num > prev + 1) pageBtns += '<span class="pager-ellipsis">…</span>';
+        pageBtns +=
+          '<button class="ghost page-num' + (num === current ? " active" : "") +
+          '" type="button" data-page="' + num + '">' + num + "</button>";
+        prev = num;
+      });
+      let sizeHtml = "";
+      if (showPageSize && typeof onPageSizeChange === "function") {
+        sizeHtml =
+          '<label class="pager-jump">每页<select name="pageSize">' +
+          pageSizeOptions.map((n) => '<option value="' + n + '"' + (n === size ? " selected" : "") + ">" + n + "</option>").join("") +
+          "</select></label>";
+      }
       pager.innerHTML =
-        "<span>共 " + total + " 条 · 第 " + page + " / " + totalPages + " 页</span><div>" +
-        '<button class="ghost" type="button" data-page="1">首页</button>' +
-        '<button class="ghost" type="button" data-page="' + Math.max(1, page - 1) + '">上一页</button>' +
-        '<button class="ghost" type="button" data-page="' + Math.min(totalPages, page + 1) + '">下一页</button>' +
-        '<button class="ghost" type="button" data-page="' + totalPages + '">末页</button></div>';
+        "<span>共 " + totalCount + " 条 · 第 " + current + " / " + totalPages + " 页</span>" +
+        "<div>" +
+        '<button class="ghost" type="button" data-role="first">首页</button>' +
+        '<button class="ghost" type="button" data-role="prev">上一页</button>' +
+        pageBtns +
+        '<button class="ghost" type="button" data-role="next">下一页</button>' +
+        '<button class="ghost" type="button" data-role="last">末页</button>' +
+        sizeHtml +
+        '<label class="pager-jump">跳转<input name="jump" type="number" min="1" max="' + totalPages + '" value="' + current + '" /></label>' +
+        '<button class="ghost" type="button" data-role="jump">前往</button>' +
+        "</div>";
+      const go = (next) => {
+        const target = Math.min(totalPages, Math.max(1, Number(next) || 1));
+        if (target === current) return;
+        onPageChange(target);
+      };
+      pager.querySelector("[data-role=first]").disabled = current <= 1 || !totalCount;
+      pager.querySelector("[data-role=prev]").disabled = current <= 1 || !totalCount;
+      pager.querySelector("[data-role=next]").disabled = current >= totalPages || !totalCount;
+      pager.querySelector("[data-role=last]").disabled = current >= totalPages || !totalCount;
+      pager.querySelector("[data-role=first]").onclick = () => go(1);
+      pager.querySelector("[data-role=prev]").onclick = () => go(current - 1);
+      pager.querySelector("[data-role=next]").onclick = () => go(current + 1);
+      pager.querySelector("[data-role=last]").onclick = () => go(totalPages);
       pager.querySelectorAll("[data-page]").forEach((button) => {
-        button.onclick = () => {
-          enterpriseQuery[key].page = Number(button.dataset.page) || 1;
+        button.onclick = () => go(button.dataset.page);
+      });
+      const jumpInput = pager.querySelector("[name=jump]");
+      pager.querySelector("[data-role=jump]").onclick = () => go(jumpInput.value);
+      jumpInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          go(jumpInput.value);
+        }
+      });
+      const sizeSelect = pager.querySelector("[name=pageSize]");
+      if (sizeSelect) {
+        sizeSelect.onchange = () => onPageSizeChange(Number(sizeSelect.value) || size);
+      }
+    }
+
+    function fillEnterprisePager(pager, key, body, reload) {
+      fillPortalListPager(pager, {
+        page: body.page || 1,
+        total: body.total || 0,
+        pageSize: body.page_size || 20,
+        onPageChange: (next) => {
+          enterpriseQuery[key].page = next;
           reload();
-        };
+        },
       });
     }
 
@@ -1466,6 +1980,10 @@
       return backdrop;
     }
 
+    function stopRowNav(event) {
+      event.stopPropagation();
+    }
+
     async function renderOrders(panel) {
       const q = enterpriseQuery.orders;
       const params = new URLSearchParams({ page: String(q.page), page_size: "20", search: q.search || "" });
@@ -1473,46 +1991,45 @@
       panel.innerHTML = "";
       const toolbar = document.createElement("div");
       toolbar.className = "toolbar";
-      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="订单号 / 状态" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="项目名称 / 付款情况" /></label><button class="ghost" type="button" data-role="search">查询</button>';
       bindEnterpriseSearch(toolbar, "orders", () => renderOrders(panel));
       const card = document.createElement("div");
       card.className = "card list-card";
       if (!(body.items || []).length) {
-        card.innerHTML = '<p class="empty">暂无本企业订单</p>';
+        card.innerHTML = '<p class="empty">暂无本企业服务项目</p>';
       } else {
         const table = document.createElement("table");
         table.className = "enterprise-table";
-        table.innerHTML = "<thead><tr><th>类型</th><th>订单号</th><th>金额</th><th>状态</th><th>创建时间</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th class='col-amount'>开始时间</th><th class='col-amount'>结束时间</th><th class='col-project'>项目名称</th><th class='col-amount'>金额</th><th class='invoice-status-cell'>付款情况</th></tr></thead>";
         const tbody = document.createElement("tbody");
         (body.items || []).forEach((item) => {
           const tr = document.createElement("tr");
           tr.className = "clickable";
-          tr.innerHTML =
-            "<td></td><td class='mono'></td><td class='mono'></td><td></td><td></td>";
+          tr.innerHTML = "<td class='col-amount'></td><td class='col-amount'></td><td class='col-project'></td><td class='mono col-amount'></td><td class='invoice-status-cell'></td>";
           const cells = tr.querySelectorAll("td");
-          cells[0].textContent = item.kind || "订单";
-          cells[1].textContent = item.orderNo || item.id || "—";
-          cells[2].textContent = formatMoney(item.amount);
-          cells[3].textContent = item.status || "—";
-          cells[4].textContent = formatDateTimeShanghai(item.createdAt);
+          cells[0].textContent = item.serviceStartDate || "—";
+          cells[1].textContent = item.serviceEndDate || "—";
+          cells[2].textContent = item.projectName || item.name || "—";
+          cells[3].textContent = formatMoney(item.amount);
+          cells[4].textContent = item.paymentStatus || "—";
           tr.onclick = async () => {
             const detail = await api("/api/portal/orders/" + encodeURIComponent(item.id) + "/");
             const data = detail.data || {};
-            const itemLines = (data.items || []).map((row) => {
-              const qty = row.quantity != null ? (" × " + row.quantity) : "";
-              const amt = row.amount != null ? ("　" + formatMoney(row.amount)) : "";
-              return (row.productName || "未命名") + qty + amt;
+            const orderLines = (data.orders || []).map((row) => {
+              return (row.orderNo || row.id || "订单") + "　" + formatMoney(row.amount) + "　" + (row.status || "");
             }).filter(Boolean);
-            showDetailModal(data.orderNo || "订单详情", [
-              ["类型", data.kind],
-              ["订单号", data.orderNo],
+            showDetailModal(data.projectName || data.name || "服务项目", [
+              ["项目名称", data.projectName || data.name],
+              ["项目编号", data.projectNo],
+              ["服务商品", data.serviceProductName || "—"],
+              ["开始时间", data.serviceStartDate || "—"],
+              ["结束时间", data.serviceEndDate || "—"],
               ["金额", formatMoney(data.amount)],
               ["应收", formatMoney(data.receivableAmount)],
               ["已收", formatMoney(data.receivedAmount)],
-              ["状态", data.status],
-              ["项目", data.projectName || "—"],
-              ["明细", itemLines.length ? itemLines.join("\n") : "暂无明细", true],
-              ["创建时间", formatDateTimeShanghai(data.createdAt, true), true],
+              ["付款情况", data.paymentStatus],
+              ["项目状态", data.status],
+              ["关联订单", orderLines.length ? orderLines.join("\n") : "暂无", true],
             ]);
           };
           tbody.appendChild(tr);
@@ -1535,7 +2052,7 @@
       panel.innerHTML = "";
       const toolbar = document.createElement("div");
       toolbar.className = "toolbar";
-      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="发票号 / 买卖方" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="发票号 / 买卖方 / 项目" /></label><button class="ghost" type="button" data-role="search">查询</button>';
       bindEnterpriseSearch(toolbar, "invoices", () => renderInvoices(panel));
       const card = document.createElement("div");
       card.className = "card list-card";
@@ -1544,33 +2061,45 @@
       } else {
         const table = document.createElement("table");
         table.className = "enterprise-table";
-        table.innerHTML = "<thead><tr><th>发票号</th><th>类型</th><th>金额</th><th>销方</th><th>状态</th><th>开票日期</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th class='col-party'>买方</th><th class='col-party'>卖方</th><th class='col-project'>对应项目</th><th class='invoice-status-cell'>状态</th><th class='col-amount'>金额</th><th class='col-actions'>操作</th></tr></thead>";
         const tbody = document.createElement("tbody");
         (body.items || []).forEach((item) => {
           const tr = document.createElement("tr");
           tr.className = "clickable";
-          tr.innerHTML = "<td class='mono'></td><td></td><td class='mono'></td><td></td><td></td><td></td>";
+          tr.innerHTML = "<td class='col-party'></td><td class='col-party'></td><td class='col-project'></td><td class='invoice-status-cell'></td><td class='mono col-amount'></td><td class='option-actions col-actions'></td>";
           const cells = tr.querySelectorAll("td");
-          cells[0].textContent = item.invoiceNo || item.id || "—";
-          cells[1].textContent = item.type || "—";
-          cells[2].textContent = formatMoney(item.amount);
-          cells[3].textContent = item.sellerName || "—";
-          cells[4].textContent = item.status || "—";
-          cells[5].textContent = formatDateTimeShanghai(item.invoiceDate);
+          cells[0].textContent = item.buyerName || "—";
+          cells[1].textContent = item.sellerName || "—";
+          cells[2].textContent = item.projectName || "—";
+          cells[3].appendChild(renderInvoiceStatusBadge(item.status));
+          cells[4].textContent = formatMoney(item.amount);
+          if (item.fileId) {
+            const link = document.createElement("a");
+            link.className = "copy-link";
+            link.href = "/api/portal/invoices/" + encodeURIComponent(item.id) + "/file/";
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "下载";
+            link.addEventListener("click", stopRowNav);
+            cells[5].appendChild(link);
+          } else {
+            cells[5].textContent = "—";
+          }
           tr.onclick = async () => {
             const detail = await api("/api/portal/invoices/" + encodeURIComponent(item.id) + "/");
             const data = detail.data || {};
             const actions = data.fileId
-              ? '<div class="modal-actions"><a class="primary" href="/api/portal/invoices/' + encodeURIComponent(data.id) + '/file/" target="_blank" rel="noopener">下载发票附件</a></div>'
+              ? '<div class="modal-actions"><a class="primary" href="/api/portal/invoices/' + encodeURIComponent(data.id) + '/file/" target="_blank" rel="noopener">下载发票</a></div>'
               : "";
             showDetailModal(data.invoiceNo || "发票详情", [
               ["发票号", data.invoiceNo],
               ["类型", data.type],
+              ["买方", data.buyerName],
+              ["卖方", data.sellerName],
+              ["对应项目", data.projectName || "—"],
               ["金额", formatMoney(data.amount)],
               ["状态", data.status],
               ["开票日期", formatDateTimeShanghai(data.invoiceDate)],
-              ["买方", data.buyerName],
-              ["销方", data.sellerName],
               ["附件", data.fileName || (data.fileId ? "已上传" : "无")],
               ["备注", data.remark || data.note || "", true],
             ], actions);
@@ -1595,27 +2124,39 @@
       panel.innerHTML = "";
       const toolbar = document.createElement("div");
       toolbar.className = "toolbar";
-      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="项目 / 合同" /></label><button class="ghost" type="button" data-role="search">查询</button>';
+      toolbar.innerHTML = '<label>搜索<input name="search" placeholder="项目 / 合同状态" /></label><button class="ghost" type="button" data-role="search">查询</button>';
       bindEnterpriseSearch(toolbar, "contracts", () => renderContracts(panel));
       const card = document.createElement("div");
       card.className = "card list-card";
       if (!(body.items || []).length) {
-        card.innerHTML = '<p class="empty">暂无本企业合同</p>';
+        card.innerHTML = '<p class="empty">暂无可下载合同</p>';
       } else {
         const table = document.createElement("table");
         table.className = "enterprise-table";
-        table.innerHTML = "<thead><tr><th>类型</th><th>项目</th><th>订单号</th><th>状态</th><th>附件</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th class='col-party'>买方</th><th class='col-party'>卖方</th><th class='col-project'>对应项目</th><th class='invoice-status-cell'>状态</th><th class='col-amount'>金额</th><th class='col-actions'>操作</th></tr></thead>";
         const tbody = document.createElement("tbody");
         (body.items || []).forEach((item) => {
           const tr = document.createElement("tr");
           tr.className = "clickable";
-          tr.innerHTML = "<td></td><td></td><td class='mono'></td><td></td><td></td>";
+          tr.innerHTML = "<td class='col-party'></td><td class='col-party'></td><td class='col-project'></td><td class='invoice-status-cell'></td><td class='mono col-amount'></td><td class='option-actions col-actions'></td>";
           const cells = tr.querySelectorAll("td");
-          cells[0].textContent = item.kind || "合同";
-          cells[1].textContent = item.projectName || item.projectNo || "—";
-          cells[2].textContent = item.orderNo || "—";
+          cells[0].textContent = item.buyerName || "—";
+          cells[1].textContent = item.sellerName || "—";
+          cells[2].textContent = item.projectName || item.projectNo || "—";
           cells[3].textContent = item.contractStatus || "—";
-          cells[4].textContent = item.contractFileName || (item.contractFileId ? "已上传" : "无");
+          cells[4].textContent = formatMoney(item.amount);
+          if (item.contractFileId) {
+            const link = document.createElement("a");
+            link.className = "copy-link";
+            link.href = "/api/portal/contracts/" + encodeURIComponent(item.id) + "/file/";
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "下载";
+            link.addEventListener("click", stopRowNav);
+            cells[5].appendChild(link);
+          } else {
+            cells[5].textContent = "—";
+          }
           tr.onclick = async () => {
             const detail = await api("/api/portal/contracts/" + encodeURIComponent(item.id) + "/");
             const data = detail.data || {};
@@ -1624,9 +2165,11 @@
               : "";
             showDetailModal(data.projectName || "合同详情", [
               ["类型", data.kind],
-              ["项目", data.projectName],
+              ["买方", data.buyerName || "—"],
+              ["卖方", data.sellerName || "—"],
+              ["对应项目", data.projectName],
               ["项目编号", data.projectNo],
-              ["订单号", data.orderNo],
+              ["金额", formatMoney(data.amount)],
               ["合同状态", data.contractStatus],
               ["附件名", data.contractFileName, true],
             ], actions);
@@ -1653,7 +2196,7 @@
       toolbar.className = "toolbar";
       toolbar.innerHTML = '<label>搜索<input name="search" placeholder="姓名 / 手机号" /></label><button class="ghost" type="button" data-role="search">查询</button>';
       bindEnterpriseSearch(toolbar, "accounts", () => renderAccounts(panel));
-      if (hasPortalPerm("portal.account.manage")) {
+      if (hasPortalPerm("portal.account.create")) {
         const addBtn = document.createElement("button");
         addBtn.className = "primary";
         addBtn.type = "button";
@@ -1668,36 +2211,37 @@
       } else {
         const table = document.createElement("table");
         table.className = "enterprise-table";
-        table.innerHTML = "<thead><tr><th>名称</th><th>手机号</th><th>状态</th><th>权限</th><th>操作</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th class='col-name'>名称</th><th class='col-phone'>手机号</th><th class='invoice-status-cell'>状态</th><th class='col-project'>权限</th><th class='col-actions'>操作</th></tr></thead>";
         const tbody = document.createElement("tbody");
         (body.items || []).forEach((item) => {
           const tr = document.createElement("tr");
-          tr.innerHTML = "<td></td><td class='mono'></td><td></td><td></td><td class='option-actions'></td>";
+          tr.innerHTML = "<td class='col-name'></td><td class='mono col-phone'></td><td class='invoice-status-cell'></td><td class='col-project'></td><td class='option-actions col-actions'></td>";
           const cells = tr.querySelectorAll("td");
           cells[0].textContent = item.name || "—";
           cells[1].textContent = item.phone || "—";
           cells[2].textContent = item.status || "—";
           cells[3].textContent = (item.permissions || []).map((id) => PERMISSION_LABELS[id] || id).join("、") || "—";
-          if (hasPortalPerm("portal.account.manage")) {
+          if (hasPortalPerm("portal.account.edit")) {
             const edit = document.createElement("button");
             edit.className = "copy-link";
             edit.type = "button";
             edit.textContent = "编辑";
             edit.onclick = () => openAccountEditor(item, () => renderAccounts(panel));
             cells[4].appendChild(edit);
-            if (item.id !== me.id) {
-              const del = document.createElement("button");
-              del.className = "copy-link danger";
-              del.type = "button";
-              del.textContent = "删除";
-              del.onclick = async () => {
-                if (!window.confirm("确认删除账号「" + (item.name || item.phone) + "」？")) return;
-                await api("/api/portal/accounts/" + encodeURIComponent(item.id) + "/", { method: "DELETE", body: "{}" });
-                renderAccounts(panel);
-              };
-              cells[4].appendChild(del);
-            }
-          } else {
+          }
+          if (hasPortalPerm("portal.account.delete") && item.id !== me.id) {
+            const del = document.createElement("button");
+            del.className = "copy-link danger";
+            del.type = "button";
+            del.textContent = "删除";
+            del.onclick = async () => {
+              if (!window.confirm("确认删除账号「" + (item.name || item.phone) + "」？")) return;
+              await api("/api/portal/accounts/" + encodeURIComponent(item.id) + "/", { method: "DELETE", body: "{}" });
+              renderAccounts(panel);
+            };
+            cells[4].appendChild(del);
+          }
+          if (!cells[4].childNodes.length) {
             cells[4].textContent = "—";
           }
           tbody.appendChild(tr);
@@ -1718,14 +2262,14 @@
       const backdrop = document.createElement("div");
       backdrop.className = "modal-backdrop";
       backdrop.innerHTML =
-        '<div class="modal"><div class="modal-head"><div><h3></h3><p>仅可管理本企业账号，不可跨企业。</p></div>' +
+        '<div class="modal"><div class="modal-head"><div><h3></h3><p>仅可管理本企业账号；可勾选范围受已购服务权限包限制。</p></div>' +
         '<button class="icon-button" type="button" aria-label="关闭">×</button></div>' +
         '<div class="modal-body"><form class="enterprise-form">' +
         '<label>账号名称<input name="name" required /></label>' +
         '<label>手机号<input name="phone" required inputmode="tel" /></label>' +
         '<label>' + (isNew ? "登录密码" : "重置密码（留空不改）") + '<input name="password" type="password" ' + (isNew ? "required" : "") + " /></label>" +
         '<label>状态<select name="status"><option value="启用">启用</option><option value="停用">停用</option></select></label>' +
-        '<fieldset><legend>门户权限</legend><div data-role="perms"></div></fieldset>' +
+        '<fieldset><legend>门户权限</legend><p class="muted" data-role="perm-hint" style="margin:0 0 8px"></p><div data-role="perms"></div></fieldset>' +
         '<p class="error"></p><div class="enterprise-actions"><button class="ghost" type="button" data-role="cancel">取消</button><button class="primary" type="submit">保存</button></div>' +
         "</form></div></div>";
       backdrop.querySelector("h3").textContent = isNew ? "新增企业账号" : "编辑企业账号";
@@ -1734,19 +2278,63 @@
       form.phone.value = item?.phone || "";
       form.status.value = item?.status || "启用";
       const permBox = form.querySelector("[data-role=perms]");
-      const selected = new Set(item?.permissions || ["portal.notice.view"]);
-      Object.entries(PERMISSION_LABELS).forEach(([id, label]) => {
-        const row = document.createElement("label");
-        row.style.display = "flex";
-        row.style.gap = "8px";
-        row.style.alignItems = "center";
-        row.style.marginBottom = "6px";
-        row.innerHTML = '<input type="checkbox" style="width:auto" /><span></span>';
-        row.querySelector("input").value = id;
-        row.querySelector("input").checked = selected.has(id);
-        row.querySelector("span").textContent = label;
-        permBox.appendChild(row);
+      const hint = form.querySelector("[data-role=perm-hint]");
+      const selected = new Set(item?.permissions || []);
+      if (selected.has("portal.account.manage")) ACCOUNT_ACTION_IDS.forEach((id) => selected.add(id));
+      const caps = Array.isArray(item?.orgEntitlements) && item.orgEntitlements.length
+        ? item.orgEntitlements
+        : (Array.isArray(me?.orgEntitlements) && me.orgEntitlements.length ? me.orgEntitlements : Object.keys(PERMISSION_LABELS));
+      const capSet = new Set(caps);
+      hint.textContent = "树状勾选：父级为模块，子级为具体能力；仅可勾选企业已购服务包含的权限。";
+      permBox.className = "portal-perm-tree";
+      const refreshParent = (groupEl) => {
+        const parent = groupEl.querySelector("input[data-role=parent]");
+        const leaves = Array.from(groupEl.querySelectorAll("input[data-role=leaf]"));
+        if (!parent || !leaves.length) return;
+        const checkedCount = leaves.filter((input) => input.checked).length;
+        parent.checked = checkedCount === leaves.length;
+        parent.indeterminate = checkedCount > 0 && checkedCount < leaves.length;
+      };
+      PERMISSION_GROUPS.forEach((group) => {
+        const ids = group.ids.filter((id) => capSet.has(id) || selected.has(id));
+        if (!ids.length) return;
+        const groupEl = document.createElement("div");
+        groupEl.className = "portal-perm-tree-group";
+        const parentLabel = document.createElement("label");
+        parentLabel.className = "portal-perm-tree-parent";
+        parentLabel.innerHTML = '<input type="checkbox" data-role="parent" style="width:auto" /><span><strong></strong><em></em></span>';
+        parentLabel.querySelector("strong").textContent = group.title;
+        parentLabel.querySelector("em").textContent = group.hint || "";
+        const parentInput = parentLabel.querySelector("input");
+        const children = document.createElement("div");
+        children.className = "portal-perm-tree-children";
+        ids.forEach((id) => {
+          const row = document.createElement("label");
+          row.className = "portal-perm-tree-child";
+          row.innerHTML = '<input type="checkbox" data-role="leaf" style="width:auto" /><span></span>';
+          const input = row.querySelector("input");
+          input.value = id;
+          input.disabled = !capSet.has(id) && !selected.has(id);
+          input.checked = selected.has(id) || (isNew && capSet.has(id));
+          input.onchange = () => refreshParent(groupEl);
+          row.querySelector("span").textContent = PERMISSION_LABELS[id] || id;
+          children.appendChild(row);
+        });
+        parentInput.onchange = () => {
+          children.querySelectorAll("input[data-role=leaf]").forEach((input) => {
+            if (input.disabled) return;
+            input.checked = parentInput.checked;
+          });
+          refreshParent(groupEl);
+        };
+        groupEl.appendChild(parentLabel);
+        groupEl.appendChild(children);
+        permBox.appendChild(groupEl);
+        refreshParent(groupEl);
       });
+      if (!permBox.querySelector("input[data-role=leaf]")) {
+        permBox.innerHTML = '<p class="muted">当前企业暂无可分配权限，请确认服务项目仍在有效期内。</p>';
+      }
       const close = () => backdrop.remove();
       backdrop.querySelector(".icon-button").onclick = close;
       form.querySelector("[data-role=cancel]").onclick = close;
@@ -1754,7 +2342,12 @@
         event.preventDefault();
         const error = form.querySelector(".error");
         error.textContent = "";
-        const permissions = Array.from(permBox.querySelectorAll("input:checked")).map((input) => input.value);
+        const permissions = Array.from(permBox.querySelectorAll("input[data-role=leaf]:checked"))
+          .map((input) => input.value)
+          .filter((id) => capSet.has(id));
+        if (ACCOUNT_ACTION_IDS.every((id) => permissions.includes(id))) {
+          permissions.push("portal.account.manage");
+        }
         const payload = {
           name: form.name.value.trim(),
           phone: form.phone.value.trim(),
@@ -1793,19 +2386,20 @@
     }
 
     function chartAxis() {
-      return { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
+      return chartAxisTheme();
     }
 
     function mountSiteCharts(prefix, data) {
-      const axis = chartAxis();
-      const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
+      const axis = chartAxisTheme();
+      const palette = chartPalette();
+      const bar = chartBarGradient();
       const siteEl = document.getElementById(prefix + "-site");
       const kindEl = document.getElementById(prefix + "-kind");
       const dealEl = document.getElementById(prefix + "-deal");
       const dailyEl = document.getElementById(prefix + "-daily");
       if (siteEl) {
         mountChart(siteEl, {
-          color: ["#1f8a56"],
+          color: [palette[0]],
           grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
           tooltip: { trigger: "axis" },
           xAxis: { type: "value", ...axis },
@@ -1815,7 +2409,7 @@
       }
       if (kindEl) {
         mountChart(kindEl, {
-          color: ["#1f8a56", "#e0b15a", "#2a9d8f", "#e07a4c", "#3d6b8a", "#c45c6a", "#8d9a84"],
+          color: palette,
           tooltip: { trigger: "item" },
           legend: { bottom: 0, type: "scroll" },
           series: [{
@@ -1829,22 +2423,22 @@
       if (dealEl) {
         const dealRows = data.monthlyDeal || [];
         mountChart(dealEl, {
-          color: ["#d7a441"],
+          color: [palette[1]],
           grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
           tooltip: { trigger: "axis", valueFormatter: (value) => formatMoney(value) },
           xAxis: { type: "category", data: dealRows.map((row) => String(row.month).slice(2).replace("-", "/")), ...axis },
-          yAxis: { type: "value", ...axis, axisLabel: { color: "#74685a", formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
-          series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: new echarts.graphic.LinearGradient(0, 1, 0, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]) } }],
+          yAxis: { type: "value", ...axis, axisLabel: { color: readCssVar("--chart-axis", "#94a3b8"), formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
+          series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: chartBarVerticalGradient() } }],
         });
       }
       if (dailyEl) {
         mountChart(dailyEl, {
-          color: ["#1f8a56"],
+          color: [palette[0]],
           grid: { left: 24, right: 16, top: 24, bottom: 8, containLabel: true },
           tooltip: { trigger: "axis" },
           xAxis: { type: "category", data: (data.daily || []).map((row) => String(row.date).slice(5)), ...axis },
           yAxis: { type: "value", ...axis },
-          series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(31,138,86,.28)" }, { offset: 1, color: "rgba(224,177,90,.05)" }]) }, data: (data.daily || []).map((row) => row.count) }],
+          series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: chartAreaGradient() }, data: (data.daily || []).map((row) => row.count) }],
         });
       }
     }
@@ -1867,17 +2461,58 @@
 
     function statsQueryParams(extra) {
       const params = new URLSearchParams({ period: tagQuery.period });
-      if (tagQuery.period === "custom") {
-        params.set("startDate", tagQuery.startDate);
-        params.set("endDate", tagQuery.endDate);
-      }
       if (tagQuery.dealKind) params.set("deal_kind", tagQuery.dealKind);
       if (tagQuery.province) params.set("province", tagQuery.province);
-      if (tagQuery.buyer) params.set("buyer", tagQuery.buyer);
       Object.entries(extra || {}).forEach(([key, value]) => {
         if (value != null && value !== "") params.set(key, String(value));
       });
       return params;
+    }
+
+    function readCssVar(name, fallback) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return value || fallback;
+    }
+    function chartPalette() {
+      return [
+        readCssVar("--chart-1", "#334155"),
+        readCssVar("--chart-2", "#1f7a4d"),
+        readCssVar("--chart-3", "#0f766e"),
+        readCssVar("--chart-4", "#b45309"),
+        readCssVar("--chart-5", "#1d4ed8"),
+        readCssVar("--chart-6", "#be123c"),
+        readCssVar("--chart-7", "#64748b"),
+      ];
+    }
+    function chartAxisTheme() {
+      const axis = readCssVar("--chart-axis", "#94a3b8");
+      const split = readCssVar("--chart-split", "#e2e8f0");
+      return {
+        axisLine: { lineStyle: { color: split } },
+        axisLabel: { color: axis },
+        splitLine: { lineStyle: { color: split } },
+      };
+    }
+    function chartBarGradient() {
+      const colors = chartPalette();
+      return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+        { offset: 0, color: colors[0] },
+        { offset: 1, color: colors[1] },
+      ]);
+    }
+    function chartBarVerticalGradient() {
+      const colors = chartPalette();
+      return new echarts.graphic.LinearGradient(0, 1, 0, 0, [
+        { offset: 0, color: colors[0] },
+        { offset: 1, color: colors[1] },
+      ]);
+    }
+    function chartAreaGradient() {
+      const colors = chartPalette();
+      return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: colors[0] + "48" },
+        { offset: 1, color: colors[1] + "0d" },
+      ]);
     }
 
     function overviewMetricRows(data) {
@@ -1890,7 +2525,23 @@
       ];
     }
 
+    const SHANDONG_CITIES = [
+      "济南", "青岛", "淄博", "枣庄", "东营", "烟台", "潍坊", "济宁",
+      "泰安", "威海", "日照", "临沂", "德州", "聊城", "滨州", "菏泽",
+    ];
+
     function mountStatsFilters(parent, { showDealKinds = true, showTagFilters = false, dealKinds = null, onChange } = {}) {
+      if (tagQuery.period === "custom" || tagQuery.period === "last_month") {
+        tagQuery.period = "last_30_days";
+        tagQuery.startDate = daysAgoYmd(29);
+        tagQuery.endDate = formatYmd(new Date());
+      }
+      if (tagQuery.province && !SHANDONG_CITIES.includes(tagQuery.province.replace(/市$/, ""))) {
+        const normalized = tagQuery.province.replace(/市$/, "");
+        tagQuery.province = SHANDONG_CITIES.includes(normalized) ? normalized : "";
+      } else if (tagQuery.province.endsWith("市")) {
+        tagQuery.province = tagQuery.province.replace(/市$/, "");
+      }
       const box = document.createElement("div");
       box.className = "stats-filters";
       box.innerHTML =
@@ -1898,39 +2549,17 @@
         '<button type="button" data-period="last_30_days">近30天</button>' +
         '<button type="button" data-period="this_week">本周</button>' +
         '<button type="button" data-period="this_month">当月</button>' +
-        '<button type="button" data-period="last_month">上月</button>' +
-        '<button type="button" data-period="custom">自定义</button>' +
-        "</div>" +
-        '<div class="stats-custom-range" data-role="custom-range" hidden>' +
-        '<label>发布开始<input type="text" class="date-input" data-role="start-date" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
-        '<span class="range-sep">至</span>' +
-        '<label>发布结束<input type="text" class="date-input" data-role="end-date" data-datepicker placeholder="yyyy-mm-dd" maxlength="10" autocomplete="off" /></label>' +
-        '<button class="ghost" type="button" data-role="apply-custom">查询</button>' +
         "</div>" +
         (showDealKinds ? '<div class="segmented" data-role="deal"></div>' : "") +
         (showTagFilters
-          ? '<label style="min-width:140px;margin:0">地区<input name="province" placeholder="如山东省" /></label>' +
-            '<label style="min-width:140px;margin:0">采购人<input name="buyer" placeholder="采购人关键词" /></label>'
+          ? '<label style="min-width:160px;margin:0">地市选择<select name="province"></select></label>'
           : "");
       parent.appendChild(box);
-      if (window.ycDatePicker) window.ycDatePicker.bindAll(box);
 
       const syncActive = () => {
         box.querySelectorAll("[data-period]").forEach((button) => {
           button.classList.toggle("active", button.dataset.period === tagQuery.period);
         });
-        const customRange = box.querySelector("[data-role=custom-range]");
-        customRange.hidden = tagQuery.period !== "custom";
-        const startInput = box.querySelector("[data-role=start-date]");
-        const endInput = box.querySelector("[data-role=end-date]");
-        if (startInput) {
-          startInput.value = tagQuery.startDate || "";
-          if (startInput._flatpickr) startInput._flatpickr.setDate(tagQuery.startDate || "", false);
-        }
-        if (endInput) {
-          endInput.value = tagQuery.endDate || "";
-          if (endInput._flatpickr) endInput._flatpickr.setDate(tagQuery.endDate || "", false);
-        }
         box.querySelectorAll("[data-deal]").forEach((button) => {
           button.classList.toggle("active", (button.dataset.deal || "") === (tagQuery.dealKind || ""));
         });
@@ -1961,41 +2590,27 @@
             tagQuery.endDate = formatYmd(new Date());
           }
           syncActive();
-          if (tagQuery.period !== "custom") onChange();
+          onChange();
         };
       });
-      const startInput = box.querySelector("[data-role=start-date]");
-      const endInput = box.querySelector("[data-role=end-date]");
-      const applyCustom = () => {
-        tagQuery.startDate = normalizeYmd(startInput.value) || "";
-        tagQuery.endDate = normalizeYmd(endInput.value) || "";
-        tagQuery.period = "custom";
-        syncActive();
-        if (!tagQuery.startDate || !tagQuery.endDate) {
-          window.alert("请选择完整的发布起止日期。");
-          return;
-        }
-        onChange();
-      };
-      box.querySelector("[data-role=apply-custom]").onclick = applyCustom;
-      startInput.onchange = () => { tagQuery.startDate = startInput.value || ""; };
-      endInput.onchange = () => { tagQuery.endDate = endInput.value || ""; };
 
       if (showTagFilters) {
-        const provinceInput = box.querySelector("[name=province]");
-        const buyerInput = box.querySelector("[name=buyer]");
-        provinceInput.value = tagQuery.province;
-        buyerInput.value = tagQuery.buyer;
-        const onFilterInput = () => {
-          window.clearTimeout(tagSearchTimer);
-          tagSearchTimer = window.setTimeout(() => {
-            tagQuery.province = provinceInput.value.trim();
-            tagQuery.buyer = buyerInput.value.trim();
-            onChange();
-          }, 300);
+        const provinceSelect = box.querySelector("[name=province]");
+        const allOpt = document.createElement("option");
+        allOpt.value = "";
+        allOpt.textContent = "全部地市";
+        provinceSelect.appendChild(allOpt);
+        SHANDONG_CITIES.forEach((city) => {
+          const opt = document.createElement("option");
+          opt.value = city;
+          opt.textContent = city + "市";
+          provinceSelect.appendChild(opt);
+        });
+        provinceSelect.value = tagQuery.province || "";
+        provinceSelect.onchange = () => {
+          tagQuery.province = provinceSelect.value || "";
+          onChange();
         };
-        provinceInput.oninput = onFilterInput;
-        buyerInput.oninput = onFilterInput;
       }
 
       syncActive();
@@ -2004,15 +2619,6 @@
 
     async function renderHome(panel) {
       await loadEcharts();
-      if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
-        panel.innerHTML = "";
-        mountStatsFilters(panel, { showDealKinds: false, onChange: () => openTab("home") });
-        const tip = document.createElement("p");
-        tip.className = "empty";
-        tip.textContent = "请选择自定义发布日期后点击「查询」。";
-        panel.appendChild(tip);
-        return;
-      }
       panel.innerHTML = '<p class="panel-loading">正在加载首页统计…</p>';
       const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeSites: "1", includeTags: "0" }).toString())).data;
       panel.innerHTML = "";
@@ -2122,6 +2728,65 @@
         return (amount / 10000).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0万";
       }
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0元";
+    }
+
+    function renderInvoiceStatusBadge(status) {
+      const text = String(status || "").trim() || "—";
+      const span = document.createElement("span");
+      span.className = "invoice-status";
+      if (text === "待确认" || text === "草稿") span.classList.add("is-pending");
+      else if (text === "已确认" || text === "已开" || text === "已收") span.classList.add("is-confirmed");
+      else if (text === "作废") span.classList.add("is-void");
+      span.textContent = text;
+      return span;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function highlightText(text, terms) {
+      const raw = String(text || "");
+      if (!raw) return "—";
+      const list = (terms || []).map((item) => String(item || "").trim()).filter(Boolean);
+      if (!list.length) return escapeHtml(raw);
+      const unique = [...new Set(list)].sort((a, b) => b.length - a.length);
+      const pattern = unique.map((item) => item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      if (!pattern) return escapeHtml(raw);
+      try {
+        const re = new RegExp("(" + pattern + ")", "gi");
+        return escapeHtml(raw).replace(re, '<mark class="mark-hit">$1</mark>');
+      } catch (_) {
+        return escapeHtml(raw);
+      }
+    }
+
+    function subscriptionKeywords(sub) {
+      if (!sub) return [];
+      if (Array.isArray(sub.keywords)) {
+        return sub.keywords.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 20);
+      }
+      return String(sub.keywordsText || sub.keywords || "")
+        .split(/[\s,，;；|]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+    }
+
+    function isPortalH5Client() {
+      return isWeChatBrowser() || window.matchMedia("(max-width: 960px)").matches;
+    }
+
+    function stopWechatBindPoll() {
+      if (wechatBindPollTimer) {
+        window.clearInterval(wechatBindPollTimer);
+        wechatBindPollTimer = 0;
+      }
+      wechatBindTicket = "";
     }
 
     function normalizeYmd(value) {
@@ -2264,9 +2929,9 @@
       return amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function fillTagStats(root, data) {
+    function fillTagStats(root, data, options) {
+      const reloadTab = (options && options.reloadTab) || "stats";
       const tag = data.tagStats || {};
-      root.querySelector("[data-tag=noticeCount]").textContent = String(tag.noticeCount ?? 0);
       root.querySelector("[data-tag=dealAmount]").textContent = moneyLabel(tag.dealAmount);
       root.querySelector("[data-tag=buyerCount]").textContent = String(tag.buyerCount ?? 0);
       root.querySelector("[data-tag=goodsCount]").textContent = String(tag.goodsCount ?? 0);
@@ -2283,7 +2948,7 @@
         if (!tagQuery.dealKind) {
           tr.onclick = () => {
             tagQuery.dealKind = row.dealKind;
-            openTab("stats");
+            openTab(reloadTab);
           };
         }
         dealBody.appendChild(tr);
@@ -2300,7 +2965,7 @@
         tr.children[2].textContent = moneyLabel(row.amount);
         regionBody.appendChild(tr);
       });
-      if (!(tag.byProvince || []).length) regionBody.innerHTML = '<tr><td colspan="3">暂无区域数据</td></tr>';
+      if (!(tag.byProvince || []).length) regionBody.innerHTML = '<tr><td colspan="3">暂无地市数据</td></tr>';
 
       const buyerBody = root.querySelector("[data-tag=buyerBody]");
       buyerBody.innerHTML = "";
@@ -2321,20 +2986,60 @@
       if (!(tag.byBuyer || []).length) buyerBody.innerHTML = '<tr><td colspan="3">暂无采购人数据</td></tr>';
     }
 
+    const FRAME_SITE_ID = "sd-gpfa-frame";
+
+    function buildFrameInsights(data, tagData) {
+      const insights = [];
+      const byKind = data.byKind || [];
+      const total = byKind.reduce((sum, row) => sum + (Number(row.count) || 0), 0) || Number(data.publicNoticeTotal) || 0;
+      const deal = byKind.find((row) => row.kind === "成交公告");
+      const stop = byKind.find((row) => row.kind === "终止公告" || row.kind === "废标公告");
+      if (deal && total) {
+        insights.push(
+          "成交公告占比 " + ((deal.count / total) * 100).toFixed(1) + "%（" + deal.count + "/" + total + "），成交金额 " + formatMoney(data.dealAmount) + "。"
+        );
+      }
+      if (stop && total) {
+        insights.push(
+          (stop.kind || "终止公告") + " " + stop.count + " 条，约占 " + ((stop.count / total) * 100).toFixed(1) + "%。"
+        );
+      }
+      const tag = (tagData && tagData.tagStats) || {};
+      const topKind = (tag.byDealKind || []).slice().sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+      if (topKind) {
+        insights.push("成交品类以「" + topKind.dealKind + "」为主，金额 " + moneyLabel(topKind.amount) + "。");
+      }
+      const topProvince = (tag.byProvince || [])[0];
+      if (topProvince) {
+        insights.push(
+          "地市成交靠前：" + topProvince.province + "（" + topProvince.count + " 条，" + moneyLabel(topProvince.amount) + "）。"
+        );
+      }
+      const topBuyer = (tag.byBuyer || [])[0];
+      if (topBuyer) {
+        insights.push(
+          "活跃采购人示例：" + topBuyer.buyerName + "（" + topBuyer.count + " 条，" + moneyLabel(topBuyer.amount) + "）。"
+        );
+      }
+      const daily = data.daily || [];
+      if (daily.length >= 7) {
+        const recent = daily.slice(-7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
+        const prev = daily.slice(-14, -7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
+        if (prev > 0) {
+          const pct = ((recent - prev) / prev) * 100;
+          insights.push(
+            "近 7 日发布 " + recent + " 条，较前 7 日" + (pct >= 0 ? "上升 " : "下降 ") + Math.abs(pct).toFixed(1) + "%。"
+          );
+        } else {
+          insights.push("近 7 日发布 " + recent + " 条。");
+        }
+      }
+      if (!insights.length) insights.push("当前筛选条件下暂无可摘要的框采洞察。");
+      return insights;
+    }
+
     async function renderStats(panel) {
       await loadEcharts();
-      if (tagQuery.period === "custom" && !tagQuery.startDate && !tagQuery.endDate) {
-        panel.innerHTML = "";
-        mountStatsFilters(panel, {
-          showTagFilters: true,
-          onChange: () => openTab("stats"),
-        });
-        const tip = document.createElement("p");
-        tip.className = "empty";
-        tip.textContent = "请选择自定义发布日期后点击「查询」。";
-        panel.appendChild(tip);
-        return;
-      }
       panel.innerHTML = '<p class="panel-loading">正在加载统计数据…</p>';
       // 先出图表指标（不含标签），标签分析二次加载，避免整页卡在标签聚合上
       const data = (await api("/api/portal/stats/?" + statsQueryParams({ includeTags: "0" }).toString())).data;
@@ -2379,23 +3084,23 @@
         "<h3>成交标签分析</h3>" +
         '<p class="panel-loading" data-tag="loading">正在加载标签分析…</p>' +
         '<div class="tag-metrics" hidden>' +
-        '<div class="metric tone-jade"><span>结果公告数</span><strong data-tag="noticeCount">—</strong></div>' +
         '<div class="metric tone-gold amount"><span>成交金额</span><strong data-tag="dealAmount">—</strong></div>' +
         '<div class="metric tone-teal"><span>采购人数</span><strong data-tag="buyerCount">—</strong></div>' +
         '<div class="metric tone-ink"><span>商品行数</span><strong data-tag="goodsCount">—</strong></div>' +
         "</div>" +
         '<div class="tag-tables" hidden>' +
         '<div><h3 style="margin:0 0 8px;font-size:14px">按成交类型</h3><table class="tag-table"><thead><tr><th>类型</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="dealBody"></tbody></table></div>' +
-        '<div><h3 style="margin:0 0 8px;font-size:14px">按省份</h3><table class="tag-table"><thead><tr><th>省份</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="regionBody"></tbody></table></div>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按地市</h3><table class="tag-table"><thead><tr><th>地市</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="regionBody"></tbody></table></div>' +
         '<div><h3 style="margin:0 0 8px;font-size:14px">按采购人</h3><table class="tag-table"><thead><tr><th>采购人</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="buyerBody"></tbody></table></div>' +
         "</div>";
       panel.appendChild(tagBlock);
 
-      const axis = { axisLine: { lineStyle: { color: "#eadfce" } }, axisLabel: { color: "#74685a" }, splitLine: { lineStyle: { color: "#f3eadc" } } };
-      const bar = new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]);
+      const axis = chartAxisTheme();
+      const palette = chartPalette();
+      const bar = chartBarGradient();
       if (includeSiteChart) {
         mountChart(document.getElementById("chart-site"), {
-          color: ["#1f8a56"],
+          color: [palette[0]],
           grid: { left: 24, right: 16, top: 16, bottom: 8, containLabel: true },
           tooltip: { trigger: "axis" },
           xAxis: { type: "value", ...axis },
@@ -2404,7 +3109,7 @@
         });
       }
       mountChart(document.getElementById("chart-kind"), {
-        color: ["#1f8a56", "#e0b15a", "#2a9d8f", "#e07a4c", "#3d6b8a", "#c45c6a", "#8d9a84"],
+        color: palette,
         tooltip: { trigger: "item" },
         legend: { bottom: 0, type: "scroll" },
         series: [{
@@ -2416,20 +3121,20 @@
       });
       const dealRows = data.monthlyDeal || [];
       mountChart(document.getElementById("chart-deal"), {
-        color: ["#d7a441"],
+        color: [palette[1]],
         grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
         tooltip: { trigger: "axis", valueFormatter: (value) => formatMoney(value) },
         xAxis: { type: "category", data: dealRows.map((row) => String(row.month).slice(2).replace("-", "/")), ...axis },
-        yAxis: { type: "value", ...axis, axisLabel: { color: "#74685a", formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
-        series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: new echarts.graphic.LinearGradient(0, 1, 0, 0, [{ offset: 0, color: "#1f8a56" }, { offset: 1, color: "#e0b15a" }]) } }],
+        yAxis: { type: "value", ...axis, axisLabel: { color: readCssVar("--chart-axis", "#94a3b8"), formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value) } },
+        series: [{ type: "bar", barMaxWidth: 28, data: dealRows.map((row) => Number(row.amount) || 0), itemStyle: { borderRadius: [6, 6, 0, 0], color: chartBarVerticalGradient() } }],
       });
       mountChart(document.getElementById("chart-daily"), {
-        color: ["#1f8a56"],
+        color: [palette[0]],
         grid: { left: 24, right: 16, top: 24, bottom: 8, containLabel: true },
         tooltip: { trigger: "axis" },
         xAxis: { type: "category", data: (data.daily || []).map((row) => String(row.date).slice(5)), ...axis },
         yAxis: { type: "value", ...axis },
-        series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(31,138,86,.28)" }, { offset: 1, color: "rgba(224,177,90,.05)" }]) }, data: (data.daily || []).map((row) => row.count) }],
+        series: [{ type: "line", smooth: true, symbolSize: 7, lineStyle: { width: 3 }, areaStyle: { color: chartAreaGradient() }, data: (data.daily || []).map((row) => row.count) }],
       });
       fitCharts();
 
@@ -2447,6 +3152,156 @@
         const loading = tagBlock.querySelector("[data-tag=loading]");
         if (loading) loading.textContent = "标签分析加载失败：" + (error.message || "请稍后重试");
       }
+    }
+
+    async function renderFrameBoard(panel) {
+      await loadEcharts();
+      panel.innerHTML = '<p class="panel-loading">正在加载框采数据…</p>';
+      const baseParams = { siteId: FRAME_SITE_ID, includeTags: "0" };
+      const data = (await api("/api/portal/stats/?" + statsQueryParams(baseParams).toString())).data;
+      const sites = data.sites || [];
+      const hasFrameSite = sites.some((site) => site.id === FRAME_SITE_ID)
+        || (data.bySite || []).some((row) => row.id === FRAME_SITE_ID || row.siteId === FRAME_SITE_ID || row.label === "框架协议");
+      const scopedEmpty = Number(data.publicNoticeTotal || 0) === 0
+        && !(data.byKind || []).length
+        && !(data.daily || []).length;
+      panel.innerHTML = "";
+      mountStatsFilters(panel, {
+        showDealKinds: true,
+        showTagFilters: true,
+        dealKinds: data.dealKinds,
+        onChange: () => openTab("frameBoard"),
+      });
+      const intro = document.createElement("p");
+      intro.className = "home-intro";
+      intro.textContent = "数据来源：山东省政府采购框架协议（框采）公告库；以下为当前筛选周期内的发布与成交概况。";
+      panel.appendChild(intro);
+      if (scopedEmpty && !hasFrameSite) {
+        const empty = document.createElement("div");
+        empty.className = "card";
+        empty.innerHTML = "<h3>暂无框采权限或数据</h3><p class='muted'>当前账号未授权「框架协议」平台，或该周期内无公告。请联系管理员开通站点权限。</p>";
+        panel.appendChild(empty);
+        return;
+      }
+      appendMetricRow(panel, overviewMetricRows(data));
+
+      const insightBox = document.createElement("section");
+      insightBox.className = "frame-insights";
+      insightBox.innerHTML = "<h3>简单分析</h3><ul data-role='insights'><li class='muted'>正在汇总洞察…</li></ul>";
+      panel.appendChild(insightBox);
+
+      const grid = document.createElement("div");
+      grid.className = "charts";
+      const kindCard = document.createElement("section");
+      kindCard.className = "card";
+      kindCard.innerHTML = '<h3>公告类型</h3><div class="chart" id="chart-frame-kind"></div>';
+      const dealCard = document.createElement("section");
+      dealCard.className = "card";
+      dealCard.innerHTML = '<h3>月成交金额</h3><div class="chart" id="chart-frame-deal"></div>';
+      grid.appendChild(kindCard);
+      grid.appendChild(dealCard);
+      panel.appendChild(grid);
+
+      const trendWrap = document.createElement("div");
+      trendWrap.className = "charts";
+      const trendCard = document.createElement("section");
+      trendCard.className = "card";
+      trendCard.innerHTML = '<h3>发布量趋势</h3><div class="chart" id="chart-frame-daily"></div>';
+      trendWrap.appendChild(trendCard);
+      panel.appendChild(trendWrap);
+
+      const tagBlock = document.createElement("section");
+      tagBlock.className = "card tag-stats";
+      tagBlock.innerHTML =
+        "<h3>框采成交结构</h3>" +
+        '<p class="panel-loading" data-tag="loading">正在加载品类 / 地市 / 采购人分析…</p>' +
+        '<div class="tag-metrics" hidden>' +
+        '<div class="metric tone-gold amount"><span>成交金额</span><strong data-tag="dealAmount">—</strong></div>' +
+        '<div class="metric tone-teal"><span>采购人数</span><strong data-tag="buyerCount">—</strong></div>' +
+        '<div class="metric tone-ink"><span>商品行数</span><strong data-tag="goodsCount">—</strong></div>' +
+        "</div>" +
+        '<div class="tag-tables" hidden>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按成交类型</h3><table class="tag-table"><thead><tr><th>类型</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="dealBody"></tbody></table></div>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按地市</h3><table class="tag-table"><thead><tr><th>地市</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="regionBody"></tbody></table></div>' +
+        '<div><h3 style="margin:0 0 8px;font-size:14px">按采购人</h3><table class="tag-table"><thead><tr><th>采购人</th><th>公告数</th><th>金额</th></tr></thead><tbody data-tag="buyerBody"></tbody></table></div>' +
+        "</div>";
+      panel.appendChild(tagBlock);
+
+      const axis = chartAxisTheme();
+      const palette = chartPalette();
+      mountChart(document.getElementById("chart-frame-kind"), {
+        color: palette,
+        tooltip: { trigger: "item" },
+        legend: { bottom: 0, type: "scroll" },
+        series: [{
+          type: "pie",
+          radius: ["42%", "68%"],
+          center: ["50%", "44%"],
+          data: (data.byKind || []).map((row) => ({ name: row.kind, value: row.count })),
+        }],
+      });
+      const dealRows = data.monthlyDeal || [];
+      mountChart(document.getElementById("chart-frame-deal"), {
+        color: [palette[1]],
+        grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
+        tooltip: { trigger: "axis", valueFormatter: (value) => formatMoney(value) },
+        xAxis: { type: "category", data: dealRows.map((row) => String(row.month).slice(2).replace("-", "/")), ...axis },
+        yAxis: {
+          type: "value",
+          ...axis,
+          axisLabel: {
+            color: readCssVar("--chart-axis", "#94a3b8"),
+            formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000) + "万" : value),
+          },
+        },
+        series: [{
+          type: "bar",
+          barMaxWidth: 28,
+          data: dealRows.map((row) => Number(row.amount) || 0),
+          itemStyle: { borderRadius: [6, 6, 0, 0], color: chartBarVerticalGradient() },
+        }],
+      });
+      mountChart(document.getElementById("chart-frame-daily"), {
+        color: [palette[0]],
+        grid: { left: 24, right: 16, top: 24, bottom: 8, containLabel: true },
+        tooltip: { trigger: "axis" },
+        xAxis: { type: "category", data: (data.daily || []).map((row) => String(row.date).slice(5)), ...axis },
+        yAxis: { type: "value", ...axis },
+        series: [{
+          type: "line",
+          smooth: true,
+          symbolSize: 7,
+          lineStyle: { width: 3 },
+          areaStyle: { color: chartAreaGradient() },
+          data: (data.daily || []).map((row) => row.count),
+        }],
+      });
+      fitCharts();
+
+      let tagData = { tagStats: {} };
+      try {
+        tagData = (await api("/api/portal/stats/?" + statsQueryParams({
+          siteId: FRAME_SITE_ID,
+          includeTags: "1",
+          includeNoticeStats: "0",
+        }).toString())).data;
+        const loading = tagBlock.querySelector("[data-tag=loading]");
+        if (loading) loading.remove();
+        tagBlock.querySelector(".tag-metrics")?.removeAttribute("hidden");
+        tagBlock.querySelector(".tag-tables")?.removeAttribute("hidden");
+        fillTagStats(tagBlock, tagData, { reloadTab: "frameBoard" });
+      } catch (error) {
+        const loading = tagBlock.querySelector("[data-tag=loading]");
+        if (loading) loading.textContent = "结构分析加载失败：" + (error.message || "请稍后重试");
+      }
+
+      const list = insightBox.querySelector("[data-role=insights]");
+      list.innerHTML = "";
+      buildFrameInsights(data, tagData).forEach((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        list.appendChild(li);
+      });
     }
 
     function kindTone(kind) {
@@ -2573,8 +3428,9 @@
         page_size: "20",
       });
       if (messageQuery.unread) params.set("unread", "1");
+      if (messageQuery.search) params.set("search", messageQuery.search);
       if (!panel.querySelector(".message-list")) {
-        panel.innerHTML = '<p class="panel-loading">正在加载消息…</p>';
+        panel.innerHTML = '<p class="panel-loading">正在加载我的订阅…</p>';
       }
       const body = await api("/api/portal/messages/?" + params.toString());
       if (requestId !== messageRequest) return;
@@ -2588,8 +3444,14 @@
         toolbar.className = "message-toolbar";
         toolbar.innerHTML =
           '<p class="message-summary muted"></p>' +
+          '<label class="search-inline">搜索<input name="search" placeholder="标题 / 采购人 / 地区 / 关键词" /></label>' +
           '<div class="message-tools">' +
+          '<div class="message-layout-toggle" role="group" aria-label="排列方式">' +
+          '<button type="button" data-layout="list">列表</button>' +
+          '<button type="button" data-layout="grid">卡片</button>' +
+          "</div>" +
           '<label class="check-row"><input name="unread" type="checkbox" /> 仅未读</label>' +
+          '<button class="ghost" type="button" data-role="search">查询</button>' +
           '<button class="ghost" type="button" data-role="refresh">刷新</button>' +
           "</div>";
         list = document.createElement("div");
@@ -2599,14 +3461,42 @@
         panel.appendChild(toolbar);
         panel.appendChild(list);
         panel.appendChild(pager);
+        const searchInput = toolbar.querySelector("[name=search]");
+        const applySearch = () => {
+          messageQuery.search = String(searchInput.value || "").trim();
+          messageQuery.page = 1;
+          renderMessages(panel);
+        };
+        toolbar.querySelector("[data-role=search]").onclick = applySearch;
+        searchInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applySearch();
+          }
+        });
         toolbar.querySelector("[name=unread]").onchange = (event) => {
           messageQuery.unread = Boolean(event.target.checked);
           messageQuery.page = 1;
           renderMessages(panel);
         };
         toolbar.querySelector("[data-role=refresh]").onclick = () => renderMessages(panel);
+        toolbar.querySelectorAll("[data-layout]").forEach((btn) => {
+          btn.onclick = () => {
+            messageQuery.layout = btn.getAttribute("data-layout") === "grid" ? "grid" : "list";
+            localStorage.setItem("portal_message_layout", messageQuery.layout);
+            list.classList.toggle("is-grid", messageQuery.layout === "grid");
+            toolbar.querySelectorAll("[data-layout]").forEach((item) => {
+              item.classList.toggle("active", item.getAttribute("data-layout") === messageQuery.layout);
+            });
+          };
+        });
       }
       toolbar.querySelector("[name=unread]").checked = Boolean(messageQuery.unread);
+      toolbar.querySelector("[name=search]").value = messageQuery.search || "";
+      list.classList.toggle("is-grid", messageQuery.layout === "grid");
+      toolbar.querySelectorAll("[data-layout]").forEach((item) => {
+        item.classList.toggle("active", item.getAttribute("data-layout") === messageQuery.layout);
+      });
       setMessageBadge(body.unreadTotal || 0);
       const summary = toolbar.querySelector(".message-summary");
       if (summary) {
@@ -2618,7 +3508,9 @@
 
       list.innerHTML = "";
       if (!body.items || !body.items.length) {
-        list.innerHTML = '<p class="empty">暂无订阅消息。</p>';
+        list.innerHTML = messageQuery.search
+          ? '<p class="empty">没有匹配的订阅记录。</p>'
+          : '<p class="empty">暂无订阅推送。</p>';
       } else {
         body.items.forEach((item) => {
           const article = document.createElement("article");
@@ -2629,20 +3521,28 @@
             '<div class="message-side">' +
             '<button class="ghost" type="button" data-role="detail">查看公告</button>' +
             "</div>";
-          article.querySelector("h3").textContent = item.title || "未命名公告";
+          const terms = item.matchedKeywords || [];
+          article.querySelector("h3").innerHTML = highlightText(item.title || "未命名公告", terms);
           const meta = article.querySelector(".message-meta");
           const chips = [
             { text: item.isRead ? "已读" : "未读", className: item.isRead ? "status-read" : "status-unread" },
             { text: item.siteLabel },
-            { text: item.buyerName },
-            { text: item.regionName },
+            { text: item.buyerName, highlight: true },
+            { text: item.regionName, highlight: true },
             { text: item.digestDate },
             { text: formatDateTimeShanghai(item.createdAt) },
           ].filter((chip) => chip.text && chip.text !== "—");
           chips.forEach((chip) => {
             const span = document.createElement("span");
             if (chip.className) span.className = chip.className;
-            span.textContent = chip.text;
+            if (chip.highlight) span.innerHTML = highlightText(chip.text, terms);
+            else span.textContent = chip.text;
+            meta.appendChild(span);
+          });
+          (terms || []).slice(0, 4).forEach((term) => {
+            const span = document.createElement("span");
+            span.className = "status-unread";
+            span.textContent = "命中：" + term;
             meta.appendChild(span);
           });
           const open = (event) => {
@@ -2658,18 +3558,14 @@
         });
       }
 
-      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 20)));
-      pager.innerHTML =
-        "<span></span><div><button class='ghost' type='button' data-dir='-1'>上一页</button><button class='ghost' type='button' data-dir='1'>下一页</button></div>";
-      pager.querySelector("span").textContent =
-        "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页";
-      pager.querySelectorAll("button").forEach((button) => {
-        button.onclick = () => {
-          const next = messageQuery.page + Number(button.dataset.dir);
-          if (next < 1 || next > totalPages) return;
+      fillPortalListPager(pager, {
+        page: body.page || messageQuery.page || 1,
+        total: body.total || 0,
+        pageSize: body.page_size || 20,
+        onPageChange: (next) => {
           messageQuery.page = next;
           renderMessages(panel);
-        };
+        },
       });
     }
 
@@ -2774,16 +3670,14 @@
     }
 
     function fillNoticePager(pager, panel, body) {
-      const totalPages = Math.max(1, Math.ceil((body.total || 0) / (body.page_size || 20)));
-      pager.innerHTML = "<span></span><div><button class='ghost' type='button' data-dir='-1'>上一页</button><button class='ghost' type='button' data-dir='1'>下一页</button></div>";
-      pager.querySelector("span").textContent = "共 " + (body.total || 0) + " 条 · 第 " + body.page + " / " + totalPages + " 页 · 每页 " + (body.page_size || 20) + " 条";
-      pager.querySelectorAll("button").forEach((button) => {
-        button.onclick = () => {
-          const next = noticeQuery.page + Number(button.dataset.dir);
-          if (next < 1 || next > totalPages) return;
+      fillPortalListPager(pager, {
+        page: body.page || noticeQuery.page || 1,
+        total: body.total || 0,
+        pageSize: body.page_size || 20,
+        onPageChange: (next) => {
           noticeQuery.page = next;
           renderNotices(panel);
-        };
+        },
       });
     }
 
@@ -2959,6 +3853,7 @@
     }
 
     async function renderSubscription(panel) {
+      stopWechatBindPoll();
       panel.innerHTML = "";
       const card = document.createElement("form");
       card.className = "card subscription-card";
@@ -2967,18 +3862,52 @@
         <p class="muted" id="wechat-status"></p>
         <div class="row-actions" id="wechat-actions"></div>
         <h3>订阅条件</h3>
-        <p class="muted">维度之间为「或」：任一维度命中即可；同一维度内多个选项也为「或」。每天汇总一条微信提醒。</p>
-        <label>采购内容标签<div class="chip-group" id="content-tags"></div></label>
-        <label>单位类型<div class="chip-group" id="org-types"></div></label>
-        <label>地区（省）
-          <select name="province">
-            <option value="">不限</option>
-          </select>
-        </label>
-        <label>地区（市，可选）<input name="city" placeholder="如：济南市" /></label>
-        <label>关键词<input name="keywords" placeholder="多个词用空格或逗号分隔，匹配标题/项目名" /></label>
-        <label>采购人（可多条，逗号分隔）<input name="buyers" placeholder="如：交通管理支队, 审计局" /></label>
-        <label class="check-row"><input name="enabled" type="checkbox" /> 开启每日推送</label>
+        <p class="muted">不同条件之间为「或」：任一页签条件命中即可；同一页签内多个选项也为「或」。每天汇总一条微信提醒。</p>
+        <details class="subscription-summary" id="sub-summary">
+          <summary>
+            <div class="summary-main">当前条件：<strong data-role="brief"></strong></div>
+            <span class="summary-toggle" data-role="toggle">展开细节</span>
+          </summary>
+          <div class="subscription-summary-body" data-role="detail"></div>
+        </details>
+        <div class="subscription-tabs" id="sub-tabs" role="tablist"></div>
+        <div class="subscription-tab-panel" data-tab="tags">
+          <label>已选内容标签<div class="selected-tag-chips" id="selected-tags"></div></label>
+          <p class="muted" id="tag-picker-hint">搜索后分页浏览全部内容标签，点击行即可勾选/取消。</p>
+          <div class="tag-picker">
+            <div class="tag-picker-search">
+              <input name="tagSearch" placeholder="搜索标签，如：车辆、加油、充电桩、打印机" aria-label="搜索标签" />
+            </div>
+            <div class="tag-picker-body">
+              <div class="tag-picker-list" id="tag-list"></div>
+              <div class="tag-picker-pager" id="tag-pager"></div>
+            </div>
+          </div>
+        </div>
+        <div class="subscription-tab-panel" data-tab="regions">
+          <label>地区（省）
+            <select name="province"><option value="">不限</option></select>
+          </label>
+          <label>地区（市，可选）<input name="city" placeholder="如：济南市" /></label>
+        </div>
+        <div class="subscription-tab-panel" data-tab="keywords">
+          <p class="muted">每个关键词单独添加，最多 20 个，避免逗号/空格分割误伤。</p>
+          <div class="keyword-add-row">
+            <input name="keywordInput" maxlength="64" placeholder="输入单个关键词后点添加" />
+            <button type="button" class="ghost" data-role="add-keyword">添加</button>
+          </div>
+          <div class="keyword-chips" id="keyword-chips"></div>
+        </div>
+        <div class="subscription-tab-panel" data-tab="buyers">
+          <label>采购人（可多条，逗号分隔）<input name="buyers" placeholder="如：交通管理支队, 审计局" /></label>
+        </div>
+        <div class="subscription-tab-panel" data-tab="orgs">
+          <label>单位类型<div class="chip-group" id="org-types"></div></label>
+        </div>
+        <div class="subscription-tab-panel" data-tab="push">
+          <label class="check-row"><input name="enabled" type="checkbox" /> 开启每日推送</label>
+          <p class="muted">开启前需先绑定微信；至少设置一类订阅条件。</p>
+        </div>
         <div class="row-actions"><button class="primary" type="submit">保存订阅</button></div>
         <p class="error" id="sub-msg"></p>
       `;
@@ -2986,8 +3915,8 @@
 
       const selectedTags = new Set(me.subscription?.contentTags || []);
       const selectedOrgTypes = new Set(me.subscription?.orgTypes || []);
+      const keywords = subscriptionKeywords(me.subscription);
       const region0 = (me.subscription?.regions && me.subscription.regions[0]) || {};
-      card.keywords.value = me.subscription?.keywords || "";
       card.buyers.value = (me.subscription?.buyers || []).join(", ");
       card.city.value = region0.city || "";
       card.enabled.checked = Boolean(me.subscription?.enabled);
@@ -2995,11 +3924,366 @@
       const statusEl = card.querySelector("#wechat-status");
       const actionsEl = card.querySelector("#wechat-actions");
       const msgEl = card.querySelector("#sub-msg");
+      const summaryEl = card.querySelector("#sub-summary");
+      const tabsEl = card.querySelector("#sub-tabs");
       const bindStatus = readWechatBindStatus();
       if (bindStatus === "ok") msgEl.textContent = "微信绑定成功。";
       else if (bindStatus === "fail") msgEl.textContent = "微信绑定失败，请重试。";
       else if (bindStatus === "conflict") msgEl.textContent = "该微信已绑定其他账号。";
       if (bindStatus) clearWechatBindStatusFromUrl();
+
+      const tabDefs = [
+        { id: "tags", label: "内容标签" },
+        { id: "regions", label: "地区" },
+        { id: "keywords", label: "关键词" },
+        { id: "buyers", label: "采购人" },
+        { id: "orgs", label: "单位类型" },
+        { id: "push", label: "推送设置" },
+      ];
+      let activeTab = "tags";
+
+      function tabCount(id) {
+        if (id === "tags") return selectedTags.size;
+        if (id === "regions") return (card.province.value || card.city.value.trim()) ? 1 : 0;
+        if (id === "keywords") return keywords.length;
+        if (id === "buyers") {
+          return String(card.buyers.value || "").split(/[\s,，;；]+/).map((x) => x.trim()).filter(Boolean).length;
+        }
+        if (id === "orgs") return selectedOrgTypes.size;
+        if (id === "push") return card.enabled.checked ? 1 : 0;
+        return 0;
+      }
+
+      function buyerList() {
+        return String(card.buyers.value || "")
+          .split(/[\s,，;；]+/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function appendSummaryRow(container, label, values) {
+        const row = document.createElement("div");
+        row.className = "subscription-summary-row";
+        row.innerHTML = "<dt></dt><dd></dd>";
+        row.querySelector("dt").textContent = label;
+        const dd = row.querySelector("dd");
+        if (!values.length) {
+          dd.innerHTML = '<span class="summary-empty">未设置</span>';
+        } else {
+          values.forEach((value) => {
+            const chip = document.createElement("span");
+            chip.className = "summary-chip";
+            chip.textContent = value;
+            dd.appendChild(chip);
+          });
+        }
+        container.appendChild(row);
+      }
+
+      function refreshSummary() {
+        const buyers = buyerList();
+        const regionText = [card.province.value, card.city.value.trim()].filter(Boolean).join("");
+        const parts = [];
+        if (selectedTags.size) parts.push("标签 " + selectedTags.size + " 个");
+        if (regionText) parts.push("地区 " + regionText);
+        if (keywords.length) parts.push("关键词 " + keywords.length + " 个");
+        if (buyers.length) parts.push("采购人 " + buyers.length + " 个");
+        if (selectedOrgTypes.size) parts.push("单位类型 " + selectedOrgTypes.size + " 个");
+        parts.push(card.enabled.checked ? "推送已开启" : "推送未开启");
+        summaryEl.querySelector("[data-role=brief]").textContent = parts.join(" · ");
+        summaryEl.querySelector("[data-role=toggle]").textContent = summaryEl.open ? "收起细节" : "展开细节";
+        const detail = summaryEl.querySelector("[data-role=detail]");
+        detail.innerHTML = "";
+        appendSummaryRow(detail, "内容标签", [...selectedTags]);
+        appendSummaryRow(detail, "地区", regionText ? [regionText] : []);
+        appendSummaryRow(detail, "关键词", keywords.slice());
+        appendSummaryRow(detail, "采购人", buyers);
+        appendSummaryRow(detail, "单位类型", [...selectedOrgTypes]);
+        appendSummaryRow(detail, "推送", [card.enabled.checked ? "每日推送已开启" : "每日推送未开启"]);
+      }
+
+      summaryEl.addEventListener("toggle", () => {
+        const toggle = summaryEl.querySelector("[data-role=toggle]");
+        if (toggle) toggle.textContent = summaryEl.open ? "收起细节" : "展开细节";
+      });
+
+      function renderTabs() {
+        tabsEl.innerHTML = "";
+        tabDefs.forEach((tab) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = activeTab === tab.id ? "active" : "";
+          const count = tabCount(tab.id);
+          btn.textContent = count ? tab.label + " (" + count + ")" : tab.label;
+          btn.onclick = () => {
+            activeTab = tab.id;
+            card.querySelectorAll(".subscription-tab-panel").forEach((pane) => {
+              pane.classList.toggle("active", pane.getAttribute("data-tab") === activeTab);
+            });
+            renderTabs();
+          };
+          tabsEl.appendChild(btn);
+        });
+        card.querySelectorAll(".subscription-tab-panel").forEach((pane) => {
+          pane.classList.toggle("active", pane.getAttribute("data-tab") === activeTab);
+        });
+        refreshSummary();
+      }
+
+      function renderKeywordChips() {
+        const box = card.querySelector("#keyword-chips");
+        box.innerHTML = "";
+        if (!keywords.length) {
+          box.innerHTML = '<span class="muted">尚未添加关键词</span>';
+          return;
+        }
+        keywords.forEach((word, index) => {
+          const chip = document.createElement("span");
+          chip.className = "keyword-chip";
+          chip.innerHTML = "<span></span><button type='button' aria-label='删除'>×</button>";
+          chip.querySelector("span").textContent = word;
+          chip.querySelector("button").onclick = () => {
+            keywords.splice(index, 1);
+            renderKeywordChips();
+            renderTabs();
+          };
+          box.appendChild(chip);
+        });
+      }
+
+      function addKeyword() {
+        const input = card.keywordInput;
+        const word = String(input.value || "").trim();
+        msgEl.textContent = "";
+        if (!word) {
+          msgEl.textContent = "请输入关键词。";
+          return;
+        }
+        if (/[,，;；|\s]/.test(word)) {
+          msgEl.textContent = "请一次只添加一个关键词，不要包含空格或逗号。";
+          return;
+        }
+        if (keywords.includes(word)) {
+          msgEl.textContent = "该关键词已存在。";
+          return;
+        }
+        if (keywords.length >= 20) {
+          msgEl.textContent = "关键词最多 20 个。";
+          return;
+        }
+        keywords.push(word);
+        input.value = "";
+        renderKeywordChips();
+        renderTabs();
+      }
+
+      function renderSelectedTags() {
+        const box = card.querySelector("#selected-tags");
+        box.innerHTML = "";
+        if (!selectedTags.size) {
+          box.innerHTML = '<span class="muted">尚未选择标签</span>';
+          return;
+        }
+        [...selectedTags].forEach((tag) => {
+          const chip = document.createElement("span");
+          chip.className = "selected-tag-chip";
+          chip.innerHTML = "<span></span><button type='button' aria-label='删除'>×</button>";
+          chip.querySelector("span").textContent = tag;
+          chip.querySelector("button").onclick = () => {
+            selectedTags.delete(tag);
+            renderSelectedTags();
+            renderTagList();
+            renderTabs();
+          };
+          box.appendChild(chip);
+        });
+      }
+
+      let tagPage = 1;
+      let tagPageSize = 20;
+      let tagSearchTimer = 0;
+      let tagSearchQuery = "";
+
+      function matchedContentTags() {
+        const all = options.contentTags || [];
+        const q = tagSearchQuery;
+        if (!q) return all.slice();
+        return all.filter((item) => String(item).toLowerCase().includes(q));
+      }
+
+      function renderTagList() {
+        const list = card.querySelector("#tag-list");
+        const pager = card.querySelector("#tag-pager");
+        const hint = card.querySelector("#tag-picker-hint");
+        const all = options.contentTags || [];
+        const matched = matchedContentTags();
+        const total = matched.length;
+        const totalPages = Math.max(1, Math.ceil(total / tagPageSize) || 1);
+        if (tagPage > totalPages) tagPage = totalPages;
+        if (tagPage < 1) tagPage = 1;
+        const start = (tagPage - 1) * tagPageSize;
+        const shown = matched.slice(start, start + tagPageSize);
+        list.innerHTML = "";
+        if (hint) {
+          hint.textContent = tagSearchQuery
+            ? `共 ${all.length} 个标签，匹配 ${total} 个；第 ${tagPage}/${totalPages} 页`
+            : `共 ${all.length} 个标签（按热度排序）；第 ${tagPage}/${totalPages} 页，可用搜索快速定位`;
+        }
+        if (!shown.length) {
+          list.innerHTML = '<div class="tag-picker-empty">没有匹配的标签</div>';
+        } else {
+          shown.forEach((item) => {
+            const active = selectedTags.has(item);
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = active ? "active" : "";
+            btn.innerHTML = "<span></span><em></em>";
+            btn.querySelector("span").textContent = item;
+            btn.querySelector("em").textContent = active ? "已选" : "选择";
+            btn.onclick = () => {
+              if (selectedTags.has(item)) selectedTags.delete(item);
+              else selectedTags.add(item);
+              renderSelectedTags();
+              renderTagList();
+              renderTabs();
+            };
+            list.appendChild(btn);
+          });
+        }
+
+        pager.innerHTML =
+          "<span data-role='summary'></span>" +
+          "<div class='pager-actions'>" +
+          "<button type='button' class='ghost' data-role='first'>首页</button>" +
+          "<button type='button' class='ghost' data-role='prev'>上一页</button>" +
+          "<button type='button' class='ghost' data-role='next'>下一页</button>" +
+          "<button type='button' class='ghost' data-role='last'>末页</button>" +
+          "<label>每页<select name='tagPageSize'><option value='10'>10</option><option value='20'>20</option><option value='50'>50</option><option value='100'>100</option></select></label>" +
+          "<label>跳转<input name='tagJump' type='number' min='1' /></label>" +
+          "<button type='button' class='ghost' data-role='jump'>前往</button>" +
+          "</div>";
+        pager.querySelector("[data-role=summary]").textContent =
+          total ? `本页 ${shown.length} 条 · 共 ${total} 条` : "暂无数据";
+        const sizeSelect = pager.querySelector("[name=tagPageSize]");
+        sizeSelect.value = String(tagPageSize);
+        sizeSelect.onchange = () => {
+          tagPageSize = Number(sizeSelect.value) || 20;
+          tagPage = 1;
+          renderTagList();
+        };
+        const jumpInput = pager.querySelector("[name=tagJump]");
+        jumpInput.value = String(tagPage);
+        pager.querySelector("[data-role=first]").disabled = tagPage <= 1 || !total;
+        pager.querySelector("[data-role=prev]").disabled = tagPage <= 1 || !total;
+        pager.querySelector("[data-role=next]").disabled = tagPage >= totalPages || !total;
+        pager.querySelector("[data-role=last]").disabled = tagPage >= totalPages || !total;
+        pager.querySelector("[data-role=first]").onclick = () => { tagPage = 1; renderTagList(); };
+        pager.querySelector("[data-role=prev]").onclick = () => { tagPage = Math.max(1, tagPage - 1); renderTagList(); };
+        pager.querySelector("[data-role=next]").onclick = () => { tagPage = Math.min(totalPages, tagPage + 1); renderTagList(); };
+        pager.querySelector("[data-role=last]").onclick = () => { tagPage = totalPages; renderTagList(); };
+        pager.querySelector("[data-role=jump]").onclick = () => {
+          const next = Math.max(1, Math.min(totalPages, Number(jumpInput.value) || 1));
+          tagPage = next;
+          renderTagList();
+        };
+        jumpInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            pager.querySelector("[data-role=jump]").click();
+          }
+        });
+      }
+
+      async function openBindQrModal(options) {
+        stopWechatBindPoll();
+        const backdrop = document.createElement("div");
+        backdrop.className = "modal-backdrop";
+        backdrop.innerHTML =
+          '<div class="modal bind-qr-modal" role="dialog" aria-modal="true">' +
+          '<div class="modal-head"><h3>扫码绑定微信</h3><button type="button" class="icon-button" data-role="close" aria-label="关闭">×</button></div>' +
+          '<div class="modal-body">' +
+          '<p class="muted">请使用微信扫一扫，关注服务号并授权绑定当前账号。</p>' +
+          '<div class="qr-box"><img alt="绑定二维码" /><div class="qr-mask">正在生成二维码…</div></div>' +
+          '<p class="muted" data-role="hint">二维码约 3 分钟有效</p>' +
+          '<p class="error" data-role="err"></p>' +
+          '<div class="row-actions" style="justify-content:center"><button type="button" class="ghost" data-role="refresh">刷新二维码</button></div>' +
+          "</div></div>";
+        document.body.appendChild(backdrop);
+        const qrImg = backdrop.querySelector("img");
+        const mask = backdrop.querySelector(".qr-mask");
+        const errEl = backdrop.querySelector("[data-role=err]");
+        const hintEl = backdrop.querySelector("[data-role=hint]");
+        const close = () => {
+          stopWechatBindPoll();
+          backdrop.remove();
+        };
+        backdrop.addEventListener("click", (event) => {
+          if (event.target === backdrop) close();
+        });
+        backdrop.querySelector("[data-role=close]").onclick = close;
+
+        async function startBindQr() {
+          stopWechatBindPoll();
+          errEl.textContent = "";
+          mask.hidden = false;
+          mask.textContent = "正在生成二维码…";
+          try {
+            const body = await api("/api/portal/wechat/scan-bind/start/", { method: "POST", body: "{}" });
+            wechatBindTicket = body.ticket || "";
+            if (!wechatBindTicket || !body.qrImageUrl) throw new Error("二维码生成失败");
+            qrImg.onload = () => { mask.hidden = true; };
+            qrImg.onerror = () => { mask.hidden = false; mask.textContent = "二维码加载失败"; };
+            qrImg.src = body.qrImageUrl;
+            const expiresIn = Math.max(30, Number(body.expiresIn) || 180) * 1000;
+            const startedAt = Date.now();
+            wechatBindPollTimer = window.setInterval(async () => {
+              if (!wechatBindTicket) return;
+              if (Date.now() - startedAt > expiresIn) {
+                stopWechatBindPoll();
+                mask.hidden = false;
+                mask.textContent = "二维码已过期，请刷新";
+                hintEl.textContent = "请点击刷新二维码";
+                return;
+              }
+              try {
+                const statusBody = await api(
+                  "/api/portal/wechat/scan-bind/status/?ticket=" + encodeURIComponent(wechatBindTicket)
+                );
+                const status = statusBody.status || "pending";
+                if (status === "pending") return;
+                if (status === "ok") {
+                  stopWechatBindPoll();
+                  me = statusBody.data || me;
+                  close();
+                  refreshWechatUi(options);
+                  msgEl.textContent = "微信绑定成功。";
+                  return;
+                }
+                if (status === "conflict") {
+                  errEl.textContent = "该微信已绑定其他账号。";
+                  mask.hidden = false;
+                  mask.textContent = "绑定冲突";
+                  return;
+                }
+                if (status === "expired" || status === "fail") {
+                  stopWechatBindPoll();
+                  mask.hidden = false;
+                  mask.textContent = status === "expired" ? "二维码已过期" : "绑定失败";
+                }
+              } catch (_) {
+                /* ignore transient poll errors */
+              }
+            }, 1500);
+          } catch (error) {
+            mask.hidden = false;
+            mask.textContent = "生成失败";
+            errEl.textContent = error.message || "无法生成绑定二维码";
+          }
+        }
+
+        backdrop.querySelector("[data-role=refresh]").onclick = () => startBindQr();
+        await startBindQr();
+      }
 
       function refreshWechatUi(options) {
         const bound = Boolean(me.wechatBound);
@@ -3022,8 +4306,12 @@
           bindBtn.textContent = "绑定微信";
           bindBtn.onclick = async () => {
             try {
-              const body = await api("/api/portal/wechat/bind-url/");
-              if (body.url) location.href = body.url;
+              if (isPortalH5Client()) {
+                const body = await api("/api/portal/wechat/bind-url/");
+                if (body.url) location.href = body.url;
+                return;
+              }
+              await openBindQrModal(options);
             } catch (error) {
               msgEl.textContent = error.message;
             }
@@ -3040,6 +4328,7 @@
               me = body.data;
               card.enabled.checked = Boolean(me.subscription?.enabled);
               refreshWechatUi(options);
+              renderTabs();
               msgEl.textContent = "已解除微信绑定，推送已关闭。";
             } catch (error) {
               msgEl.textContent = error.message;
@@ -3054,6 +4343,10 @@
         if (bindStatus) {
           const latest = await api("/api/portal/me/");
           me = latest.data;
+          keywords.splice(0, keywords.length, ...subscriptionKeywords(me.subscription));
+          (me.subscription?.contentTags || []).forEach((item) => selectedTags.add(item));
+          (me.subscription?.orgTypes || []).forEach((item) => selectedOrgTypes.add(item));
+          card.enabled.checked = Boolean(me.subscription?.enabled);
         }
         options = await api("/api/portal/subscription/options/");
       } catch (error) {
@@ -3068,17 +4361,26 @@
         provinceSelect.appendChild(opt);
       });
       provinceSelect.value = region0.province || "";
+      provinceSelect.onchange = () => renderTabs();
+      card.city.addEventListener("input", () => renderTabs());
+      card.buyers.addEventListener("input", () => renderTabs());
+      card.enabled.onchange = () => renderTabs();
+      card.tagSearch.addEventListener("input", () => {
+        window.clearTimeout(tagSearchTimer);
+        tagSearchTimer = window.setTimeout(() => {
+          tagSearchQuery = String(card.tagSearch.value || "").trim().toLowerCase();
+          tagPage = 1;
+          renderTagList();
+        }, 200);
+      });
+      card.querySelector("[data-role=add-keyword]").onclick = addKeyword;
+      card.keywordInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          addKeyword();
+        }
+      });
 
-      const redrawTags = () => renderChipGroup(
-        card.querySelector("#content-tags"),
-        options.contentTags || [],
-        [...selectedTags],
-        (item) => {
-          if (selectedTags.has(item)) selectedTags.delete(item);
-          else selectedTags.add(item);
-          redrawTags();
-        },
-      );
       const redrawOrgs = () => renderChipGroup(
         card.querySelector("#org-types"),
         options.orgTypes || [],
@@ -3087,10 +4389,14 @@
           if (selectedOrgTypes.has(item)) selectedOrgTypes.delete(item);
           else selectedOrgTypes.add(item);
           redrawOrgs();
+          renderTabs();
         },
       );
-      redrawTags();
       redrawOrgs();
+      renderSelectedTags();
+      renderTagList();
+      renderKeywordChips();
+      renderTabs();
       refreshWechatUi(options);
 
       card.onsubmit = async (event) => {
@@ -3113,7 +4419,7 @@
             method: "PUT",
             body: JSON.stringify({
               enabled: card.enabled.checked,
-              keywords: card.keywords.value,
+              keywords,
               contentTags: [...selectedTags],
               orgTypes: [...selectedOrgTypes],
               buyers,
@@ -3123,6 +4429,7 @@
           me = body.data;
           msgEl.textContent = "订阅已保存。";
           refreshWechatUi(options);
+          renderTabs();
         } catch (error) {
           msgEl.textContent = error.message;
         }
@@ -3236,6 +4543,12 @@
       dropdown.hidden = !dropdown.hidden;
     };
     dropdown.querySelector("[data-go=account]").onclick = () => openTab("account");
+    dropdown.querySelectorAll("[data-theme-set]").forEach((button) => {
+      button.onclick = (event) => {
+        event.stopPropagation();
+        applyPortalTheme(button.getAttribute("data-theme-set"), { refresh: true });
+      };
+    });
     document.getElementById("msg-bell").onclick = (event) => {
       event.stopPropagation();
       dropdown.hidden = true;

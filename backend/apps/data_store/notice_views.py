@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any
 
+from django.core.cache import cache
 from django.db import ProgrammingError
 from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from django.http import JsonResponse
@@ -66,8 +67,11 @@ _LIST_PARSED_ONLY = (
     "end_time",
 )
 _OPTIONS_TTL_SEC = 300.0
-_RAW_COUNT_TTL_SEC = 30.0
-_FILTERED_COUNT_TTL_SEC = 60.0
+# 全表 COUNT(*) 冷启动可达 1s+；Redis 跨 worker 共享，拉长 TTL 抗闲置
+_RAW_COUNT_TTL_SEC = 1800.0
+_FILTERED_COUNT_TTL_SEC = 300.0
+_RAW_COUNT_REDIS_KEY = "notice_raw_total_v1"
+_FILTERED_COUNT_REDIS_PREFIX = "notice_filtered_total_v1:"
 _options_cache: dict[str, tuple[float, Any]] = {}
 _raw_count_cache: tuple[float, int] | None = None
 _filtered_count_cache: dict[str, tuple[float, int]] = {}
@@ -85,23 +89,34 @@ def _cached_options(key: str, builder):
 
 
 def _cached_raw_total() -> int:
-    """无筛选列表的总数短缓存，避免每次 COUNT(*) 全表。"""
+    """无筛选列表的总数缓存：进程内 + Redis，避免反复 COUNT(*) 全表。"""
     global _raw_count_cache
     now = time.monotonic()
     if _raw_count_cache and _raw_count_cache[0] > now:
         return _raw_count_cache[1]
-    total = NoticeRaw.objects.count()
+    shared = cache.get(_RAW_COUNT_REDIS_KEY)
+    if isinstance(shared, int) and shared >= 0:
+        _raw_count_cache = (now + _RAW_COUNT_TTL_SEC, shared)
+        return shared
+    total = int(NoticeRaw.objects.count())
+    cache.set(_RAW_COUNT_REDIS_KEY, total, int(_RAW_COUNT_TTL_SEC))
     _raw_count_cache = (now + _RAW_COUNT_TTL_SEC, total)
     return total
 
 
 def _cached_filtered_total(cache_key: str, counter) -> int:
-    """带筛选 COUNT 的短缓存（默认发布日起筛很常见）。"""
+    """带筛选 COUNT：进程内 + Redis 短缓存。"""
     now = time.monotonic()
     hit = _filtered_count_cache.get(cache_key)
     if hit and hit[0] > now:
         return hit[1]
+    redis_key = f"{_FILTERED_COUNT_REDIS_PREFIX}{cache_key}"
+    shared = cache.get(redis_key)
+    if isinstance(shared, int) and shared >= 0:
+        _filtered_count_cache[cache_key] = (now + _FILTERED_COUNT_TTL_SEC, shared)
+        return shared
     total = int(counter())
+    cache.set(redis_key, total, int(_FILTERED_COUNT_TTL_SEC))
     _filtered_count_cache[cache_key] = (now + _FILTERED_COUNT_TTL_SEC, total)
     if len(_filtered_count_cache) > 64:
         # 简单淘汰过期项，避免无限涨

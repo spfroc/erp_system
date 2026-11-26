@@ -202,6 +202,10 @@ import {
   findDuplicateServiceProjects,
   normalizeServiceEndDate,
 } from "./serviceProjectDuplicate";
+import { AdminPermissionTree } from "./AdminPermissionTree";
+import { ADMIN_PERMISSION_TREE, adminPermissionMatrixRows, permissionGroups, permissionLabels } from "./adminPermissions";
+import { PortalPermissionTree } from "./PortalPermissionTree";
+import { PORTAL_PERMISSION_OPTIONS } from "./portalPermissions";
 import type { AcceptanceStatus, AppData, ContractStatus, DeliveryStatus, EntityType, FinanceStatementRow, Invoice, InvoiceLineItem, LibraryContact, LogisticsStatus, NavCategory, NavGroup, NavMenuItem, OperationLog, OptionGroup, OrderPaymentStatus, Organization, OrganizationRole, ReconcileStatus, TaxpayerType, PermissionKey, PlatformAccount, Product, Project, ProjectItem, ProjectMemo, ProjectReminder, ProjectStatus, PurchaseOrder, QiluAccountType, ReminderWorkContent, Role, SalesOrder, ServiceCustomerKind, ServiceOrder, ServicePeriodUnit, ServiceType, SupplierPrice, TrademarkAttachment, TrademarkCertificate, Transaction, User, WebsiteLead, WebsiteLeadMemo } from "./types";
 
 type OrderListTab = "销售订单" | "采购订单" | "服务订单";
@@ -410,84 +414,6 @@ function isCustomerOrganization(org: Organization) {
 function isResellerOrganization(org: Organization) {
   return orgHasRole(org, "中间销售商");
 }
-const permissionLabels: Record<PermissionKey, string> = {
-  "dashboard.view": "查看总览",
-  "project.view": "查看项目",
-  "project.create": "新建项目",
-  "project.edit": "编辑项目",
-  "entity.view": "查看客户基础信息",
-  "entity.create": "维护客户基础信息",
-  "product.view": "查看商品及价格体系",
-  "product.manage": "管理商品及价格体系",
-  "purchase.manage": "管理采购履约",
-  "serviceOrder.view": "查看服务订单",
-  "serviceOrder.manage": "管理服务订单",
-  "salesOrder.view": "查看销售订单",
-  "salesOrder.manage": "管理销售订单",
-  "purchaseOrder.view": "查看采购订单",
-  "purchaseOrder.manage": "管理采购订单",
-  "finance.view": "查看财务",
-  "finance.manage": "管理流水",
-  "invoice.manage": "管理发票",
-  "onboarding.manage": "管理入驻服务",
-  "platformAccount.view": "查看平台账号",
-  "platformAccount.manage": "管理平台账号",
-  "trademarkCertificate.view": "查看商标管理",
-  "trademarkCertificate.manage": "管理商标",
-  "notice.view": "查看公告",
-  "notice.manage": "管理公告",
-  "notice.stats.view": "查看公告统计",
-  "notice.tag.view": "查看公告标签",
-  "notice.tag.manage": "修正公告标签",
-  "notice.orgType.view": "查看公告类型",
-  "notice.orgType.manage": "管理公告类型",
-  "notice.nature.view": "查看性质",
-  "notice.nature.manage": "管理性质",
-  "notice.site.view": "查看站点管理",
-  "notice.site.manage": "管理站点",
-  "notice.categoryMap.view": "查看分类映射",
-  "notice.categoryMap.manage": "管理分类映射",
-  "site.view": "查看前端网站配置",
-  "site.manage": "管理前端网站配置",
-  "library.view": "查看政企客户资料库",
-  "library.manage": "管理政企客户资料库",
-  "mallCustomer.view": "查看资料库",
-  "mallCustomer.manage": "管理资料库",
-  "sms.view": "查看短信日志",
-  "sms.manage": "短信管理",
-  "customerAccount.view": "查看登录账号",
-  "customerAccount.manage": "管理登录账号",
-  "portal.notice.view": "门户：公告列表",
-  "portal.notice.subscribe": "门户：订阅消息",
-  "portal.stats.view": "门户：数据统计",
-  "portal.order.view": "门户：企业订单",
-  "portal.invoice.view": "门户：企业发票",
-  "portal.contract.view": "门户：企业合同",
-  "portal.account.view": "门户：查看企业账号",
-  "portal.account.manage": "门户：管理企业账号",
-  "menu.view": "查看菜单配置",
-  "menu.manage": "管理菜单配置",
-  "lead.manage": "管理商机",
-  "sensitive.view": "查看敏感信息",
-  "profit.view": "查看利润",
-  "dev.ops.view": "查看定时任务",
-  "dev.ops.manage": "管理定时任务",
-  "assistant.view": "查看智能助手",
-  "assistant.use": "使用智能助手",
-  "assistant.manage": "管理智能助手",
-  "mcpLog.view": "查看MCP调用日志",
-  "wechatMp.view": "查看微信公众号",
-  "wechatMp.manage": "管理微信公众号",
-  "user.manage": "管理用户权限",
-};
-const permissionGroups: Array<{ title: string; keys: PermissionKey[] }> = [
-  { title: "基础", keys: ["dashboard.view", "project.view", "entity.view", "product.view", "platformAccount.view", "trademarkCertificate.view", "notice.view", "notice.stats.view", "notice.tag.view", "notice.orgType.view", "notice.nature.view", "notice.site.view", "notice.categoryMap.view", "site.view", "library.view", "mallCustomer.view", "sms.view", "mcpLog.view", "wechatMp.view", "customerAccount.view", "menu.view", "serviceOrder.view", "salesOrder.view", "purchaseOrder.view", "dev.ops.view", "assistant.view"] },
-  { title: "业务", keys: ["project.create", "project.edit", "entity.create", "product.manage", "purchase.manage", "onboarding.manage", "platformAccount.manage", "trademarkCertificate.manage", "notice.manage", "notice.tag.manage", "notice.orgType.manage", "notice.nature.manage", "notice.site.manage", "notice.categoryMap.manage", "site.manage", "library.manage", "mallCustomer.manage", "sms.manage", "customerAccount.manage", "menu.manage", "lead.manage", "serviceOrder.manage", "salesOrder.manage", "purchaseOrder.manage", "wechatMp.manage", "assistant.use"] },
-  { title: "客户门户", keys: ["portal.notice.view", "portal.stats.view", "portal.notice.subscribe", "portal.order.view", "portal.invoice.view", "portal.contract.view", "portal.account.view", "portal.account.manage"] },
-  { title: "财务", keys: ["finance.view", "finance.manage", "invoice.manage", "profit.view"] },
-  { title: "安全", keys: ["sensitive.view", "dev.ops.manage", "assistant.manage", "user.manage"] },
-];
-
 function hasPermission(permissionSet: Set<PermissionKey>, permission: PermissionKey) {
   if (permissionSet.has(permission)) return true;
   if (permission === "platformAccount.view") {
@@ -565,6 +491,18 @@ function hasPermission(permissionSet: Set<PermissionKey>, permission: Permission
     return permissionSet.has("customerAccount.manage");
   }
   if (permission === "portal.account.view") {
+    return (
+      permissionSet.has("portal.account.manage") ||
+      permissionSet.has("portal.account.create") ||
+      permissionSet.has("portal.account.edit") ||
+      permissionSet.has("portal.account.delete")
+    );
+  }
+  if (
+    permission === "portal.account.create" ||
+    permission === "portal.account.edit" ||
+    permission === "portal.account.delete"
+  ) {
     return permissionSet.has("portal.account.manage");
   }
   if (permission === "menu.view") {
@@ -11997,7 +11935,10 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
     costPrice: "",
     orderInfo: "",
     platformIds: [] as string[],
+    portalEntitlements: [] as string[],
+    entitlementsConfigured: false,
   };
+  const canEditEntitlements = can("product.entitlement.manage");
   const [form, setForm] = useState(emptyProductForm);
   const [productStatus, setProductStatus] = useState("");
   const [productTab, setProductTab] = useState<Product["kind"]>("实体商品");
@@ -12033,6 +11974,8 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
     setForm({
       ...emptyProductForm,
       category: kind === "实体商品" ? "空调" : "平台服务",
+      portalEntitlements: kind === "虚拟服务" ? PORTAL_PERMISSION_OPTIONS.map((item) => item.id) : [],
+      entitlementsConfigured: kind === "虚拟服务",
     });
     setProductStatus("");
   }
@@ -12040,6 +11983,7 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
   function openEditProductModal(product: Product) {
     setCreatingProductKind(null);
     setEditingProductId(product.id);
+    const entitlementsConfigured = Array.isArray(product.portalEntitlements);
     setForm({
       code: product.code,
       name: product.name,
@@ -12050,6 +11994,10 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
       costPrice: String(product.costPrice ?? ""),
       orderInfo: product.orderInfo ?? "",
       platformIds: product.platformIds ?? [],
+      portalEntitlements: entitlementsConfigured
+        ? [...(product.portalEntitlements || [])]
+        : PORTAL_PERMISSION_OPTIONS.map((item) => item.id),
+      entitlementsConfigured,
     });
     setProductStatus("");
   }
@@ -12215,6 +12163,20 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
       source: editingProduct?.source,
       sourceProjectId: editingProduct?.sourceProjectId,
     };
+    if (isService) {
+      if (canEditEntitlements) {
+        if (form.entitlementsConfigured) {
+          productPatch.portalEntitlements = form.portalEntitlements.filter((id) =>
+            PORTAL_PERMISSION_OPTIONS.some((item) => item.id === id),
+          );
+        } else {
+          // null：后端清除绑定，恢复「未配置=有效期内全开」兼容行为
+          (productPatch as Product & { portalEntitlements?: string[] | null }).portalEntitlements = null;
+        }
+      } else if (editingProduct && Array.isArray(editingProduct.portalEntitlements)) {
+        productPatch.portalEntitlements = editingProduct.portalEntitlements;
+      }
+    }
     try {
       if (editingProduct) {
         await commit(
@@ -12459,6 +12421,55 @@ function Products({ data, commit, can }: { data: AppData; commit: (data: AppData
                       </label>
                     ))}
                   </div>
+                  {canEditEntitlements ? (
+                    <div className="product-entitlement-box span-full">
+                      <div className="product-entitlement-head">
+                        <strong>绑定门户权限包</strong>
+                        <span>仅开发/运维可见。按模块分级配置门户能力；客户购买且服务在有效期内后，企业账号可勾选不超过本包的权限。</span>
+                      </div>
+                      <label className="product-entitlement-toggle">
+                        <input
+                          type="checkbox"
+                          checked={form.entitlementsConfigured}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            setForm({
+                              ...form,
+                              entitlementsConfigured: enabled,
+                              portalEntitlements: enabled
+                                ? (form.portalEntitlements.length
+                                  ? form.portalEntitlements
+                                  : PORTAL_PERMISSION_OPTIONS.map((item) => item.id))
+                                : PORTAL_PERMISSION_OPTIONS.map((item) => item.id),
+                            });
+                          }}
+                        />
+                        <span>启用权限包裁剪（关闭=兼容旧逻辑：有效服务期内开放全部门户权限，下方为当前生效范围预览）</span>
+                      </label>
+                      <PortalPermissionTree
+                        className="product-entitlement-tree"
+                        selected={form.portalEntitlements}
+                        forceAllChecked={!form.entitlementsConfigured}
+                        readOnly={!form.entitlementsConfigured}
+                        onChange={(next) => setForm({ ...form, portalEntitlements: next })}
+                      />
+                      {!form.entitlementsConfigured && (
+                        <p className="muted" style={{ margin: 0 }}>
+                          当前未单独配置权限包，购买本服务的企业在有效期内将获得上表全部门户权限。勾选「启用权限包裁剪」后可按项减少。
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="muted span-full">
+                      门户权限包：
+                      {Array.isArray(editingProduct?.portalEntitlements)
+                        ? (PORTAL_PERMISSION_OPTIONS
+                          .filter((item) => !("treeHidden" in item && item.treeHidden) && editingProduct?.portalEntitlements?.includes(item.id))
+                          .map((item) => item.label)
+                          .join("、") || "（空）")
+                        : "未单独配置（有效服务期内开放全部门户权限）"}
+                    </p>
+                  )}
                 </>
               )}
               <textarea value={form.orderInfo} onChange={(event) => setForm({ ...form, orderInfo: event.target.value })} placeholder="下单信息/链接/备注" />
@@ -15712,15 +15723,6 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
     }
   }
 
-  function toggleRolePermission(permission: PermissionKey) {
-    setRoleForm((current) => ({
-      ...current,
-      permissions: current.permissions.includes(permission)
-        ? current.permissions.filter((item) => item !== permission)
-        : [...current.permissions, permission],
-    }));
-  }
-
   async function addRole() {
     if (!roleForm.name.trim() || roleForm.permissions.length === 0 || savingAction) return;
     const role: Role = {
@@ -15816,25 +15818,30 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
         </div>
       </div>
       <div className="panel">
-        <PanelTitle title="权限矩阵" subtitle="权限点由系统功能定义，通过角色勾选分配；已包含平台账号查看/管理。" />
+        <PanelTitle title="权限矩阵" subtitle="按分区 → 模块 → 动作分级展示；权限点由系统功能定义，通过角色勾选分配。" />
         <div className="permission-table">
           <div className="permission-row permission-head">
             <span>权限点</span>
             {data.roles.map((role) => <strong key={role.id}>{role.name}</strong>)}
           </div>
-          {permissionGroups.map((group) => (
-            <div className="permission-group" key={group.title}>
-              <div className="permission-section">{group.title}</div>
-              {group.keys.map((key) => (
-                <div className="permission-row" key={key}>
-                  <span>{permissionLabels[key]}</span>
-                  {data.roles.map((role) => (
-                    <b key={role.id} className={role.permissions.includes(key) ? "allowed" : "denied"}>
-                      {role.permissions.includes(key) ? "允许" : "无"}
-                    </b>
-                  ))}
-                </div>
-              ))}
+          {ADMIN_PERMISSION_TREE.map((section) => (
+            <div className="permission-group" key={section.title}>
+              <div className="permission-section">{section.title}</div>
+              {adminPermissionMatrixRows()
+                .filter((row) => row.section === section.title)
+                .map((row) => (
+                  <div className={`permission-row${row.isFirstInModule ? " permission-module-head" : ""}`} key={`${row.moduleId}-${row.key}`}>
+                    <span className="permission-module-cell">
+                      {row.isFirstInModule ? <strong>{row.moduleLabel}</strong> : null}
+                      <em className={row.isFirstInModule ? undefined : "permission-leaf-indent"}>{row.label}</em>
+                    </span>
+                    {data.roles.map((role) => (
+                      <b key={role.id} className={role.permissions.includes(row.key) ? "allowed" : "denied"}>
+                        {role.permissions.includes(row.key) ? "允许" : "无"}
+                      </b>
+                    ))}
+                  </div>
+                ))}
             </div>
           ))}
         </div>
@@ -15885,26 +15892,17 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
             <div className="modal-head">
               <div>
                 <h2>编辑角色</h2>
-                <p>可修改角色名称、说明和权限点；保存后立即对已分配该角色的用户生效。</p>
+                <p>按分区 → 模块 → 动作树状勾选；保存后立即对已分配该角色的用户生效。</p>
               </div>
               <button className="icon-button" onClick={() => setEditingRole(null)} aria-label="关闭编辑角色"><X size={18} /></button>
             </div>
             <div className="role-edit-form">
               <input value={roleForm.name} onChange={(event) => setRoleForm({ ...roleForm, name: event.target.value })} placeholder="角色名称" />
               <textarea value={roleForm.description} onChange={(event) => setRoleForm({ ...roleForm, description: event.target.value })} placeholder="角色说明" />
-              <div className="role-permission-list">
-                {permissionGroups.map((group) => (
-                  <div className="permission-check-group" key={group.title}>
-                    <strong>{group.title}</strong>
-                    {group.keys.map((key) => (
-                      <label key={key}>
-                        <input type="checkbox" checked={roleForm.permissions.includes(key)} onChange={() => toggleRolePermission(key)} />
-                        <span>{permissionLabels[key]}</span>
-                      </label>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              <AdminPermissionTree
+                selected={roleForm.permissions}
+                onChange={(next) => setRoleForm((current) => ({ ...current, permissions: next }))}
+              />
             </div>
             <div className="modal-actions">
               <button className="ghost" onClick={() => setEditingRole(null)}>取消</button>
@@ -15919,26 +15917,17 @@ function AccessControl({ data, commit }: { data: AppData; commit: (data: AppData
             <div className="modal-head">
               <div>
                 <h2>新增角色</h2>
-                <p>创建后可在新增用户和编辑用户时分配该角色。</p>
+                <p>创建后可在新增用户和编辑用户时分配该角色。权限按分区 → 模块 → 动作树状勾选。</p>
               </div>
               <button className="icon-button" onClick={() => setShowCreateRole(false)} aria-label="关闭新增角色"><X size={18} /></button>
             </div>
             <div className="role-edit-form">
               <input value={roleForm.name} onChange={(event) => setRoleForm({ ...roleForm, name: event.target.value })} placeholder="角色名称" />
               <textarea value={roleForm.description} onChange={(event) => setRoleForm({ ...roleForm, description: event.target.value })} placeholder="角色说明" />
-              <div className="role-permission-list">
-                {permissionGroups.map((group) => (
-                  <div className="permission-check-group" key={group.title}>
-                    <strong>{group.title}</strong>
-                    {group.keys.map((key) => (
-                      <label key={key}>
-                        <input type="checkbox" checked={roleForm.permissions.includes(key)} onChange={() => toggleRolePermission(key)} />
-                        <span>{permissionLabels[key]}</span>
-                      </label>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              <AdminPermissionTree
+                selected={roleForm.permissions}
+                onChange={(next) => setRoleForm((current) => ({ ...current, permissions: next }))}
+              />
             </div>
             <div className="modal-actions">
               <button className="ghost" onClick={() => setShowCreateRole(false)}>取消</button>

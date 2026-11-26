@@ -33,6 +33,7 @@ const PERMISSION_OPTIONS: Array<{ id: PermissionKey; label: string }> = [
   { id: "entity.create", label: "创建主体" },
   { id: "product.view", label: "查看商品" },
   { id: "product.manage", label: "管理商品" },
+  { id: "product.entitlement.manage", label: "配置服务商品权限包" },
   { id: "purchase.manage", label: "管理采购" },
   { id: "serviceOrder.view", label: "查看服务订单" },
   { id: "serviceOrder.manage", label: "管理服务订单" },
