@@ -160,6 +160,27 @@ def _invoice_project_ids(payload: dict) -> list[str]:
     return ids
 
 
+def _normalize_payment_label(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    aliases = {
+        "已付": "已付款",
+        "已收": "已付款",
+        "付清": "已付款",
+        "未付": "待付款",
+        "未收": "待付款",
+        "待付": "待付款",
+        "部分付": "部分付款",
+        "部分已付": "部分付款",
+    }
+    if text in aliases:
+        return aliases[text]
+    if text in {"已付款", "待付款", "部分付款", "退款", "取消"}:
+        return text
+    return text
+
+
 def _derive_payment_status(
     order_statuses: list[str],
     *,
@@ -167,24 +188,48 @@ def _derive_payment_status(
     receivable: float = 0,
     received: float = 0,
 ) -> str:
-    text = str(fallback or "").strip()
-    if text:
-        return text
-    unique = {str(item or "").strip() for item in order_statuses if str(item or "").strip()}
+    """优先按订单应收/已收与订单状态推导；仅无订单数据时才回退项目上的 paymentStatus。"""
+    try:
+        receivable_n = float(receivable or 0)
+    except (TypeError, ValueError):
+        receivable_n = 0.0
+    try:
+        received_n = float(received or 0)
+    except (TypeError, ValueError):
+        received_n = 0.0
+
+    if receivable_n > 0 or received_n > 0:
+        if receivable_n > 0 and received_n + 1e-9 >= receivable_n:
+            return "已付款"
+        if received_n > 0:
+            return "部分付款"
+        return "待付款"
+
+    unique = {
+        _normalize_payment_label(item)
+        for item in order_statuses
+        if _normalize_payment_label(item)
+    }
     if unique == {"已付款"}:
         return "已付款"
-    if "退款" in unique and len(unique) == 1:
+    if unique == {"退款"}:
         return "退款"
-    if "取消" in unique and len(unique) == 1:
+    if unique == {"取消"}:
         return "取消"
-    if "部分付款" in unique or ({"待付款", "已付款"} & unique and len(unique) > 1):
+    if "部分付款" in unique or ({"待付款", "已付款"} <= unique) or (
+        "待付款" in unique and "已付款" in unique
+    ):
         return "部分付款"
-    if unique:
+    if len(unique) == 1:
         return next(iter(unique))
-    if receivable > 0 and received >= receivable:
-        return "已付款"
-    if received > 0:
-        return "部分付款"
+    if unique:
+        if "已付款" in unique and "待付款" in unique:
+            return "部分付款"
+        return "部分付款" if len(unique) > 1 else next(iter(unique))
+
+    fallback_label = _normalize_payment_label(fallback)
+    if fallback_label:
+        return fallback_label
     return "待付款"
 
 

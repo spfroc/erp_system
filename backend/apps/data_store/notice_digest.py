@@ -16,6 +16,8 @@ from .notice_inbox_models import PortalNoticeInbox
 from .notice_models import NoticeParsed, NoticeRaw
 from .notice_push_models import NoticePushLog
 from .notice_subscription import (
+    PORTAL_DEAL_NOTICE_KINDS,
+    classify_notice_category,
     notice_matches_subscription,
     normalize_subscription,
     subscription_has_filters,
@@ -140,9 +142,20 @@ def _load_notices_between(
     return result
 
 
-def match_notices_for_subscription(notices: list[dict[str, Any]], subscription: dict[str, Any]) -> list[dict[str, Any]]:
+def match_notices_for_subscription(
+    notices: list[dict[str, Any]],
+    subscription: dict[str, Any],
+    *,
+    allow_deal_notices: bool = True,
+) -> list[dict[str, Any]]:
     hits: list[dict[str, Any]] = []
+    deal_kinds = set(PORTAL_DEAL_NOTICE_KINDS)
     for item in notices:
+        kind = str(item.get("noticeKind") or "").strip()
+        if not allow_deal_notices and (
+            kind in deal_kinds or classify_notice_category(kind) == "结果"
+        ):
+            continue
         if notice_matches_subscription(
             subscription=subscription,
             title=item.get("title") or "",
@@ -154,7 +167,7 @@ def match_notices_for_subscription(notices: list[dict[str, Any]], subscription: 
             city=item.get("city") or "",
             district=item.get("district") or "",
             region_name=item.get("regionName") or "",
-            notice_kind=item.get("noticeKind") or "",
+            notice_kind=kind,
         ):
             hits.append(item)
     return hits
@@ -337,7 +350,18 @@ def send_digest_for_account(
     if slot:
         notices = _exclude_already_inboxed(account_id=record.id, digest_date=digest_date, notices=notices)
 
-    hits = match_notices_for_subscription(notices, subscription)
+    perms = set(normalize_portal_permissions(account.get("permissions")))
+    caps = set(account.get("orgEntitlements") or [])
+    allow_deal = "portal.stats.view" in perms or "portal.stats.view" in caps
+    sub_for_match = subscription
+    if not allow_deal:
+        cats = [item for item in (subscription.get("noticeCategories") or []) if item != "结果"]
+        sub_for_match = {**subscription, "noticeCategories": cats}
+    hits = match_notices_for_subscription(
+        notices,
+        sub_for_match,
+        allow_deal_notices=allow_deal,
+    )
     empty_test = False
     if not hits:
         if not allow_empty:

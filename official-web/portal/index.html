@@ -896,8 +896,22 @@
     .notice-upsell {
       margin: 0 0 12px; padding: 12px 14px; border-radius: 10px;
       border: 1px solid #f0d9a8; background: #fff8ea; color: #6b4e16; font-size: 13px; line-height: 1.5;
+      display: grid; gap: 10px;
+    }
+    .notice-upsell.is-strong {
+      border-color: #e8b86a; background: #fff3d6;
     }
     .notice-upsell strong { color: #8a5a10; }
+    .notice-upsell-actions {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .notice-upsell-actions .ghost,
+    .notice-upsell-actions .primary {
+      width: auto; margin: 0; height: 32px; min-height: 32px; padding: 0 12px; font-size: 13px;
+    }
+    .notice-upsell-actions a.ghost {
+      text-decoration: none;
+    }
     .notice-kind-prefix { color: #1a5fb4; font-weight: 700; margin-right: 4px; }
     @media (max-width: 1480px) { .notice-card-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     @media (max-width: 1180px) { .notice-card-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -966,6 +980,8 @@
     .enterprise-table .col-party { width: 16%; word-break: break-word; overflow-wrap: anywhere; }
     .enterprise-table .col-project { width: auto; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
     .enterprise-table .col-amount { width: 7em; white-space: nowrap; }
+    .enterprise-table .col-date { width: 7.5em; white-space: nowrap; }
+    .enterprise-table .col-pay { width: 5.5em; white-space: nowrap; }
     .enterprise-table .col-actions {
       width: 5.5em; white-space: nowrap; text-align: left; vertical-align: middle;
     }
@@ -2140,18 +2156,18 @@
       } else {
         const table = document.createElement("table");
         table.className = "enterprise-table";
-        table.innerHTML = "<thead><tr><th class='col-amount'>开始时间</th><th class='col-amount'>结束时间</th><th class='col-project'>项目名称</th><th class='col-amount'>金额</th><th class='invoice-status-cell'>付款情况</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th class='col-project'>项目名称</th><th class='col-amount'>金额</th><th class='col-pay'>付款情况</th><th class='col-date'>开始时间</th><th class='col-date'>结束时间</th></tr></thead>";
         const tbody = document.createElement("tbody");
         (body.items || []).forEach((item) => {
           const tr = document.createElement("tr");
           tr.className = "clickable";
-          tr.innerHTML = "<td class='col-amount'></td><td class='col-amount'></td><td class='col-project'></td><td class='mono col-amount'></td><td class='invoice-status-cell'></td>";
+          tr.innerHTML = "<td class='col-project'></td><td class='mono col-amount'></td><td class='col-pay'></td><td class='col-date'></td><td class='col-date'></td>";
           const cells = tr.querySelectorAll("td");
-          cells[0].textContent = item.serviceStartDate || "—";
-          cells[1].textContent = item.serviceEndDate || "—";
-          cells[2].textContent = item.projectName || item.name || "—";
-          cells[3].textContent = formatMoney(item.amount);
-          cells[4].textContent = item.paymentStatus || "—";
+          cells[0].textContent = item.projectName || item.name || "—";
+          cells[1].textContent = formatMoney(item.amount);
+          cells[2].textContent = item.paymentStatus || "—";
+          cells[3].textContent = item.serviceStartDate || "—";
+          cells[4].textContent = item.serviceEndDate || "—";
           tr.onclick = async () => {
             const detail = await api("/api/portal/orders/" + encodeURIComponent(item.id) + "/");
             const data = detail.data || {};
@@ -2162,13 +2178,13 @@
               ["项目名称", data.projectName || data.name],
               ["项目编号", data.projectNo],
               ["服务商品", data.serviceProductName || "—"],
-              ["开始时间", data.serviceStartDate || "—"],
-              ["结束时间", data.serviceEndDate || "—"],
               ["金额", formatMoney(data.amount)],
               ["应收", formatMoney(data.receivableAmount)],
               ["已收", formatMoney(data.receivedAmount)],
               ["付款情况", data.paymentStatus],
               ["项目状态", data.status],
+              ["开始时间", data.serviceStartDate || "—"],
+              ["结束时间", data.serviceEndDate || "—"],
               ["关联订单", orderLines.length ? orderLines.join("\n") : "暂无", true],
             ]);
           };
@@ -3665,7 +3681,13 @@
         const detail = await api("/api/portal/notices/" + id + "/");
         showNoticeDetail(detail);
       } catch (error) {
-        window.alert(error.message || "加载详情失败");
+        const msg = error.message || "加载详情失败";
+        if (/数据分析|成交|结果|6 个月|历史公告/.test(msg)) {
+          const go = window.confirm(msg + "\n\n是否前往「服务项目」查看或联系开通？");
+          if (go && hasPortalPerm("portal.order.view")) openTab("orders");
+          return;
+        }
+        window.alert(msg);
       }
     }
 
@@ -4053,13 +4075,46 @@
       });
     }
 
+    function syncNoticeKindOptions(kindSelect, body) {
+      if (!kindSelect) return;
+      const kinds = Array.isArray(body.noticeKinds) ? body.noticeKinds.slice() : [];
+      const prev = noticeQuery.noticeKind || kindSelect.value || "";
+      kindSelect.innerHTML = '<option value="">全部</option>';
+      kinds.forEach((kind) => {
+        const option = document.createElement("option");
+        option.value = kind;
+        option.textContent = kind;
+        kindSelect.appendChild(option);
+      });
+      if (prev && kinds.includes(prev)) {
+        kindSelect.value = prev;
+        noticeQuery.noticeKind = prev;
+      } else {
+        kindSelect.value = "";
+        noticeQuery.noticeKind = "";
+      }
+    }
+
+    function bindNoticeDatePickers(fromInput, toInput, body) {
+      if (!window.ycDatePicker || !fromInput || !toInput) return;
+      const floor = body && body.maxLookbackMonths
+        ? monthsAgoYmd(body.maxLookbackMonths)
+        : noticeLookbackFloorYmd();
+      const common = { minDate: floor, maxDate: "today" };
+      window.ycDatePicker.bind(fromInput, common);
+      window.ycDatePicker.bind(toInput, common);
+      if (fromInput._flatpickr) fromInput._flatpickr.setDate(fromInput.value || "", false);
+      if (toInput._flatpickr) toInput._flatpickr.setDate(toInput.value || "", false);
+    }
+
     function syncNoticeUpsell(panel, body) {
       let box = panel.querySelector(".notice-upsell");
-      const need = Boolean(body.lookbackClamped) || Boolean(body.dealNoticeBlocked);
-      if (!need) {
+      const hasAnalytics = Boolean(body.hasAnalyticsService) || hasAnalyticsService();
+      if (hasAnalytics) {
         if (box) box.remove();
         return;
       }
+      const strong = Boolean(body.lookbackClamped) || Boolean(body.dealNoticeBlocked);
       if (!box) {
         box = document.createElement("div");
         box.className = "notice-upsell";
@@ -4067,18 +4122,29 @@
         if (toolbar && toolbar.nextSibling) panel.insertBefore(box, toolbar.nextSibling);
         else panel.prepend(box);
       }
+      box.classList.toggle("is-strong", strong);
       const months = body.maxLookbackMonths || 6;
       const parts = [];
       if (body.lookbackClamped) {
-        parts.push("普通客户最多可查近 " + months + " 个月公告；更早数据需开通<strong>数据分析服务</strong>。");
+        parts.push("已超出标准版可查范围。普通客户最多可查近 <strong>" + months + " 个月</strong>；更早数据需开通数据分析服务。");
+      } else {
+        parts.push("当前为标准版：默认可查近 3 个月，最早可查近 <strong>" + months + " 个月</strong>。");
       }
       if (body.dealNoticeBlocked) {
+        parts.push("成交/结果类公告已对标准版隐藏，开通<strong>数据分析服务</strong>后可查看。");
+      } else if (body.dealNoticeRestricted) {
         parts.push("成交/结果类公告仅对开通<strong>数据分析服务</strong>的客户开放。");
       }
-      if (!parts.length) {
-        parts.push("开通<strong>数据分析服务</strong>后可查询更长周期与成交公告。");
-      }
-      box.innerHTML = parts.join(" ");
+      box.innerHTML =
+        "<div>" + parts.join(" ") + "</div>" +
+        '<div class="notice-upsell-actions">' +
+        (hasPortalPerm("portal.order.view")
+          ? '<button type="button" class="primary" data-role="goto-orders">查看服务项目</button>'
+          : "") +
+        '<a class="ghost" href="tel:13105315957">联系开通 13105315957</a>' +
+        "</div>";
+      const gotoBtn = box.querySelector("[data-role=goto-orders]");
+      if (gotoBtn) gotoBtn.onclick = () => openTab("orders");
     }
 
     async function renderNotices(panel) {
@@ -4171,13 +4237,7 @@
           renderNotices(panel);
         };
         const kindSelect = toolbar.querySelector("[name=noticeKind]");
-        (body.noticeKinds || []).forEach((kind) => {
-          const option = document.createElement("option");
-          option.value = kind;
-          option.textContent = kind;
-          kindSelect.appendChild(option);
-        });
-        kindSelect.value = noticeQuery.noticeKind;
+        syncNoticeKindOptions(kindSelect, body);
         kindSelect.onchange = () => {
           noticeQuery.noticeKind = kindSelect.value;
           noticeQuery.page = 1;
@@ -4209,17 +4269,13 @@
         fromInput.value = noticeQuery.publishDateFrom || defaultNoticePublishFrom();
         toInput.value = noticeQuery.publishDateTo || formatYmd(new Date());
         noticeQuery.publishDateTo = toInput.value;
-        if (window.ycDatePicker) {
-          window.ycDatePicker.bind(fromInput);
-          window.ycDatePicker.bind(toInput);
-        }
+        bindNoticeDatePickers(fromInput, toInput, body);
         toolbar.querySelector("[data-role=apply]").onclick = () => {
           noticeQuery.publishDateFrom = clampNoticePublishFrom(fromInput.value);
           noticeQuery.publishDateTo = normalizeYmd(toInput.value) || formatYmd(new Date());
           fromInput.value = noticeQuery.publishDateFrom;
           toInput.value = noticeQuery.publishDateTo;
-          if (fromInput._flatpickr) fromInput._flatpickr.setDate(noticeQuery.publishDateFrom || "", false);
-          if (toInput._flatpickr) toInput._flatpickr.setDate(noticeQuery.publishDateTo || "", false);
+          bindNoticeDatePickers(fromInput, toInput, body);
           noticeQuery.regionName = toolbar.querySelector("[name=regionName]").value.trim();
           noticeQuery.projectCode = toolbar.querySelector("[name=projectCode]").value.trim();
           noticeQuery.projectName = toolbar.querySelector("[name=projectName]").value.trim();
@@ -4244,18 +4300,12 @@
         toolbar.querySelector("[name=progress]").value = noticeQuery.progress;
         const regionSelect = toolbar.querySelector("[name=regionName]");
         if (regionSelect) regionSelect.value = noticeQuery.regionName || "";
-        const kindSelect = toolbar.querySelector("[name=noticeKind]");
-        if (kindSelect && body.noticeKinds) {
-          const current = new Set(Array.from(kindSelect.options).map((opt) => opt.value).filter(Boolean));
-          body.noticeKinds.forEach((kind) => {
-            if (current.has(kind)) return;
-            const option = document.createElement("option");
-            option.value = kind;
-            option.textContent = kind;
-            kindSelect.appendChild(option);
-          });
-          kindSelect.value = noticeQuery.noticeKind;
-        }
+        syncNoticeKindOptions(toolbar.querySelector("[name=noticeKind]"), body);
+        bindNoticeDatePickers(
+          toolbar.querySelector("[name=publishDateFrom]"),
+          toolbar.querySelector("[name=publishDateTo]"),
+          body
+        );
       }
       syncNoticeUpsell(panel, body);
       fillNoticeList(list, body);
@@ -4311,7 +4361,7 @@
             <div class="chip-group" id="city-chips"></div>
           </div>
           <div class="subscription-tab-panel" data-tab="kinds">
-            <p class="muted">可选「公告」或「结果」，不选则不限类型。</p>
+            <p class="muted" data-role="kinds-tip">可选「公告」或「结果」，不选则不限类型。</p>
             <div class="chip-group" id="notice-categories"></div>
           </div>
           <div class="subscription-tab-panel" data-tab="orgs">
@@ -4365,7 +4415,7 @@
         if (id === "regions") return selectedCities.size;
         if (id === "kinds") return selectedNoticeCategories.size;
         if (id === "orgs") return selectedOrgTypes.size;
-        if (id === "push") return (card.enabled.checked ? 1 : 0) + pushTimes.length;
+        if (id === "push") return card.enabled.checked ? pushTimes.length : 0;
         return 0;
       }
 
@@ -4493,9 +4543,21 @@
       }
 
       function renderNoticeCategoryChips() {
+        const allowed = (options.noticeCategories && options.noticeCategories.length)
+          ? options.noticeCategories.slice()
+          : (hasAnalyticsService() ? ["公告", "结果"] : ["公告"]);
+        [...selectedNoticeCategories].forEach((item) => {
+          if (!allowed.includes(item)) selectedNoticeCategories.delete(item);
+        });
+        const tip = card.querySelector("[data-role=kinds-tip]");
+        if (tip) {
+          tip.textContent = allowed.includes("结果")
+            ? "可选「公告」或「结果」，不选则不限类型。"
+            : "标准版仅可订阅「公告」类；「结果/成交」需开通数据分析服务。";
+        }
         renderChipGroup(
           card.querySelector("#notice-categories"),
-          ["公告", "结果"],
+          allowed,
           [...selectedNoticeCategories],
           (item) => {
             if (selectedNoticeCategories.has(item)) selectedNoticeCategories.delete(item);
@@ -4742,7 +4804,12 @@
         }
       }
 
-      let options = { orgTypes: [], shandongCities: SHANDONG_CITIES, wechatConfigured: false };
+      let options = {
+        orgTypes: [],
+        shandongCities: SHANDONG_CITIES,
+        noticeCategories: hasAnalyticsService() ? ["公告", "结果"] : ["公告"],
+        wechatConfigured: false,
+      };
       try {
         if (bindStatus) {
           const latest = await api("/api/portal/me/");
@@ -4758,6 +4825,9 @@
           card.enabled.checked = Boolean(me.subscription?.enabled);
         }
         options = await api("/api/portal/subscription/options/");
+        if (!options.noticeCategories || !options.noticeCategories.length) {
+          options.noticeCategories = options.hasAnalyticsService ? ["公告", "结果"] : ["公告"];
+        }
       } catch (error) {
         msgEl.textContent = error.message || msgEl.textContent;
       }

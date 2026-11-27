@@ -1476,6 +1476,8 @@ def portal_notices(request):
         body["defaultLookbackMonths"] = 3
         body["lookbackClamped"] = bool(lookback_clamped and not has_analytics)
         body["dealNoticeBlocked"] = bool(deal_blocked)
+        # 普通客户始终标记「成交类受限」，便于前端常驻引导；被拦查询时再强化文案
+        body["dealNoticeRestricted"] = bool(not has_analytics)
         body["regions"] = [
             "济南", "青岛", "淄博", "枣庄", "东营", "烟台", "潍坊", "济宁",
             "泰安", "威海", "日照", "临沂", "德州", "聊城", "滨州", "菏泽",
@@ -1801,6 +1803,11 @@ def portal_subscription(request):
     account = public_account(record)
     if not account.get("wechatBound"):
         return JsonResponse({"detail": "请先绑定微信后再设置订阅。"}, status=400)
+    # 普通客户不可订阅「结果」类（成交公告）
+    notice_categories = list(normalized.get("noticeCategories") or [])
+    if not _portal_has_analytics_service(account):
+        notice_categories = [item for item in notice_categories if item != "结果"]
+        normalized = normalize_subscription({**normalized, "noticeCategories": notice_categories})
     data = dict(record.data or {})
     data["subscription"] = {
         "enabled": normalized["enabled"],
@@ -1809,7 +1816,7 @@ def portal_subscription(request):
         "regions": normalized.get("regions") or [],
         "buyers": [],
         "orgTypes": normalized.get("orgTypes") or [],
-        "noticeCategories": normalized.get("noticeCategories") or [],
+        "noticeCategories": notice_categories,
         "pushTimes": list(normalized.get("pushTimes") or push_times),
     }
     record.data = data
@@ -1824,10 +1831,14 @@ def portal_subscription_options(request):
         return error
     from .notice_dict import KIND_ORG_TYPE, list_dict_names
 
+    account = public_account(record)
+    has_analytics = _portal_has_analytics_service(account)
+    notice_categories = ["公告", "结果"] if has_analytics else ["公告"]
     return JsonResponse(
         {
             "shandongCities": list(SHANDONG_CITIES),
-            "noticeCategories": ["公告", "结果"],
+            "noticeCategories": notice_categories,
+            "hasAnalyticsService": has_analytics,
             "orgTypes": list(list_dict_names(KIND_ORG_TYPE, enabled_only=True))
             or ["机关", "教育", "医疗卫生", "公安系统", "事业单位", "其他"],
             "wechatConfigured": wechat_mp.mp_configured(),
