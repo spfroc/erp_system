@@ -292,6 +292,51 @@
     .keyword-add-row input { flex: 1 1 180px; min-width: 0; }
     .keyword-add-row .ghost { flex: none; }
     .keyword-chips, .selected-tag-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; min-height: 8px; }
+    .push-time-list { display: grid; gap: 10px; }
+    .push-time-row {
+      display: grid;
+      grid-template-columns: 72px minmax(168px, 200px) auto;
+      align-items: center;
+      column-gap: 10px;
+      min-height: var(--control-h);
+    }
+    .push-time-label {
+      margin: 0; color: var(--muted); font-size: 13px; line-height: var(--control-h);
+      white-space: nowrap;
+    }
+    .push-time-fields {
+      display: grid;
+      grid-template-columns: 1fr 12px 1fr;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .subscription-card .push-time-fields select {
+      width: 100%;
+      height: var(--control-h);
+      min-height: var(--control-h);
+      max-height: var(--control-h);
+      margin: 0;
+      padding: 0 8px;
+      box-sizing: border-box;
+    }
+    .push-time-sep {
+      text-align: center; color: var(--muted); font-size: 14px; line-height: var(--control-h);
+    }
+    .push-time-row > .ghost {
+      width: auto; margin: 0; height: var(--control-h); min-height: var(--control-h);
+      justify-self: start;
+    }
+    .push-time-actions {
+      display: flex;
+      align-items: center;
+      padding-left: calc(72px + 10px);
+    }
+    .push-time-actions .ghost { width: auto; margin: 0; flex: none; }
+    .wechat-bind-gate {
+      display: grid; gap: 12px; padding: 16px; border-radius: 14px;
+      background: #f7f2e8; border: 1px solid rgba(234,223,206,.95);
+    }
     .keyword-chip, .selected-tag-chip {
       display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 12px;
       border-radius: 999px; background: rgba(27,104,68,.1); color: var(--green-dark); font-size: 13px;
@@ -496,12 +541,23 @@
     }
     .home-intro { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
     .frame-insights {
-      margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--line-strong);
+      margin: 18px 0 16px; padding: 14px 16px; border: 1px solid var(--line-strong);
       border-radius: 12px; background: #fff;
     }
-    .frame-insights h3 { margin: 0 0 8px; font-size: 15px; font-weight: 750; }
-    .frame-insights ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink); font-size: 13px; line-height: 1.55; }
-    .frame-insights li::marker { color: var(--green); }
+    .stats-panel > .metrics + .frame-insights { margin-top: 20px; }
+    .frame-insights > h3 { margin: 0 0 12px; font-size: 15px; font-weight: 750; }
+    .frame-insights-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+    }
+    .frame-insights .insight-card {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fafbfc; min-width: 0;
+    }
+    .frame-insights .insight-card h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+    .frame-insights .insight-note { margin: 0 0 6px; color: var(--muted); font-size: 12px; line-height: 1.4; min-height: 1.4em; }
+    .frame-insights .insight-chart { height: 220px; width: 100%; }
+    @media (max-width: 960px) {
+      .frame-insights-grid { grid-template-columns: 1fr; }
+    }
     .stats-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
     .stats-filters .segmented { flex: none; }
     .stats-custom-range { display: inline-flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -643,16 +699,50 @@
 
     /* 消息列表：更疏朗的卡片 + 状态条 */
     #panel.message-panel { gap: 0; }
-    .message-toolbar {
-      flex: none; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-      margin-bottom: 12px; padding: 14px 16px;
-      background: rgba(255,253,248,.88); border: 1px solid rgba(234,223,206,.95);
+    .message-shell {
+      flex: none; display: grid; gap: 12px; margin-bottom: 12px; padding: 14px 16px;
+      background: rgba(255,253,248,.92); border: 1px solid rgba(234,223,206,.95);
       border-radius: 16px; box-shadow: 0 6px 18px rgba(62, 42, 16, .04);
     }
-    .message-toolbar .message-summary { flex: 1 1 180px; min-width: 0; margin: 0; }
+    .message-head {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;
+      justify-content: space-between;
+    }
+    .message-head h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--ink); }
+    .message-head .muted { margin: 4px 0 0; }
+    .message-head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .message-sub-bar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      padding: 10px 12px; background: #f7f2e8; border: 1px solid rgba(234,223,206,.95);
+      border-radius: 12px; color: var(--muted); font-size: 13px;
+    }
+    .message-sub-bar .summary-chip {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+      background: #fff; border: 1px solid rgba(234,223,206,.95); color: var(--ink); font-size: 12px;
+    }
+    .message-toolbar {
+      display: grid; gap: 12px; padding-top: 2px;
+    }
+    .message-toolbar-row {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    }
+    .message-toolbar .message-summary { flex: 1 1 220px; min-width: 0; margin: 0; }
     .message-toolbar .message-summary strong { color: var(--ink); font-weight: 700; }
     .message-toolbar .message-summary em { color: #b24b2c; font-style: normal; font-weight: 700; }
-    .message-toolbar .message-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+    .message-toolbar .message-filters {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1 1 auto;
+    }
+    .message-toolbar .message-filters label {
+      display: inline-flex; align-items: center; gap: 8px; margin: 0;
+      font-size: 13px; color: var(--muted); white-space: nowrap;
+    }
+    .message-toolbar .message-filters select {
+      min-width: 148px; height: 36px; border-radius: 10px; border: 1px solid var(--line-strong);
+      background: #fff; padding: 0 10px; color: var(--ink);
+    }
+    .message-toolbar .message-tools {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto;
+    }
     .message-toolbar .check-row {
       padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px;
       background: #fff; min-height: 36px;
@@ -773,31 +863,42 @@
       display: grid; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0;
     }
     .portal-notice-fields > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .portal-notice-fields b { color: #c45a1a; font-weight: 700; }
+    .portal-notice-fields b { color: #1a5fb4; font-weight: 700; }
     .portal-notice-meta {
       flex: 0 0 auto;
       display: flex; flex-wrap: wrap; gap: 6px; min-width: 0;
     }
     .portal-notice-meta span {
-      display: inline-flex; max-width: 100%; padding: 3px 8px; border-radius: 2px; background: #f6f0e6;
-      color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      display: inline-flex; max-width: 100%; padding: 3px 8px; border-radius: 2px; background: #f3f6fa;
+      border: 1px solid #e4ebf3; color: var(--muted); font-size: 11px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .portal-notice-actions {
       flex: 0 0 auto;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr auto;
       gap: 6px;
-      margin-top: 4px;
+      margin-top: auto;
+      padding-top: 4px;
     }
     .portal-notice-actions .ghost {
       width: 100%;
       margin: 0;
-      height: 32px;
-      min-height: 32px;
+      height: 34px;
+      min-height: 34px;
       padding: 0 8px;
       font-size: 12px;
-      border-radius: 8px;
+      border-radius: 4px;
     }
+    .portal-notice-actions [data-role="detail"] {
+      background: #f3f7fc; border-color: #c9daf0; color: #1a5fb4; font-weight: 650;
+    }
+    .notice-upsell {
+      margin: 0 0 12px; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid #f0d9a8; background: #fff8ea; color: #6b4e16; font-size: 13px; line-height: 1.5;
+    }
+    .notice-upsell strong { color: #8a5a10; }
+    .notice-kind-prefix { color: #1a5fb4; font-weight: 700; margin-right: 4px; }
     @media (max-width: 1480px) { .notice-card-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     @media (max-width: 1180px) { .notice-card-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (max-width: 900px) { .notice-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -1009,17 +1110,24 @@
       }
       .notice h3 { font-size: 15px; -webkit-line-clamp: 3; }
       .notice p { -webkit-line-clamp: 3; }
-      .message-toolbar {
-        flex-direction: row; flex-wrap: wrap; align-items: center;
-        gap: 6px 8px; padding: 8px 10px; margin-bottom: 8px; border-radius: 12px;
-        box-shadow: none;
+      .push-time-row {
+        grid-template-columns: 64px minmax(0, 1fr) auto;
+        column-gap: 8px;
       }
+      .push-time-actions { padding-left: calc(64px + 8px); }
+      .message-shell {
+        gap: 10px; padding: 12px; margin-bottom: 8px; border-radius: 12px; box-shadow: none;
+      }
+      .message-toolbar { gap: 10px; }
+      .message-toolbar-row { gap: 8px; }
       .message-toolbar .message-summary {
-        flex: 1 1 auto; font-size: 12px; line-height: 1.35;
+        flex: 1 1 100%; font-size: 12px; line-height: 1.35;
       }
       .message-toolbar .message-summary .message-hint { display: none; }
+      .message-toolbar .message-filters { width: 100%; }
+      .message-toolbar .message-filters select { min-width: 0; flex: 1 1 120px; }
       .message-toolbar .message-tools {
-        margin-left: 0; width: auto; flex: none; gap: 6px;
+        margin-left: 0; width: 100%; flex: none; gap: 6px;
       }
       .message-toolbar .message-tools .ghost,
       .message-toolbar .check-row {
@@ -1228,19 +1336,7 @@
     const dropdown = document.getElementById("dropdown");
     let me = null;
     let tab = "home";
-    let noticeQuery = {
-      page: 1,
-      search: "",
-      siteId: "",
-      noticeKind: "",
-      progress: "",
-      regionName: "",
-      projectCode: "",
-      projectName: "",
-      buyerName: "",
-      publishDateFrom: "",
-      publishDateTo: "",
-    };
+    let noticeQuery = null;
     function formatYmd(date) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1253,6 +1349,12 @@
       date.setDate(date.getDate() - days);
       return formatYmd(date);
     }
+    function monthsAgoYmd(months) {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setMonth(date.getMonth() - Math.max(0, Number(months) || 0));
+      return formatYmd(date);
+    }
     const todayYmd = formatYmd(new Date());
     let tagQuery = {
       period: "last_30_days",
@@ -1261,6 +1363,36 @@
       dealKind: "",
       province: "",
     };
+    function hasAnalyticsService() {
+      return hasPortalPerm("portal.stats.view");
+    }
+    function defaultNoticePublishFrom() {
+      return monthsAgoYmd(3);
+    }
+    function noticeLookbackFloorYmd() {
+      return monthsAgoYmd(hasAnalyticsService() ? 12 : 6);
+    }
+    function clampNoticePublishFrom(value) {
+      const floor = noticeLookbackFloorYmd();
+      const raw = normalizeYmd(value || "") || defaultNoticePublishFrom();
+      return raw < floor ? floor : raw;
+    }
+    function defaultNoticeQuery() {
+      return {
+        page: 1,
+        search: "",
+        siteId: "",
+        noticeKind: "",
+        progress: "",
+        regionName: "",
+        projectCode: "",
+        projectName: "",
+        buyerName: "",
+        publishDateFrom: defaultNoticePublishFrom(),
+        publishDateTo: formatYmd(new Date()),
+      };
+    }
+    noticeQuery = defaultNoticeQuery();
     const PORTAL_THEME_KEY = "portal_theme";
     function currentPortalTheme() {
       const saved = localStorage.getItem(PORTAL_THEME_KEY);
@@ -1379,7 +1511,15 @@
     ];
     const ACCOUNT_ACTION_IDS = ["portal.account.view", "portal.account.create", "portal.account.edit", "portal.account.delete"];
     let enterpriseQuery = { orders: { page: 1, search: "" }, invoices: { page: 1, search: "" }, contracts: { page: 1, search: "" }, accounts: { page: 1, search: "" } };
-    let messageQuery = { page: 1, unread: false, search: "", layout: localStorage.getItem("portal_message_layout") === "grid" ? "grid" : "list" };
+    let messageQuery = {
+      page: 1,
+      unread: false,
+      keyword: "",
+      region: "",
+      search: "",
+      layout: localStorage.getItem("portal_message_layout") === "grid" ? "grid" : "list",
+      filtersReady: false,
+    };
     let messageRequest = 0;
     let unreadBadgeCount = 0;
     let wechatBindPollTimer = 0;
@@ -2777,6 +2917,62 @@
         .slice(0, 20);
     }
 
+    function subscriptionCities(sub) {
+      const rows = Array.isArray(sub?.regions) ? sub.regions : [];
+      const out = [];
+      rows.forEach((row) => {
+        let city = String(row?.city || "").trim().replace(/市$/, "");
+        if (!city || !SHANDONG_CITIES.includes(city) || out.includes(city)) return;
+        out.push(city);
+      });
+      return out;
+    }
+
+    function subscriptionNoticeCategories(sub) {
+      const raw = Array.isArray(sub?.noticeCategories) ? sub.noticeCategories : [];
+      return raw.map((item) => String(item || "").trim()).filter((item) => item === "公告" || item === "结果");
+    }
+
+    function subscriptionPushTimes(sub) {
+      const raw = Array.isArray(sub?.pushTimes) ? sub.pushTimes : [];
+      const out = [];
+      raw.forEach((item) => {
+        let text = String(item || "").trim();
+        if (/^\d:\d{2}$/.test(text)) text = "0" + text;
+        if (!/^\d{2}:\d{2}$/.test(text) || out.includes(text)) return;
+        out.push(text);
+      });
+      out.sort();
+      return out.length ? out.slice(0, 5) : ["18:00"];
+    }
+
+    function validateSubscriptionPushTimes(times) {
+      const normalized = [];
+      (times || []).forEach((item) => {
+        let text = String(item || "").trim();
+        if (/^\d:\d{2}$/.test(text)) text = "0" + text;
+        if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text) || normalized.includes(text)) return;
+        normalized.push(text);
+      });
+      normalized.sort();
+      if (!normalized.length) return { times: ["18:00"], error: "" };
+      if (normalized.length > 5) return { times: normalized.slice(0, 5), error: "推送时刻最多 5 个。" };
+      const minutes = normalized.map((item) => {
+        const [h, m] = item.split(":").map(Number);
+        return h * 60 + m;
+      });
+      for (let i = 0; i < minutes.length; i += 1) {
+        const start = minutes[i];
+        let count = 0;
+        for (let j = i; j < minutes.length; j += 1) {
+          if (minutes[j] < start + 60) count += 1;
+          else break;
+        }
+        if (count > 3) return { times: normalized, error: "1 小时内推送时刻最多 3 个。" };
+      }
+      return { times: normalized, error: "" };
+    }
+
     function isPortalH5Client() {
       return isWeChatBrowser() || window.matchMedia("(max-width: 960px)").matches;
     }
@@ -2988,54 +3184,134 @@
 
     const FRAME_SITE_ID = "sd-gpfa-frame";
 
-    function buildFrameInsights(data, tagData) {
-      const insights = [];
+    function frameWeekCompare(data) {
+      const daily = data.daily || [];
+      const recent = daily.slice(-7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
+      const prev = daily.slice(-14, -7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
+      let pct = null;
+      if (prev > 0) pct = ((recent - prev) / prev) * 100;
+      return { recent, prev, pct };
+    }
+
+    function mountFrameInsightCharts(data, tagData) {
+      const axis = chartAxisTheme();
+      const palette = chartPalette();
+      const bar = chartBarGradient();
       const byKind = data.byKind || [];
       const total = byKind.reduce((sum, row) => sum + (Number(row.count) || 0), 0) || Number(data.publicNoticeTotal) || 0;
       const deal = byKind.find((row) => row.kind === "成交公告");
-      const stop = byKind.find((row) => row.kind === "终止公告" || row.kind === "废标公告");
-      if (deal && total) {
-        insights.push(
-          "成交公告占比 " + ((deal.count / total) * 100).toFixed(1) + "%（" + deal.count + "/" + total + "），成交金额 " + formatMoney(data.dealAmount) + "。"
-        );
+      const kindNote = document.querySelector("[data-insight-note=kind]");
+      if (kindNote) {
+        kindNote.textContent = deal && total
+          ? ("成交占比 " + ((deal.count / total) * 100).toFixed(1) + "% · 成交额 " + formatMoney(data.dealAmount))
+          : "按公告类型看构成";
       }
-      if (stop && total) {
-        insights.push(
-          (stop.kind || "终止公告") + " " + stop.count + " 条，约占 " + ((stop.count / total) * 100).toFixed(1) + "%。"
-        );
+      const kindEl = document.getElementById("chart-frame-insight-kind");
+      if (kindEl) {
+        mountChart(kindEl, {
+          color: palette,
+          tooltip: { trigger: "item", formatter: "{b}<br/>{c} 条（{d}%）" },
+          legend: { bottom: 0, type: "scroll", textStyle: { fontSize: 11 } },
+          series: [{
+            type: "pie",
+            radius: ["40%", "66%"],
+            center: ["50%", "42%"],
+            label: { formatter: "{d}%", fontSize: 11 },
+            data: byKind.map((row) => ({ name: row.kind, value: row.count })),
+          }],
+        });
       }
+
+      const week = frameWeekCompare(data);
+      const weekNote = document.querySelector("[data-insight-note=week]");
+      if (weekNote) {
+        weekNote.textContent = week.pct == null
+          ? ("近 7 日发布 " + week.recent + " 条")
+          : ("近 7 日 " + week.recent + " 条，较前 7 日" + (week.pct >= 0 ? "↑" : "↓") + Math.abs(week.pct).toFixed(1) + "%");
+      }
+      const weekEl = document.getElementById("chart-frame-insight-week");
+      if (weekEl) {
+        mountChart(weekEl, {
+          color: [palette[0], palette[1]],
+          grid: { left: 24, right: 16, top: 28, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "category", data: ["前 7 日", "近 7 日"], ...axis },
+          yAxis: { type: "value", ...axis },
+          series: [{
+            type: "bar",
+            barMaxWidth: 42,
+            data: [
+              { value: week.prev, itemStyle: { color: palette[6] || palette[0], borderRadius: [6, 6, 0, 0] } },
+              { value: week.recent, itemStyle: { color: bar, borderRadius: [6, 6, 0, 0] } },
+            ],
+            label: { show: true, position: "top", color: readCssVar("--chart-axis", "#64748b"), fontSize: 11 },
+          }],
+        });
+      }
+
       const tag = (tagData && tagData.tagStats) || {};
-      const topKind = (tag.byDealKind || []).slice().sort((a, b) => Number(b.amount) - Number(a.amount))[0];
-      if (topKind) {
-        insights.push("成交品类以「" + topKind.dealKind + "」为主，金额 " + moneyLabel(topKind.amount) + "。");
+      const dealKinds = (tag.byDealKind || []).slice().sort((a, b) => Number(b.amount) - Number(a.amount));
+      const topDeal = dealKinds[0];
+      const dealNote = document.querySelector("[data-insight-note=deal]");
+      if (dealNote) {
+        dealNote.textContent = topDeal
+          ? ("主品类「" + topDeal.dealKind + "」· " + moneyLabel(topDeal.amount))
+          : "加载品类结构…";
       }
-      const topProvince = (tag.byProvince || [])[0];
-      if (topProvince) {
-        insights.push(
-          "地市成交靠前：" + topProvince.province + "（" + topProvince.count + " 条，" + moneyLabel(topProvince.amount) + "）。"
-        );
+      const dealEl = document.getElementById("chart-frame-insight-deal");
+      if (dealEl && dealKinds.length) {
+        mountChart(dealEl, {
+          color: palette,
+          tooltip: { trigger: "item", formatter: (params) => params.name + "<br/>" + moneyLabel(params.value) + "（" + params.percent + "%）" },
+          legend: { bottom: 0, type: "scroll", textStyle: { fontSize: 11 } },
+          series: [{
+            type: "pie",
+            radius: ["40%", "66%"],
+            center: ["50%", "42%"],
+            label: { formatter: "{b}", fontSize: 11 },
+            data: dealKinds.map((row) => ({ name: row.dealKind, value: Number(row.amount) || 0 })),
+          }],
+        });
       }
-      const topBuyer = (tag.byBuyer || [])[0];
-      if (topBuyer) {
-        insights.push(
-          "活跃采购人示例：" + topBuyer.buyerName + "（" + topBuyer.count + " 条，" + moneyLabel(topBuyer.amount) + "）。"
-        );
+
+      const provinces = (tag.byProvince || []).slice(0, 8);
+      const topProvince = provinces[0];
+      const regionNote = document.querySelector("[data-insight-note=region]");
+      if (regionNote) {
+        regionNote.textContent = topProvince
+          ? ("靠前：" + topProvince.province + " · " + moneyLabel(topProvince.amount))
+          : "加载地市分布…";
       }
-      const daily = data.daily || [];
-      if (daily.length >= 7) {
-        const recent = daily.slice(-7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
-        const prev = daily.slice(-14, -7).reduce((sum, row) => sum + (Number(row.count) || 0), 0);
-        if (prev > 0) {
-          const pct = ((recent - prev) / prev) * 100;
-          insights.push(
-            "近 7 日发布 " + recent + " 条，较前 7 日" + (pct >= 0 ? "上升 " : "下降 ") + Math.abs(pct).toFixed(1) + "%。"
-          );
-        } else {
-          insights.push("近 7 日发布 " + recent + " 条。");
-        }
+      const regionEl = document.getElementById("chart-frame-insight-region");
+      if (regionEl && provinces.length) {
+        const rows = provinces.slice().reverse();
+        mountChart(regionEl, {
+          color: [palette[1]],
+          grid: { left: 8, right: 24, top: 8, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis", valueFormatter: (value) => moneyLabel(value) },
+          xAxis: {
+            type: "value",
+            ...axis,
+            axisLabel: {
+              color: readCssVar("--chart-axis", "#94a3b8"),
+              formatter: (value) => (Math.abs(value) >= 10000 ? (value / 10000).toFixed(0) + "万" : value),
+            },
+          },
+          yAxis: {
+            type: "category",
+            data: rows.map((row) => String(row.province || "").replace(/^山东省/, "") || row.province),
+            ...axis,
+            axisLabel: { width: 72, overflow: "truncate", fontSize: 11 },
+          },
+          series: [{
+            type: "bar",
+            barWidth: 12,
+            data: rows.map((row) => Number(row.amount) || 0),
+            itemStyle: { borderRadius: [0, 6, 6, 0], color: bar },
+          }],
+        });
       }
-      if (!insights.length) insights.push("当前筛选条件下暂无可摘要的框采洞察。");
-      return insights;
+      fitCharts();
     }
 
     async function renderStats(panel) {
@@ -3187,28 +3463,28 @@
 
       const insightBox = document.createElement("section");
       insightBox.className = "frame-insights";
-      insightBox.innerHTML = "<h3>简单分析</h3><ul data-role='insights'><li class='muted'>正在汇总洞察…</li></ul>";
+      insightBox.innerHTML =
+        "<h3>简单分析</h3>" +
+        '<div class="frame-insights-grid">' +
+        '<div class="insight-card"><h4>公告构成</h4><p class="insight-note" data-insight-note="kind">按类型看占比</p><div class="insight-chart" id="chart-frame-insight-kind"></div></div>' +
+        '<div class="insight-card"><h4>近 7 日环比</h4><p class="insight-note" data-insight-note="week">发布量对比</p><div class="insight-chart" id="chart-frame-insight-week"></div></div>' +
+        '<div class="insight-card"><h4>成交品类</h4><p class="insight-note" data-insight-note="deal">加载中…</p><div class="insight-chart" id="chart-frame-insight-deal"></div></div>' +
+        '<div class="insight-card"><h4>地市成交 TOP</h4><p class="insight-note" data-insight-note="region">加载中…</p><div class="insight-chart" id="chart-frame-insight-region"></div></div>' +
+        "</div>";
       panel.appendChild(insightBox);
+      mountFrameInsightCharts(data, { tagStats: {} });
 
       const grid = document.createElement("div");
       grid.className = "charts";
-      const kindCard = document.createElement("section");
-      kindCard.className = "card";
-      kindCard.innerHTML = '<h3>公告类型</h3><div class="chart" id="chart-frame-kind"></div>';
       const dealCard = document.createElement("section");
       dealCard.className = "card";
       dealCard.innerHTML = '<h3>月成交金额</h3><div class="chart" id="chart-frame-deal"></div>';
-      grid.appendChild(kindCard);
-      grid.appendChild(dealCard);
-      panel.appendChild(grid);
-
-      const trendWrap = document.createElement("div");
-      trendWrap.className = "charts";
       const trendCard = document.createElement("section");
       trendCard.className = "card";
       trendCard.innerHTML = '<h3>发布量趋势</h3><div class="chart" id="chart-frame-daily"></div>';
-      trendWrap.appendChild(trendCard);
-      panel.appendChild(trendWrap);
+      grid.appendChild(dealCard);
+      grid.appendChild(trendCard);
+      panel.appendChild(grid);
 
       const tagBlock = document.createElement("section");
       tagBlock.className = "card tag-stats";
@@ -3229,17 +3505,6 @@
 
       const axis = chartAxisTheme();
       const palette = chartPalette();
-      mountChart(document.getElementById("chart-frame-kind"), {
-        color: palette,
-        tooltip: { trigger: "item" },
-        legend: { bottom: 0, type: "scroll" },
-        series: [{
-          type: "pie",
-          radius: ["42%", "68%"],
-          center: ["50%", "44%"],
-          data: (data.byKind || []).map((row) => ({ name: row.kind, value: row.count })),
-        }],
-      });
       const dealRows = data.monthlyDeal || [];
       mountChart(document.getElementById("chart-frame-deal"), {
         color: [palette[1]],
@@ -3278,9 +3543,8 @@
       });
       fitCharts();
 
-      let tagData = { tagStats: {} };
       try {
-        tagData = (await api("/api/portal/stats/?" + statsQueryParams({
+        const tagData = (await api("/api/portal/stats/?" + statsQueryParams({
           siteId: FRAME_SITE_ID,
           includeTags: "1",
           includeNoticeStats: "0",
@@ -3290,18 +3554,15 @@
         tagBlock.querySelector(".tag-metrics")?.removeAttribute("hidden");
         tagBlock.querySelector(".tag-tables")?.removeAttribute("hidden");
         fillTagStats(tagBlock, tagData, { reloadTab: "frameBoard" });
+        mountFrameInsightCharts(data, tagData);
       } catch (error) {
         const loading = tagBlock.querySelector("[data-tag=loading]");
         if (loading) loading.textContent = "结构分析加载失败：" + (error.message || "请稍后重试");
+        const dealNote = document.querySelector("[data-insight-note=deal]");
+        const regionNote = document.querySelector("[data-insight-note=region]");
+        if (dealNote) dealNote.textContent = "品类数据加载失败";
+        if (regionNote) regionNote.textContent = "地市数据加载失败";
       }
-
-      const list = insightBox.querySelector("[data-role=insights]");
-      list.innerHTML = "";
-      buildFrameInsights(data, tagData).forEach((text) => {
-        const li = document.createElement("li");
-        li.textContent = text;
-        list.appendChild(li);
-      });
     }
 
     function kindTone(kind) {
@@ -3421,59 +3682,98 @@
       }
     }
 
+    function syncMessageFiltersFromSubscription(sub) {
+      const keywords = subscriptionKeywords(sub);
+      const cities = subscriptionCities(sub);
+      if (!messageQuery.filtersReady) {
+        messageQuery.keyword = "";
+        messageQuery.region = "";
+        messageQuery.filtersReady = true;
+      }
+      if (messageQuery.keyword && !keywords.includes(messageQuery.keyword)) messageQuery.keyword = "";
+      if (messageQuery.region && !cities.includes(messageQuery.region)) messageQuery.region = "";
+      return { keywords, cities, categories: subscriptionNoticeCategories(sub), orgTypes: sub?.orgTypes || [] };
+    }
+
     async function renderMessages(panel) {
       const requestId = ++messageRequest;
+      const subMeta = syncMessageFiltersFromSubscription(me?.subscription);
       const params = new URLSearchParams({
         page: String(messageQuery.page),
         page_size: "20",
       });
       if (messageQuery.unread) params.set("unread", "1");
-      if (messageQuery.search) params.set("search", messageQuery.search);
+      if (messageQuery.keyword) params.set("keyword", messageQuery.keyword);
+      if (messageQuery.region) params.set("region", messageQuery.region);
       if (!panel.querySelector(".message-list")) {
         panel.innerHTML = '<p class="panel-loading">正在加载我的订阅…</p>';
       }
       const body = await api("/api/portal/messages/?" + params.toString());
       if (requestId !== messageRequest) return;
+      if (body.subscription) {
+        Object.assign(subMeta, syncMessageFiltersFromSubscription(body.subscription));
+      }
 
+      let shell = panel.querySelector(".message-shell");
+      let head = panel.querySelector(".message-head");
+      let subBar = panel.querySelector(".message-sub-bar");
       let toolbar = panel.querySelector(".message-toolbar");
       let list = panel.querySelector(".message-list");
       let pager = panel.querySelector(".pager");
-      if (!toolbar || !list || !pager) {
+      if (!shell || !head || !toolbar || !list || !pager) {
         panel.innerHTML = "";
+        shell = document.createElement("div");
+        shell.className = "message-shell";
+        head = document.createElement("div");
+        head.className = "message-head";
+        head.innerHTML =
+          "<div><h2>我的订阅</h2><p class=\"muted\">按你的商机订阅条件筛选推送记录</p></div>" +
+          '<div class="message-head-actions">' +
+          '<button type="button" class="primary" data-role="open-subscription">订阅商机</button>' +
+          "</div>";
+        subBar = document.createElement("div");
+        subBar.className = "message-sub-bar";
         toolbar = document.createElement("div");
         toolbar.className = "message-toolbar";
         toolbar.innerHTML =
+          '<div class="message-toolbar-row">' +
           '<p class="message-summary muted"></p>' +
-          '<label class="search-inline">搜索<input name="search" placeholder="标题 / 采购人 / 地区 / 关键词" /></label>' +
           '<div class="message-tools">' +
           '<div class="message-layout-toggle" role="group" aria-label="排列方式">' +
           '<button type="button" data-layout="list">列表</button>' +
           '<button type="button" data-layout="grid">卡片</button>' +
           "</div>" +
           '<label class="check-row"><input name="unread" type="checkbox" /> 仅未读</label>' +
-          '<button class="ghost" type="button" data-role="search">查询</button>' +
           '<button class="ghost" type="button" data-role="refresh">刷新</button>' +
+          "</div>" +
+          "</div>" +
+          '<div class="message-toolbar-row">' +
+          '<div class="message-filters">' +
+          '<label>关键词<select name="keyword"><option value="">全部关键词</option></select></label>' +
+          '<label>地市<select name="region"><option value="">全部地市</option></select></label>' +
+          "</div>" +
           "</div>";
         list = document.createElement("div");
         list.className = "list-card message-list";
         pager = document.createElement("div");
         pager.className = "pager";
-        panel.appendChild(toolbar);
+        shell.appendChild(head);
+        shell.appendChild(subBar);
+        shell.appendChild(toolbar);
+        panel.appendChild(shell);
         panel.appendChild(list);
         panel.appendChild(pager);
-        const searchInput = toolbar.querySelector("[name=search]");
-        const applySearch = () => {
-          messageQuery.search = String(searchInput.value || "").trim();
+        head.querySelector("[data-role=open-subscription]").onclick = () => openTab("subscription");
+        toolbar.querySelector("[name=keyword]").onchange = (event) => {
+          messageQuery.keyword = String(event.target.value || "").trim();
           messageQuery.page = 1;
           renderMessages(panel);
         };
-        toolbar.querySelector("[data-role=search]").onclick = applySearch;
-        searchInput.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            applySearch();
-          }
-        });
+        toolbar.querySelector("[name=region]").onchange = (event) => {
+          messageQuery.region = String(event.target.value || "").trim();
+          messageQuery.page = 1;
+          renderMessages(panel);
+        };
         toolbar.querySelector("[name=unread]").onchange = (event) => {
           messageQuery.unread = Boolean(event.target.checked);
           messageQuery.page = 1;
@@ -3491,8 +3791,57 @@
           };
         });
       }
+      if (!subBar) subBar = panel.querySelector(".message-sub-bar");
+
+      const keywordSelect = toolbar.querySelector("[name=keyword]");
+      const regionSelect = toolbar.querySelector("[name=region]");
+      const fillSelect = (select, items, emptyLabel, current) => {
+        const values = items.slice();
+        select.innerHTML = "";
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = emptyLabel;
+        select.appendChild(empty);
+        values.forEach((item) => {
+          const opt = document.createElement("option");
+          opt.value = item;
+          opt.textContent = item;
+          select.appendChild(opt);
+        });
+        select.value = values.includes(current) ? current : "";
+        select.disabled = !values.length;
+      };
+      fillSelect(keywordSelect, subMeta.keywords, "全部关键词", messageQuery.keyword);
+      fillSelect(regionSelect, subMeta.cities, "全部地市", messageQuery.region);
+      messageQuery.keyword = keywordSelect.value;
+      messageQuery.region = regionSelect.value;
+
+      const chips = [];
+      subMeta.keywords.forEach((item) => chips.push(item));
+      subMeta.cities.forEach((item) => chips.push(item));
+      (subMeta.categories || []).forEach((item) => chips.push(item));
+      (subMeta.orgTypes || []).forEach((item) => chips.push(item));
+      subBar.innerHTML = "";
+      if (!chips.length) {
+        subBar.innerHTML = '<span>尚未设置订阅条件，请先前往「订阅商机」配置。</span>';
+      } else {
+        const label = document.createElement("span");
+        label.textContent = "当前订阅：";
+        subBar.appendChild(label);
+        chips.slice(0, 12).forEach((text) => {
+          const chip = document.createElement("span");
+          chip.className = "summary-chip";
+          chip.textContent = text;
+          subBar.appendChild(chip);
+        });
+        if (chips.length > 12) {
+          const more = document.createElement("span");
+          more.textContent = "等 " + chips.length + " 项";
+          subBar.appendChild(more);
+        }
+      }
+
       toolbar.querySelector("[name=unread]").checked = Boolean(messageQuery.unread);
-      toolbar.querySelector("[name=search]").value = messageQuery.search || "";
       list.classList.toggle("is-grid", messageQuery.layout === "grid");
       toolbar.querySelectorAll("[data-layout]").forEach((item) => {
         item.classList.toggle("active", item.getAttribute("data-layout") === messageQuery.layout);
@@ -3500,15 +3849,17 @@
       setMessageBadge(body.unreadTotal || 0);
       const summary = toolbar.querySelector(".message-summary");
       if (summary) {
+        const filteredUnread = body.unreadFiltered != null ? body.unreadFiltered : body.unreadTotal || 0;
         summary.innerHTML =
           "共 <strong></strong> 条，未读 <em></em> 条<span class='message-hint'> · 点卡片查看详情</span>";
         summary.querySelector("strong").textContent = String(body.total || 0);
-        summary.querySelector("em").textContent = String(body.unreadTotal || 0);
+        summary.querySelector("em").textContent = String(filteredUnread);
       }
 
       list.innerHTML = "";
+      const hasFilter = Boolean(messageQuery.keyword || messageQuery.region || messageQuery.unread);
       if (!body.items || !body.items.length) {
-        list.innerHTML = messageQuery.search
+        list.innerHTML = hasFilter
           ? '<p class="empty">没有匹配的订阅记录。</p>'
           : '<p class="empty">暂无订阅推送。</p>';
       } else {
@@ -3524,7 +3875,7 @@
           const terms = item.matchedKeywords || [];
           article.querySelector("h3").innerHTML = highlightText(item.title || "未命名公告", terms);
           const meta = article.querySelector(".message-meta");
-          const chips = [
+          const metaChips = [
             { text: item.isRead ? "已读" : "未读", className: item.isRead ? "status-read" : "status-unread" },
             { text: item.siteLabel },
             { text: item.buyerName, highlight: true },
@@ -3532,7 +3883,7 @@
             { text: item.digestDate },
             { text: formatDateTimeShanghai(item.createdAt) },
           ].filter((chip) => chip.text && chip.text !== "—");
-          chips.forEach((chip) => {
+          metaChips.forEach((chip) => {
             const span = document.createElement("span");
             if (chip.className) span.className = chip.className;
             if (chip.highlight) span.innerHTML = highlightText(chip.text, terms);
@@ -3600,6 +3951,14 @@
       }, 30000);
     }
 
+    function noticeKindPrefix(item) {
+      const kind = String(item.noticeKind || "").trim();
+      if (!kind) return "";
+      if (/意向/.test(kind)) return "【采购意向】";
+      if (/成交|结果/.test(kind)) return "【结果公告】";
+      return "【平台采购公告】";
+    }
+
     function fillNoticeList(list, body) {
       list.innerHTML = "";
       if (!body.items.length) {
@@ -3622,14 +3981,17 @@
             : item.dealAmount != null && item.dealAmount !== ""
               ? "¥" + Number(item.dealAmount).toLocaleString("zh-CN")
               : "—";
-        const publish = formatDateTimeShanghai(item.publishTime);
+        const method = item.procurementMode || item.noticeKind || "—";
         const clock = noticeCountdownInfo(item);
+        const prefix = noticeKindPrefix(item);
         article.innerHTML =
           "<h3></h3>" +
           '<div class="portal-notice-status tone-' + clock.tone + '"><strong class="kind"></strong><em class="countdown"></em></div>' +
           '<div class="portal-notice-fields">' +
           "<div>采购预算：<b></b></div>" +
-          "<div data-role='publish'></div>" +
+          "<div data-role='start'></div>" +
+          "<div data-role='end'></div>" +
+          "<div data-role='method'></div>" +
           "<div data-role='buyer'></div>" +
           "</div>" +
           '<div class="portal-notice-meta"></div>' +
@@ -3637,14 +3999,24 @@
           '<button class="ghost" type="button" data-role="detail">查看详情</button>' +
           '<button class="ghost" type="button" data-role="source">原文</button>' +
           "</div>";
-        article.querySelector("h3").textContent = item.title || "未命名公告";
+        const titleEl = article.querySelector("h3");
+        titleEl.innerHTML = "";
+        if (prefix) {
+          const mark = document.createElement("span");
+          mark.className = "notice-kind-prefix";
+          mark.textContent = prefix;
+          titleEl.appendChild(mark);
+        }
+        titleEl.appendChild(document.createTextNode(item.title || "未命名公告"));
         article.querySelector(".kind").textContent = clock.label;
         article.querySelector(".portal-notice-status .countdown").textContent = clock.text || "";
         article.querySelector(".portal-notice-fields b").textContent = amount;
-        article.querySelector("[data-role=publish]").textContent = "发布时间：" + publish;
+        article.querySelector("[data-role=start]").textContent = "开始时间：" + formatDateTimeShanghai(item.startTime);
+        article.querySelector("[data-role=end]").textContent = "结束时间：" + formatDateTimeShanghai(item.endTime);
+        article.querySelector("[data-role=method]").textContent = "采购方式：" + method;
         article.querySelector("[data-role=buyer]").textContent = "采购单位：" + (item.buyerName || "—");
         const meta = article.querySelector(".portal-notice-meta");
-        [item.siteLabel, item.noticeKind, item.regionName]
+        [item.siteLabel, method, item.regionName]
           .filter((part) => part && part !== "—")
           .forEach((text) => {
             const span = document.createElement("span");
@@ -3681,8 +4053,37 @@
       });
     }
 
+    function syncNoticeUpsell(panel, body) {
+      let box = panel.querySelector(".notice-upsell");
+      const need = Boolean(body.lookbackClamped) || Boolean(body.dealNoticeBlocked);
+      if (!need) {
+        if (box) box.remove();
+        return;
+      }
+      if (!box) {
+        box = document.createElement("div");
+        box.className = "notice-upsell";
+        const toolbar = panel.querySelector(".toolbar");
+        if (toolbar && toolbar.nextSibling) panel.insertBefore(box, toolbar.nextSibling);
+        else panel.prepend(box);
+      }
+      const months = body.maxLookbackMonths || 6;
+      const parts = [];
+      if (body.lookbackClamped) {
+        parts.push("普通客户最多可查近 " + months + " 个月公告；更早数据需开通<strong>数据分析服务</strong>。");
+      }
+      if (body.dealNoticeBlocked) {
+        parts.push("成交/结果类公告仅对开通<strong>数据分析服务</strong>的客户开放。");
+      }
+      if (!parts.length) {
+        parts.push("开通<strong>数据分析服务</strong>后可查询更长周期与成交公告。");
+      }
+      box.innerHTML = parts.join(" ");
+    }
+
     async function renderNotices(panel) {
       const requestId = ++noticeRequest;
+      noticeQuery.publishDateFrom = clampNoticePublishFrom(noticeQuery.publishDateFrom);
       const params = new URLSearchParams({
         page: String(noticeQuery.page),
         page_size: "20",
@@ -3694,14 +4095,19 @@
         projectCode: noticeQuery.projectCode,
         projectName: noticeQuery.projectName,
         buyerName: noticeQuery.buyerName,
+        publishDateFrom: noticeQuery.publishDateFrom,
       });
-      if (noticeQuery.publishDateFrom) params.set("publishDateFrom", noticeQuery.publishDateFrom);
       if (noticeQuery.publishDateTo) params.set("publishDateTo", noticeQuery.publishDateTo);
       if (!panel.querySelector(".notice-card-list")) {
         panel.innerHTML = '<p class="panel-loading">正在加载公告列表…</p>';
       }
       const body = await api("/api/portal/notices/?" + params.toString());
       if (requestId !== noticeRequest) return;
+      if (body.publishDateFrom) noticeQuery.publishDateFrom = body.publishDateFrom;
+      if (body.publishDateTo != null && body.publishDateTo !== undefined) {
+        // 仅当服务端回写了结束日时同步；空串表示未限制结束日
+        if (body.publishDateTo) noticeQuery.publishDateTo = body.publishDateTo;
+      }
 
       let toolbar = panel.querySelector(".toolbar");
       let list = panel.querySelector(".notice-card-list");
@@ -3715,7 +4121,7 @@
           '<label>平台<select name="siteId"><option value="">全部</option></select></label>' +
           '<label>类型<select name="noticeKind"><option value="">全部</option></select></label>' +
           '<label>进度<select name="progress"><option value="">全部</option><option value="ongoing">进行中</option><option value="upcoming">未开始</option><option value="ended">已截止</option></select></label>' +
-          '<label>区域<input name="regionName" placeholder="如：济南" /></label>' +
+          '<label>区域<select name="regionName"><option value="">全部地市</option></select></label>' +
           '<label>项目编号<input name="projectCode" /></label>' +
           '<label>项目名称<input name="projectName" /></label>' +
           '<label>采购单位<input name="buyerName" /></label>' +
@@ -3748,7 +4154,6 @@
           };
         };
         bindText("search", "search", true);
-        bindText("regionName", "regionName", true);
         bindText("projectCode", "projectCode", true);
         bindText("projectName", "projectName", true);
         bindText("buyerName", "buyerName", true);
@@ -3785,17 +4190,32 @@
           noticeQuery.page = 1;
           renderNotices(panel);
         };
+        const regionSelect = toolbar.querySelector("[name=regionName]");
+        const regionOptions = body.regions && body.regions.length ? body.regions : SHANDONG_CITIES;
+        regionOptions.forEach((city) => {
+          const option = document.createElement("option");
+          option.value = city;
+          option.textContent = /市$/.test(city) ? city : city + "市";
+          regionSelect.appendChild(option);
+        });
+        regionSelect.value = noticeQuery.regionName || "";
+        regionSelect.onchange = () => {
+          noticeQuery.regionName = regionSelect.value || "";
+          noticeQuery.page = 1;
+          renderNotices(panel);
+        };
         const fromInput = toolbar.querySelector("[name=publishDateFrom]");
         const toInput = toolbar.querySelector("[name=publishDateTo]");
-        fromInput.value = noticeQuery.publishDateFrom || "";
-        toInput.value = noticeQuery.publishDateTo || "";
+        fromInput.value = noticeQuery.publishDateFrom || defaultNoticePublishFrom();
+        toInput.value = noticeQuery.publishDateTo || formatYmd(new Date());
+        noticeQuery.publishDateTo = toInput.value;
         if (window.ycDatePicker) {
           window.ycDatePicker.bind(fromInput);
           window.ycDatePicker.bind(toInput);
         }
         toolbar.querySelector("[data-role=apply]").onclick = () => {
-          noticeQuery.publishDateFrom = normalizeYmd(fromInput.value) || "";
-          noticeQuery.publishDateTo = normalizeYmd(toInput.value) || "";
+          noticeQuery.publishDateFrom = clampNoticePublishFrom(fromInput.value);
+          noticeQuery.publishDateTo = normalizeYmd(toInput.value) || formatYmd(new Date());
           fromInput.value = noticeQuery.publishDateFrom;
           toInput.value = noticeQuery.publishDateTo;
           if (fromInput._flatpickr) fromInput._flatpickr.setDate(noticeQuery.publishDateFrom || "", false);
@@ -3808,19 +4228,7 @@
           renderNotices(panel);
         };
         toolbar.querySelector("[data-role=reset]").onclick = () => {
-          noticeQuery = {
-            page: 1,
-            search: "",
-            siteId: "",
-            noticeKind: "",
-            progress: "",
-            regionName: "",
-            projectCode: "",
-            projectName: "",
-            buyerName: "",
-            publishDateFrom: "",
-            publishDateTo: "",
-          };
+          noticeQuery = defaultNoticeQuery();
           renderNotices(panel);
         };
         list = document.createElement("div");
@@ -3834,7 +4242,22 @@
         toolbar.querySelector("[name=publishDateFrom]").value = noticeQuery.publishDateFrom;
         toolbar.querySelector("[name=publishDateTo]").value = noticeQuery.publishDateTo;
         toolbar.querySelector("[name=progress]").value = noticeQuery.progress;
+        const regionSelect = toolbar.querySelector("[name=regionName]");
+        if (regionSelect) regionSelect.value = noticeQuery.regionName || "";
+        const kindSelect = toolbar.querySelector("[name=noticeKind]");
+        if (kindSelect && body.noticeKinds) {
+          const current = new Set(Array.from(kindSelect.options).map((opt) => opt.value).filter(Boolean));
+          body.noticeKinds.forEach((kind) => {
+            if (current.has(kind)) return;
+            const option = document.createElement("option");
+            option.value = kind;
+            option.textContent = kind;
+            kindSelect.appendChild(option);
+          });
+          kindSelect.value = noticeQuery.noticeKind;
+        }
       }
+      syncNoticeUpsell(panel, body);
       fillNoticeList(list, body);
       fillNoticePager(pager, panel, body);
     }
@@ -3861,64 +4284,58 @@
         <h3>微信推送</h3>
         <p class="muted" id="wechat-status"></p>
         <div class="row-actions" id="wechat-actions"></div>
-        <h3>订阅条件</h3>
-        <p class="muted">不同条件之间为「或」：任一页签条件命中即可；同一页签内多个选项也为「或」。每天汇总一条微信提醒。</p>
-        <details class="subscription-summary" id="sub-summary">
-          <summary>
-            <div class="summary-main">当前条件：<strong data-role="brief"></strong></div>
-            <span class="summary-toggle" data-role="toggle">展开细节</span>
-          </summary>
-          <div class="subscription-summary-body" data-role="detail"></div>
-        </details>
-        <div class="subscription-tabs" id="sub-tabs" role="tablist"></div>
-        <div class="subscription-tab-panel" data-tab="tags">
-          <label>已选内容标签<div class="selected-tag-chips" id="selected-tags"></div></label>
-          <p class="muted" id="tag-picker-hint">搜索后分页浏览全部内容标签，点击行即可勾选/取消。</p>
-          <div class="tag-picker">
-            <div class="tag-picker-search">
-              <input name="tagSearch" placeholder="搜索标签，如：车辆、加油、充电桩、打印机" aria-label="搜索标签" />
+        <div id="sub-gate" class="wechat-bind-gate" hidden>
+          <p class="muted" style="margin:0">设置订阅前请先绑定微信。绑定后可配置关键词、地市、公告类型与推送时刻。</p>
+        </div>
+        <div id="sub-body">
+          <h3>订阅条件</h3>
+          <p class="muted">关键词、地市、单位类型之间为「或」；公告类型为「且」过滤。可自定义多个推送时刻。</p>
+          <details class="subscription-summary" id="sub-summary">
+            <summary>
+              <div class="summary-main">当前条件：<strong data-role="brief"></strong></div>
+              <span class="summary-toggle" data-role="toggle">展开细节</span>
+            </summary>
+            <div class="subscription-summary-body" data-role="detail"></div>
+          </details>
+          <div class="subscription-tabs" id="sub-tabs" role="tablist"></div>
+          <div class="subscription-tab-panel" data-tab="keywords">
+            <p class="muted">每个关键词单独添加，最多 20 个。</p>
+            <div class="keyword-add-row">
+              <input name="keywordInput" maxlength="64" placeholder="输入单个关键词后点添加" />
+              <button type="button" class="ghost" data-role="add-keyword">添加</button>
             </div>
-            <div class="tag-picker-body">
-              <div class="tag-picker-list" id="tag-list"></div>
-              <div class="tag-picker-pager" id="tag-pager"></div>
+            <div class="keyword-chips" id="keyword-chips"></div>
+          </div>
+          <div class="subscription-tab-panel" data-tab="regions">
+            <p class="muted">仅支持山东省内地市，可多选。</p>
+            <div class="chip-group" id="city-chips"></div>
+          </div>
+          <div class="subscription-tab-panel" data-tab="kinds">
+            <p class="muted">可选「公告」或「结果」，不选则不限类型。</p>
+            <div class="chip-group" id="notice-categories"></div>
+          </div>
+          <div class="subscription-tab-panel" data-tab="orgs">
+            <label>单位类型<div class="chip-group" id="org-types"></div></label>
+          </div>
+          <div class="subscription-tab-panel" data-tab="push">
+            <label class="check-row"><input name="enabled" type="checkbox" /> 开启推送</label>
+            <p class="muted">最多 5 个推送时刻；任意 1 小时内不超过 3 个。到点汇总推送新命中公告。</p>
+            <div class="push-time-list" id="push-time-list"></div>
+            <div class="push-time-actions">
+              <button type="button" class="ghost" data-role="add-push-time">添加推送时刻</button>
             </div>
           </div>
+          <div class="row-actions"><button class="primary" type="submit">保存订阅</button></div>
         </div>
-        <div class="subscription-tab-panel" data-tab="regions">
-          <label>地区（省）
-            <select name="province"><option value="">不限</option></select>
-          </label>
-          <label>地区（市，可选）<input name="city" placeholder="如：济南市" /></label>
-        </div>
-        <div class="subscription-tab-panel" data-tab="keywords">
-          <p class="muted">每个关键词单独添加，最多 20 个，避免逗号/空格分割误伤。</p>
-          <div class="keyword-add-row">
-            <input name="keywordInput" maxlength="64" placeholder="输入单个关键词后点添加" />
-            <button type="button" class="ghost" data-role="add-keyword">添加</button>
-          </div>
-          <div class="keyword-chips" id="keyword-chips"></div>
-        </div>
-        <div class="subscription-tab-panel" data-tab="buyers">
-          <label>采购人（可多条，逗号分隔）<input name="buyers" placeholder="如：交通管理支队, 审计局" /></label>
-        </div>
-        <div class="subscription-tab-panel" data-tab="orgs">
-          <label>单位类型<div class="chip-group" id="org-types"></div></label>
-        </div>
-        <div class="subscription-tab-panel" data-tab="push">
-          <label class="check-row"><input name="enabled" type="checkbox" /> 开启每日推送</label>
-          <p class="muted">开启前需先绑定微信；至少设置一类订阅条件。</p>
-        </div>
-        <div class="row-actions"><button class="primary" type="submit">保存订阅</button></div>
         <p class="error" id="sub-msg"></p>
       `;
       panel.appendChild(card);
 
-      const selectedTags = new Set(me.subscription?.contentTags || []);
+      const selectedCities = new Set(subscriptionCities(me.subscription));
       const selectedOrgTypes = new Set(me.subscription?.orgTypes || []);
+      const selectedNoticeCategories = new Set(subscriptionNoticeCategories(me.subscription));
       const keywords = subscriptionKeywords(me.subscription);
-      const region0 = (me.subscription?.regions && me.subscription.regions[0]) || {};
-      card.buyers.value = (me.subscription?.buyers || []).join(", ");
-      card.city.value = region0.city || "";
+      let pushTimes = subscriptionPushTimes(me.subscription);
       card.enabled.checked = Boolean(me.subscription?.enabled);
 
       const statusEl = card.querySelector("#wechat-status");
@@ -3926,6 +4343,8 @@
       const msgEl = card.querySelector("#sub-msg");
       const summaryEl = card.querySelector("#sub-summary");
       const tabsEl = card.querySelector("#sub-tabs");
+      const subBody = card.querySelector("#sub-body");
+      const subGate = card.querySelector("#sub-gate");
       const bindStatus = readWechatBindStatus();
       if (bindStatus === "ok") msgEl.textContent = "微信绑定成功。";
       else if (bindStatus === "fail") msgEl.textContent = "微信绑定失败，请重试。";
@@ -3933,32 +4352,21 @@
       if (bindStatus) clearWechatBindStatusFromUrl();
 
       const tabDefs = [
-        { id: "tags", label: "内容标签" },
-        { id: "regions", label: "地区" },
         { id: "keywords", label: "关键词" },
-        { id: "buyers", label: "采购人" },
+        { id: "regions", label: "地区" },
+        { id: "kinds", label: "公告类型" },
         { id: "orgs", label: "单位类型" },
         { id: "push", label: "推送设置" },
       ];
-      let activeTab = "tags";
+      let activeTab = "keywords";
 
       function tabCount(id) {
-        if (id === "tags") return selectedTags.size;
-        if (id === "regions") return (card.province.value || card.city.value.trim()) ? 1 : 0;
         if (id === "keywords") return keywords.length;
-        if (id === "buyers") {
-          return String(card.buyers.value || "").split(/[\s,，;；]+/).map((x) => x.trim()).filter(Boolean).length;
-        }
+        if (id === "regions") return selectedCities.size;
+        if (id === "kinds") return selectedNoticeCategories.size;
         if (id === "orgs") return selectedOrgTypes.size;
-        if (id === "push") return card.enabled.checked ? 1 : 0;
+        if (id === "push") return (card.enabled.checked ? 1 : 0) + pushTimes.length;
         return 0;
-      }
-
-      function buyerList() {
-        return String(card.buyers.value || "")
-          .split(/[\s,，;；]+/)
-          .map((item) => item.trim())
-          .filter(Boolean);
       }
 
       function appendSummaryRow(container, label, values) {
@@ -3981,25 +4389,23 @@
       }
 
       function refreshSummary() {
-        const buyers = buyerList();
-        const regionText = [card.province.value, card.city.value.trim()].filter(Boolean).join("");
         const parts = [];
-        if (selectedTags.size) parts.push("标签 " + selectedTags.size + " 个");
-        if (regionText) parts.push("地区 " + regionText);
         if (keywords.length) parts.push("关键词 " + keywords.length + " 个");
-        if (buyers.length) parts.push("采购人 " + buyers.length + " 个");
+        if (selectedCities.size) parts.push("地市 " + selectedCities.size + " 个");
+        if (selectedNoticeCategories.size) parts.push("类型 " + [...selectedNoticeCategories].join("/"));
         if (selectedOrgTypes.size) parts.push("单位类型 " + selectedOrgTypes.size + " 个");
         parts.push(card.enabled.checked ? "推送已开启" : "推送未开启");
+        if (pushTimes.length) parts.push("时刻 " + pushTimes.join("、"));
         summaryEl.querySelector("[data-role=brief]").textContent = parts.join(" · ");
         summaryEl.querySelector("[data-role=toggle]").textContent = summaryEl.open ? "收起细节" : "展开细节";
         const detail = summaryEl.querySelector("[data-role=detail]");
         detail.innerHTML = "";
-        appendSummaryRow(detail, "内容标签", [...selectedTags]);
-        appendSummaryRow(detail, "地区", regionText ? [regionText] : []);
         appendSummaryRow(detail, "关键词", keywords.slice());
-        appendSummaryRow(detail, "采购人", buyers);
+        appendSummaryRow(detail, "地区", [...selectedCities]);
+        appendSummaryRow(detail, "公告类型", [...selectedNoticeCategories]);
         appendSummaryRow(detail, "单位类型", [...selectedOrgTypes]);
-        appendSummaryRow(detail, "推送", [card.enabled.checked ? "每日推送已开启" : "每日推送未开启"]);
+        appendSummaryRow(detail, "推送时刻", pushTimes.slice());
+        appendSummaryRow(detail, "推送", [card.enabled.checked ? "已开启" : "未开启"]);
       }
 
       summaryEl.addEventListener("toggle", () => {
@@ -4077,121 +4483,108 @@
         renderTabs();
       }
 
-      function renderSelectedTags() {
-        const box = card.querySelector("#selected-tags");
+      function renderCityChips(cities) {
+        renderChipGroup(card.querySelector("#city-chips"), cities || SHANDONG_CITIES, [...selectedCities], (item) => {
+          if (selectedCities.has(item)) selectedCities.delete(item);
+          else selectedCities.add(item);
+          renderCityChips(cities);
+          renderTabs();
+        });
+      }
+
+      function renderNoticeCategoryChips() {
+        renderChipGroup(
+          card.querySelector("#notice-categories"),
+          ["公告", "结果"],
+          [...selectedNoticeCategories],
+          (item) => {
+            if (selectedNoticeCategories.has(item)) selectedNoticeCategories.delete(item);
+            else selectedNoticeCategories.add(item);
+            renderNoticeCategoryChips();
+            renderTabs();
+          }
+        );
+      }
+
+      function fillTimeSelect(select, values, current) {
+        select.innerHTML = "";
+        values.forEach((value) => {
+          const opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = value;
+          select.appendChild(opt);
+        });
+        select.value = values.includes(current) ? current : values[0];
+      }
+
+      function readPushTimeRow(row) {
+        const hour = row.querySelector("[data-role=hour]")?.value || "18";
+        const minute = row.querySelector("[data-role=minute]")?.value || "00";
+        return hour + ":" + minute;
+      }
+
+      function syncPushTimesFromRows() {
+        const rows = Array.from(card.querySelectorAll(".push-time-row"));
+        const next = rows.map((row) => readPushTimeRow(row));
+        const checked = validateSubscriptionPushTimes(next);
+        pushTimes = checked.times;
+        msgEl.textContent = checked.error || "";
+        return checked;
+      }
+
+      function renderPushTimes() {
+        const box = card.querySelector("#push-time-list");
         box.innerHTML = "";
-        if (!selectedTags.size) {
-          box.innerHTML = '<span class="muted">尚未选择标签</span>';
-          return;
-        }
-        [...selectedTags].forEach((tag) => {
-          const chip = document.createElement("span");
-          chip.className = "selected-tag-chip";
-          chip.innerHTML = "<span></span><button type='button' aria-label='删除'>×</button>";
-          chip.querySelector("span").textContent = tag;
-          chip.querySelector("button").onclick = () => {
-            selectedTags.delete(tag);
-            renderSelectedTags();
-            renderTagList();
+        const hourValues = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+        pushTimes.forEach((time, index) => {
+          const parts = String(time || "18:00").split(":");
+          let hour = String(parts[0] || "18").padStart(2, "0");
+          let minute = String(parts[1] || "00").padStart(2, "0");
+          const minuteValues = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+          if (!minuteValues.includes(minute)) minuteValues.push(minute);
+          minuteValues.sort();
+          if (!hourValues.includes(hour)) hour = "18";
+
+          const row = document.createElement("div");
+          row.className = "push-time-row";
+          row.innerHTML =
+            '<span class="push-time-label">推送时刻</span>' +
+            '<div class="push-time-fields">' +
+            '<select data-role="hour" aria-label="小时"></select>' +
+            '<span class="push-time-sep">:</span>' +
+            '<select data-role="minute" aria-label="分钟"></select>' +
+            "</div>" +
+            '<button type="button" class="ghost" data-role="remove">删除</button>';
+          const hourSelect = row.querySelector("[data-role=hour]");
+          const minuteSelect = row.querySelector("[data-role=minute]");
+          fillTimeSelect(hourSelect, hourValues, hour);
+          fillTimeSelect(minuteSelect, minuteValues, minute);
+          const onChange = () => {
+            const checked = syncPushTimesFromRows();
+            if (checked.error) {
+              renderPushTimes();
+              renderTabs();
+              return;
+            }
+            pushTimes[index] = readPushTimeRow(row);
+            pushTimes = validateSubscriptionPushTimes(pushTimes).times;
             renderTabs();
           };
-          box.appendChild(chip);
+          hourSelect.onchange = onChange;
+          minuteSelect.onchange = onChange;
+          row.querySelector("[data-role=remove]").onclick = () => {
+            if (pushTimes.length <= 1) {
+              msgEl.textContent = "至少保留一个推送时刻。";
+              return;
+            }
+            pushTimes.splice(index, 1);
+            renderPushTimes();
+            renderTabs();
+          };
+          box.appendChild(row);
         });
-      }
-
-      let tagPage = 1;
-      let tagPageSize = 20;
-      let tagSearchTimer = 0;
-      let tagSearchQuery = "";
-
-      function matchedContentTags() {
-        const all = options.contentTags || [];
-        const q = tagSearchQuery;
-        if (!q) return all.slice();
-        return all.filter((item) => String(item).toLowerCase().includes(q));
-      }
-
-      function renderTagList() {
-        const list = card.querySelector("#tag-list");
-        const pager = card.querySelector("#tag-pager");
-        const hint = card.querySelector("#tag-picker-hint");
-        const all = options.contentTags || [];
-        const matched = matchedContentTags();
-        const total = matched.length;
-        const totalPages = Math.max(1, Math.ceil(total / tagPageSize) || 1);
-        if (tagPage > totalPages) tagPage = totalPages;
-        if (tagPage < 1) tagPage = 1;
-        const start = (tagPage - 1) * tagPageSize;
-        const shown = matched.slice(start, start + tagPageSize);
-        list.innerHTML = "";
-        if (hint) {
-          hint.textContent = tagSearchQuery
-            ? `共 ${all.length} 个标签，匹配 ${total} 个；第 ${tagPage}/${totalPages} 页`
-            : `共 ${all.length} 个标签（按热度排序）；第 ${tagPage}/${totalPages} 页，可用搜索快速定位`;
-        }
-        if (!shown.length) {
-          list.innerHTML = '<div class="tag-picker-empty">没有匹配的标签</div>';
-        } else {
-          shown.forEach((item) => {
-            const active = selectedTags.has(item);
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = active ? "active" : "";
-            btn.innerHTML = "<span></span><em></em>";
-            btn.querySelector("span").textContent = item;
-            btn.querySelector("em").textContent = active ? "已选" : "选择";
-            btn.onclick = () => {
-              if (selectedTags.has(item)) selectedTags.delete(item);
-              else selectedTags.add(item);
-              renderSelectedTags();
-              renderTagList();
-              renderTabs();
-            };
-            list.appendChild(btn);
-          });
-        }
-
-        pager.innerHTML =
-          "<span data-role='summary'></span>" +
-          "<div class='pager-actions'>" +
-          "<button type='button' class='ghost' data-role='first'>首页</button>" +
-          "<button type='button' class='ghost' data-role='prev'>上一页</button>" +
-          "<button type='button' class='ghost' data-role='next'>下一页</button>" +
-          "<button type='button' class='ghost' data-role='last'>末页</button>" +
-          "<label>每页<select name='tagPageSize'><option value='10'>10</option><option value='20'>20</option><option value='50'>50</option><option value='100'>100</option></select></label>" +
-          "<label>跳转<input name='tagJump' type='number' min='1' /></label>" +
-          "<button type='button' class='ghost' data-role='jump'>前往</button>" +
-          "</div>";
-        pager.querySelector("[data-role=summary]").textContent =
-          total ? `本页 ${shown.length} 条 · 共 ${total} 条` : "暂无数据";
-        const sizeSelect = pager.querySelector("[name=tagPageSize]");
-        sizeSelect.value = String(tagPageSize);
-        sizeSelect.onchange = () => {
-          tagPageSize = Number(sizeSelect.value) || 20;
-          tagPage = 1;
-          renderTagList();
-        };
-        const jumpInput = pager.querySelector("[name=tagJump]");
-        jumpInput.value = String(tagPage);
-        pager.querySelector("[data-role=first]").disabled = tagPage <= 1 || !total;
-        pager.querySelector("[data-role=prev]").disabled = tagPage <= 1 || !total;
-        pager.querySelector("[data-role=next]").disabled = tagPage >= totalPages || !total;
-        pager.querySelector("[data-role=last]").disabled = tagPage >= totalPages || !total;
-        pager.querySelector("[data-role=first]").onclick = () => { tagPage = 1; renderTagList(); };
-        pager.querySelector("[data-role=prev]").onclick = () => { tagPage = Math.max(1, tagPage - 1); renderTagList(); };
-        pager.querySelector("[data-role=next]").onclick = () => { tagPage = Math.min(totalPages, tagPage + 1); renderTagList(); };
-        pager.querySelector("[data-role=last]").onclick = () => { tagPage = totalPages; renderTagList(); };
-        pager.querySelector("[data-role=jump]").onclick = () => {
-          const next = Math.max(1, Math.min(totalPages, Number(jumpInput.value) || 1));
-          tagPage = next;
-          renderTagList();
-        };
-        jumpInput.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            pager.querySelector("[data-role=jump]").click();
-          }
-        });
+        const addBtn = card.querySelector("[data-role=add-push-time]");
+        if (addBtn) addBtn.disabled = pushTimes.length >= 5;
       }
 
       async function openBindQrModal(options) {
@@ -4256,6 +4649,7 @@
                   me = statusBody.data || me;
                   close();
                   refreshWechatUi(options);
+                  syncBindGate();
                   msgEl.textContent = "微信绑定成功。";
                   return;
                 }
@@ -4285,13 +4679,23 @@
         await startBindQr();
       }
 
+      function syncBindGate() {
+        const bound = Boolean(me.wechatBound);
+        subGate.hidden = bound;
+        subBody.hidden = !bound;
+        if (!bound) {
+          msgEl.textContent = msgEl.textContent || "请先绑定微信后再设置订阅。";
+        }
+      }
+
       function refreshWechatUi(options) {
         const bound = Boolean(me.wechatBound);
         const follow = me.wechatFollowStatus || "unknown";
         statusEl.textContent = bound
-          ? `已绑定微信${follow === "unsubscribed" ? "（已取关服务号，将无法收到推送）" : "，可开启每日汇总推送"}`
-          : "尚未绑定微信。开启推送前请先关注服务号并完成绑定。";
+          ? `已绑定微信${follow === "unsubscribed" ? "（已取关服务号，将无法收到推送）" : "，可设置订阅并开启推送"}`
+          : "尚未绑定微信。请先绑定后再设置订阅条件。";
         actionsEl.innerHTML = "";
+        syncBindGate();
         if (!options?.wechatConfigured) {
           const tip = document.createElement("p");
           tip.className = "muted";
@@ -4338,14 +4742,19 @@
         }
       }
 
-      let options = { contentTags: [], orgTypes: [], provinces: [], wechatConfigured: false };
+      let options = { orgTypes: [], shandongCities: SHANDONG_CITIES, wechatConfigured: false };
       try {
         if (bindStatus) {
           const latest = await api("/api/portal/me/");
           me = latest.data;
           keywords.splice(0, keywords.length, ...subscriptionKeywords(me.subscription));
-          (me.subscription?.contentTags || []).forEach((item) => selectedTags.add(item));
+          selectedCities.clear();
+          subscriptionCities(me.subscription).forEach((item) => selectedCities.add(item));
+          selectedOrgTypes.clear();
           (me.subscription?.orgTypes || []).forEach((item) => selectedOrgTypes.add(item));
+          selectedNoticeCategories.clear();
+          subscriptionNoticeCategories(me.subscription).forEach((item) => selectedNoticeCategories.add(item));
+          pushTimes = subscriptionPushTimes(me.subscription);
           card.enabled.checked = Boolean(me.subscription?.enabled);
         }
         options = await api("/api/portal/subscription/options/");
@@ -4353,26 +4762,7 @@
         msgEl.textContent = error.message || msgEl.textContent;
       }
 
-      const provinceSelect = card.province;
-      (options.provinces || []).forEach((name) => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        provinceSelect.appendChild(opt);
-      });
-      provinceSelect.value = region0.province || "";
-      provinceSelect.onchange = () => renderTabs();
-      card.city.addEventListener("input", () => renderTabs());
-      card.buyers.addEventListener("input", () => renderTabs());
       card.enabled.onchange = () => renderTabs();
-      card.tagSearch.addEventListener("input", () => {
-        window.clearTimeout(tagSearchTimer);
-        tagSearchTimer = window.setTimeout(() => {
-          tagSearchQuery = String(card.tagSearch.value || "").trim().toLowerCase();
-          tagPage = 1;
-          renderTagList();
-        }, 200);
-      });
       card.querySelector("[data-role=add-keyword]").onclick = addKeyword;
       card.keywordInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -4380,6 +4770,18 @@
           addKeyword();
         }
       });
+      card.querySelector("[data-role=add-push-time]").onclick = () => {
+        if (pushTimes.length >= 5) {
+          msgEl.textContent = "推送时刻最多 5 个。";
+          return;
+        }
+        pushTimes = validateSubscriptionPushTimes(pushTimes.concat(["18:00"])).times;
+        const checked = validateSubscriptionPushTimes(pushTimes);
+        msgEl.textContent = checked.error || "";
+        pushTimes = checked.times;
+        renderPushTimes();
+        renderTabs();
+      };
 
       const redrawOrgs = () => renderChipGroup(
         card.querySelector("#org-types"),
@@ -4393,40 +4795,54 @@
         },
       );
       redrawOrgs();
-      renderSelectedTags();
-      renderTagList();
+      renderCityChips(options.shandongCities && options.shandongCities.length ? options.shandongCities : SHANDONG_CITIES);
+      renderNoticeCategoryChips();
       renderKeywordChips();
+      renderPushTimes();
       renderTabs();
       refreshWechatUi(options);
 
       card.onsubmit = async (event) => {
         event.preventDefault();
         msgEl.textContent = "";
-        const buyers = String(card.buyers.value || "")
-          .split(/[\s,，;；]+/)
-          .map((item) => item.trim())
-          .filter(Boolean);
-        const regions = [];
-        if (provinceSelect.value || card.city.value.trim()) {
-          regions.push({
-            province: provinceSelect.value || "",
-            city: card.city.value.trim(),
-            district: "",
-          });
+        if (!me.wechatBound) {
+          msgEl.textContent = "请先绑定微信后再设置订阅。";
+          syncBindGate();
+          return;
         }
+        const checked = validateSubscriptionPushTimes(pushTimes);
+        pushTimes = checked.times;
+        renderPushTimes();
+        if (checked.error) {
+          msgEl.textContent = checked.error;
+          activeTab = "push";
+          renderTabs();
+          return;
+        }
+        const regions = [...selectedCities].map((city) => ({
+          province: "山东省",
+          city,
+          district: "",
+        }));
         try {
           const body = await api("/api/portal/subscription/", {
             method: "PUT",
             body: JSON.stringify({
               enabled: card.enabled.checked,
               keywords,
-              contentTags: [...selectedTags],
-              orgTypes: [...selectedOrgTypes],
-              buyers,
               regions,
+              orgTypes: [...selectedOrgTypes],
+              noticeCategories: [...selectedNoticeCategories],
+              pushTimes,
+              contentTags: [],
+              buyers: [],
             }),
           });
           me = body.data;
+          pushTimes = subscriptionPushTimes(me.subscription);
+          renderPushTimes();
+          messageQuery.filtersReady = false;
+          messageQuery.page = 1;
           msgEl.textContent = "订阅已保存。";
           refreshWechatUi(options);
           renderTabs();

@@ -25,7 +25,12 @@ from django.views.decorators.http import require_http_methods
 from .models import CustomerAccountRecord, OrganizationRecord, PlatformAccountRecord, ProjectRecord
 from .notice_inbox_models import PortalNoticeInbox
 from .notice_models import NoticeGoods, NoticeParsed, NoticeRaw
-from .notice_subscription import normalize_subscription, subscription_has_filters
+from .notice_subscription import (
+    SHANDONG_CITIES,
+    normalize_subscription,
+    subscription_has_filters,
+    validate_push_times,
+)
 from .notice_tagging import DEAL_KINDS, normalize_stats_period, period_bounds, safe_stats
 from .notice_views import (
     NOTICE_TYPE_LABELS,
@@ -34,7 +39,14 @@ from .notice_views import (
     query_crawled_notices,
 )
 from . import wechat_mp
-from .notices import clamp_public_publish_date_from
+from .notices import (
+    PORTAL_DEAL_NOTICE_KINDS,
+    PORTAL_NOTICE_BASIC_LOOKBACK_MONTHS,
+    clamp_portal_publish_date_from,
+    clamp_public_publish_date_from,
+    portal_notice_range_ok,
+    public_notice_min_publish_date,
+)
 
 PORTAL_COOKIE = "portal_session"
 PORTAL_SALT = "portal-account"
@@ -1379,6 +1391,13 @@ def _portal_swr_get_or_build(
     return fresh
 
 
+def _portal_has_analytics_service(account: dict) -> bool:
+    """已购数据分析服务：账号或企业权限包含 portal.stats.view。"""
+    perms = set(account.get("permissions") or [])
+    caps = set(account.get("orgEntitlements") or [])
+    return "portal.stats.view" in perms or "portal.stats.view" in caps
+
+
 @require_http_methods(["GET"])
 def portal_notices(request):
     record, error = require_portal(request, "portal.notice.view")
@@ -1386,14 +1405,20 @@ def portal_notices(request):
         return error
     account = public_account(record)
     scope = account_site_scope(account)
+    has_analytics = _portal_has_analytics_service(account)
     page = int(request.GET.get("page") or 1)
     page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 50)
     search = (request.GET.get("search") or "").strip()
     site_id = (request.GET.get("siteId") or "").strip()
     notice_kind = (request.GET.get("noticeKind") or "").strip()
     notice_kinds = (request.GET.get("noticeKinds") or request.GET.get("notice_kinds") or "").strip()
-    publish_date_from = (request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip()
+    raw_from = (request.GET.get("publishDateFrom") or request.GET.get("publish_date_from") or "").strip()
     publish_date_to = (request.GET.get("publishDateTo") or request.GET.get("publish_date_to") or "").strip()
+    publish_date_from, lookback_clamped = clamp_portal_publish_date_from(
+        raw_from,
+        has_analytics=has_analytics,
+    )
+    publish_date_from, publish_date_to = portal_notice_range_ok(publish_date_from, publish_date_to)
     buyer_name = (request.GET.get("buyerName") or "").strip()
     project_code = (request.GET.get("projectCode") or "").strip()
     project_name = (request.GET.get("projectName") or "").strip()
@@ -1401,30 +1426,23 @@ def portal_notices(request):
     progress = (request.GET.get("progress") or "").strip()
     procurement_mode = (request.GET.get("procurementMode") or request.GET.get("procurement_mode") or "").strip()
     sort = (request.GET.get("sort") or request.GET.get("orderBy") or "").strip()
-    # 默认首屏（无筛选）跨 worker 缓存 + SWR，躲开闲置后冷 COUNT
-    default_first_page = (
-        page == 1
-        and page_size == 20
-        and not any(
-            [
-                search,
-                site_id,
-                notice_kind,
-                notice_kinds,
-                publish_date_from,
-                publish_date_to,
-                buyer_name,
-                project_code,
-                project_name,
-                region_name,
-                progress,
-                procurement_mode,
-                sort,
-            ]
-        )
-    )
-    scope_key = "all" if scope is None else ",".join(scope)
-    list_cache_key = f"portal_notices_default_v2:{scope_key}" if default_first_page else ""
+
+    deal_kinds = set(PORTAL_DEAL_NOTICE_KINDS)
+    exclude_notice_kinds = ""
+    deal_blocked = False
+    if not has_analytics:
+        exclude_notice_kinds = ",".join(PORTAL_DEAL_NOTICE_KINDS)
+        if notice_kind in deal_kinds:
+            notice_kind = ""
+            deal_blocked = True
+        if notice_kinds:
+            kept = [part.strip() for part in notice_kinds.split(",") if part.strip() and part.strip() not in deal_kinds]
+            if len(kept) != len([part for part in notice_kinds.split(",") if part.strip()]):
+                deal_blocked = True
+            notice_kinds = ",".join(kept)
+
+    all_kinds = PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"]
+    visible_kinds = [kind for kind in all_kinds if has_analytics or kind not in deal_kinds]
 
     def _build_notice_payload() -> dict:
         try:
@@ -1445,33 +1463,24 @@ def portal_notices(request):
                 progress=progress,
                 procurement_mode=procurement_mode,
                 sort=sort,
+                exclude_notice_kinds=exclude_notice_kinds,
             )
         except (ProgrammingError, OperationalError) as exc:
             raise exc
         body["sites"] = site_options(scope)
-        body["noticeKinds"] = PORTAL_NOTICE_KINDS + ["意向公开", "结果公告", "成交结果公告"]
+        body["noticeKinds"] = visible_kinds
+        body["publishDateFrom"] = publish_date_from
+        body["publishDateTo"] = publish_date_to
+        body["hasAnalyticsService"] = has_analytics
+        body["maxLookbackMonths"] = 12 if has_analytics else 6
+        body["defaultLookbackMonths"] = 3
+        body["lookbackClamped"] = bool(lookback_clamped and not has_analytics)
+        body["dealNoticeBlocked"] = bool(deal_blocked)
+        body["regions"] = [
+            "济南", "青岛", "淄博", "枣庄", "东营", "烟台", "潍坊", "济宁",
+            "泰安", "威海", "日照", "临沂", "德州", "聊城", "滨州", "菏泽",
+        ]
         return body
-
-    if list_cache_key:
-        try:
-            payload = _portal_swr_get_or_build(
-                list_cache_key,
-                hard_seconds=PORTAL_NOTICES_DEFAULT_CACHE_SECONDS,
-                soft_seconds=PORTAL_NOTICES_SOFT_SECONDS,
-                builder=_build_notice_payload,
-            )
-            return JsonResponse(payload)
-        except (ProgrammingError, OperationalError):
-            return JsonResponse(
-                {
-                    "detail": "公告数据暂时不可用，请稍后重试或联系管理员。",
-                    "items": [],
-                    "total": 0,
-                    "page": page,
-                    "page_size": page_size,
-                },
-                status=503,
-            )
 
     try:
         payload = _build_notice_payload()
@@ -1497,6 +1506,7 @@ def portal_notice_detail(request, notice_id: int):
         return error
     account = public_account(record)
     scope = account_site_scope(account)
+    has_analytics = _portal_has_analytics_service(account)
     try:
         raw = NoticeRaw.objects.filter(id=notice_id).first()
         if not raw:
@@ -1504,6 +1514,32 @@ def portal_notice_detail(request, notice_id: int):
         if scope is not None and raw.site_id not in scope:
             return JsonResponse({"detail": "无权查看该公告"}, status=403)
         parsed = NoticeParsed.objects.filter(notice_raw_id=raw.id).first()
+        kind = str((parsed.notice_kind if parsed else "") or getattr(raw, "notice_kind", "") or "").strip()
+        if not has_analytics and kind in PORTAL_DEAL_NOTICE_KINDS:
+            return JsonResponse(
+                {
+                    "detail": "成交/结果类公告需开通数据分析服务后查看。",
+                    "code": "analytics_required",
+                    "hasAnalyticsService": False,
+                },
+                status=403,
+            )
+        if not has_analytics and parsed and parsed.publish_time:
+            publish_dt = parsed.publish_time
+            if timezone.is_aware(publish_dt):
+                publish_day = timezone.localtime(publish_dt).date()
+            else:
+                publish_day = publish_dt.date() if hasattr(publish_dt, "date") else None
+            six_floor = public_notice_min_publish_date(months=PORTAL_NOTICE_BASIC_LOOKBACK_MONTHS)
+            if publish_day and publish_day < six_floor:
+                return JsonResponse(
+                    {
+                        "detail": "超过近 6 个月的历史公告需开通数据分析服务后查看。",
+                        "code": "analytics_required",
+                        "hasAnalyticsService": False,
+                    },
+                    status=403,
+                )
         goods = list(NoticeGoods.objects.filter(notice_raw_id=raw.id).order_by("line_no", "id"))
         return JsonResponse(_serialize_detail(raw, parsed, goods))
     except (ProgrammingError, OperationalError):
@@ -1550,33 +1586,49 @@ def portal_messages(request):
     page_size = min(max(int(request.GET.get("page_size") or request.GET.get("pageSize") or 20), 1), 100)
     unread_only = str(request.GET.get("unread") or "").strip().lower() in {"1", "true", "yes"}
     search = (request.GET.get("search") or "").strip()
+    keyword = (request.GET.get("keyword") or "").strip()
+    region = (request.GET.get("region") or request.GET.get("city") or "").strip()
     qs = PortalNoticeInbox.objects.filter(customer_account_id=record.id).order_by("-created_at", "-id")
     if unread_only:
         qs = qs.filter(is_read=False)
-    if search:
+    needle = keyword or search
+    if needle:
         qs = qs.filter(
-            Q(title__icontains=search)
-            | Q(project_name__icontains=search)
-            | Q(buyer_name__icontains=search)
-            | Q(region_name__icontains=search)
-            | Q(site_id__icontains=search)
+            Q(title__icontains=needle)
+            | Q(project_name__icontains=needle)
+            | Q(buyer_name__icontains=needle)
+            | Q(region_name__icontains=needle)
+            | Q(site_id__icontains=needle)
         )
+    if region:
+        qs = qs.filter(region_name__icontains=region.replace("市", ""))
     total = qs.count()
     unread_total = PortalNoticeInbox.objects.filter(customer_account_id=record.id, is_read=False).count()
+    unread_filtered = qs.filter(is_read=False).count() if not unread_only else total
     rows = list(qs[(page - 1) * page_size : page * page_size])
     account = public_account(record)
     sub = account.get("subscription") if isinstance(account.get("subscription"), dict) else {}
     highlight_terms = list(sub.get("keywords") or [])
-    if search:
-        highlight_terms = [search, *highlight_terms]
+    if needle:
+        highlight_terms = [needle, *highlight_terms]
     return JsonResponse(
         {
             "items": [_serialize_inbox_item(row, highlight_terms=highlight_terms) for row in rows],
             "total": total,
             "unreadTotal": unread_total,
+            "unreadFiltered": unread_filtered,
             "page": page,
             "page_size": page_size,
             "search": search,
+            "keyword": keyword,
+            "region": region,
+            "subscription": {
+                "keywords": list(sub.get("keywords") or []),
+                "regions": list(sub.get("regions") or []),
+                "noticeCategories": list(sub.get("noticeCategories") or []),
+                "orgTypes": list(sub.get("orgTypes") or []),
+                "enabled": bool(sub.get("enabled")),
+            },
         }
     )
 
@@ -1739,20 +1791,26 @@ def portal_subscription(request):
     if not isinstance(payload, dict):
         return JsonResponse({"detail": "订阅内容无效。"}, status=400)
     wanted_enabled = bool(payload.get("enabled"))
+    push_times, push_error = validate_push_times(payload.get("pushTimes") or payload.get("push_times"))
+    if push_error:
+        return JsonResponse({"detail": push_error}, status=400)
+    payload = {**payload, "pushTimes": push_times}
     normalized = normalize_subscription(payload)
     if wanted_enabled and not subscription_has_filters(normalized):
-        return JsonResponse({"detail": "请至少设置标签、地区、关键词、采购人或单位中的一项。"}, status=400)
+        return JsonResponse({"detail": "请至少设置关键词、地区、公告类型或单位中的一项。"}, status=400)
     account = public_account(record)
-    if wanted_enabled and not account.get("wechatBound"):
-        return JsonResponse({"detail": "请先绑定微信后再开启推送。"}, status=400)
+    if not account.get("wechatBound"):
+        return JsonResponse({"detail": "请先绑定微信后再设置订阅。"}, status=400)
     data = dict(record.data or {})
     data["subscription"] = {
         "enabled": normalized["enabled"],
         "keywords": list(normalized.get("keywords") or []),
-        "contentTags": normalized.get("contentTags") or [],
+        "contentTags": [],
         "regions": normalized.get("regions") or [],
-        "buyers": normalized.get("buyers") or [],
+        "buyers": [],
         "orgTypes": normalized.get("orgTypes") or [],
+        "noticeCategories": normalized.get("noticeCategories") or [],
+        "pushTimes": list(normalized.get("pushTimes") or push_times),
     }
     record.data = data
     record.save(update_fields=["data", "updated_at"])
@@ -1764,74 +1822,18 @@ def portal_subscription_options(request):
     record, error = require_portal(request, "portal.notice.subscribe")
     if error:
         return error
-    from django.db.models import Count
-
     from .notice_dict import KIND_ORG_TYPE, list_dict_names
-    from .notice_tag_models import NoticeResultTag
 
-    cache_key = "portal_subscription_content_tags_v1"
-    content_tags = cache.get(cache_key)
-    if not isinstance(content_tags, list) or not content_tags:
-        # 全量去重标签（按使用频次排序）；门户用搜索筛选，不再截断到几十个
-        content_tags = list(
-            NoticeResultTag.objects.exclude(content_tag="")
-            .values("content_tag")
-            .annotate(total=Count("id"))
-            .order_by("-total", "content_tag")
-            .values_list("content_tag", flat=True)
-        )
-        # 兜底：库空或极冷门时仍可勾选常用项
-        for item in (
-            "车辆",
-            "汽车",
-            "公务用车",
-            "新能源汽车",
-            "充电桩",
-            "车辆加油",
-            "油卡",
-            "ETC",
-            "车辆维保",
-            "车辆保险",
-            "车辆租赁",
-            "客车",
-            "货车",
-            "轿车",
-            "轮胎",
-            "汽配",
-            "汽车配件",
-            "洗车",
-            "停车",
-            "印刷",
-            "运维服务",
-            "办公用品",
-            "空调",
-            "LED屏幕",
-            "宣传项目",
-            "家具",
-            "计算机",
-        ):
-            if item not in content_tags:
-                content_tags.append(item)
-        cache.set(cache_key, content_tags, 300)
-    provinces = [
-        "山东省",
-        "北京市",
-        "上海市",
-        "天津市",
-        "河北省",
-        "河南省",
-        "江苏省",
-        "浙江省",
-        "广东省",
-        "四川省",
-    ]
     return JsonResponse(
         {
-            "contentTags": content_tags,
+            "shandongCities": list(SHANDONG_CITIES),
+            "noticeCategories": ["公告", "结果"],
             "orgTypes": list(list_dict_names(KIND_ORG_TYPE, enabled_only=True))
             or ["机关", "教育", "医疗卫生", "公安系统", "事业单位", "其他"],
-            "provinces": provinces,
             "wechatConfigured": wechat_mp.mp_configured(),
+            # 兼容旧前端字段
+            "contentTags": [],
+            "provinces": ["山东省"],
         }
     )
 

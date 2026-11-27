@@ -14,6 +14,10 @@ from urllib.request import Request, urlopen
 from django.utils import timezone
 
 PUBLIC_NOTICE_LOOKBACK_MONTHS = 3
+PORTAL_NOTICE_DEFAULT_LOOKBACK_MONTHS = 3
+PORTAL_NOTICE_BASIC_LOOKBACK_MONTHS = 6
+PORTAL_NOTICE_MAX_LOOKBACK_MONTHS = 12
+PORTAL_DEAL_NOTICE_KINDS = ("成交公告", "结果公告", "成交结果公告")
 
 
 def public_notice_min_publish_date(*, months: int = PUBLIC_NOTICE_LOOKBACK_MONTHS) -> date:
@@ -28,20 +32,65 @@ def public_notice_min_publish_date(*, months: int = PUBLIC_NOTICE_LOOKBACK_MONTH
     return date(year, month, day)
 
 
+def _parse_ymd(raw: str | None) -> date | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        parts = text[:10].split("-")
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except Exception:
+        return None
+
+
 def clamp_public_publish_date_from(raw: str | None = "") -> str:
     """公开列表 publishDateFrom：缺省或早于窗口时钳制到近三个月起点。"""
     floor = public_notice_min_publish_date()
-    text = str(raw or "").strip()
-    if not text:
-        return floor.isoformat()
-    try:
-        parts = text[:10].split("-")
-        requested = date(int(parts[0]), int(parts[1]), int(parts[2]))
-    except Exception:
+    requested = _parse_ymd(raw)
+    if requested is None:
         return floor.isoformat()
     if requested < floor:
         return floor.isoformat()
     return requested.isoformat()
+
+
+def clamp_portal_publish_date_from(
+    raw: str | None = "",
+    *,
+    has_analytics: bool = False,
+) -> tuple[str, bool]:
+    """门户公告 publishDateFrom。
+
+    - 未传：默认近 3 个月
+    - 有数据分析服务：最早可到近 12 个月
+    - 普通客户：最早可到近 6 个月；更早会被钳制并返回 clamped=True 便于前端引导升级
+    """
+    max_months = (
+        PORTAL_NOTICE_MAX_LOOKBACK_MONTHS if has_analytics else PORTAL_NOTICE_BASIC_LOOKBACK_MONTHS
+    )
+    hard_floor = public_notice_min_publish_date(months=max_months)
+    default_from = public_notice_min_publish_date(months=PORTAL_NOTICE_DEFAULT_LOOKBACK_MONTHS)
+    requested = _parse_ymd(raw)
+    if requested is None:
+        return default_from.isoformat(), False
+    if requested < hard_floor:
+        return hard_floor.isoformat(), True
+    return requested.isoformat(), False
+
+
+def portal_notice_range_ok(publish_from: str, publish_to: str | None = "") -> tuple[str, str]:
+    """保证查询跨度不超过一年；未传结束日时按今天计算跨度，但仍可不回写结束日。"""
+    today = timezone.localdate()
+    start = _parse_ymd(publish_from) or public_notice_min_publish_date(
+        months=PORTAL_NOTICE_DEFAULT_LOOKBACK_MONTHS
+    )
+    has_to = bool(str(publish_to or "").strip())
+    end = _parse_ymd(publish_to) or today
+    if end < start:
+        end = start
+    if (end - start).days > 366:
+        start = date.fromordinal(end.toordinal() - 366)
+    return start.isoformat(), (end.isoformat() if has_to else "")
 
 from .models import NoticeCollectionRunRecord, NoticeCollectionSourceRecord, NoticeRecord, WebsiteLeadRecord
 

@@ -51,7 +51,8 @@ def _account_wechat(record: CustomerAccountRecord) -> dict[str, Any]:
     }
 
 
-def _iter_eligible_accounts():
+def _iter_eligible_accounts(*, push_slot: str = ""):
+    slot = str(push_slot or "").strip()
     qs = CustomerAccountRecord.objects.filter(is_deleted=False, status="启用")
     for record in qs.iterator(chunk_size=200):
         account = public_account(record)
@@ -60,6 +61,9 @@ def _iter_eligible_accounts():
             continue
         sub = normalize_subscription(account.get("subscription"))
         if not sub.get("enabled") or not subscription_has_filters(sub):
+            continue
+        push_times = list(sub.get("pushTimes") or ["18:00"])
+        if slot and slot not in push_times:
             continue
         wechat = _account_wechat(record)
         if not wechat["openid"]:
@@ -71,6 +75,15 @@ def _iter_eligible_accounts():
 
 def _load_day_notices(digest_date: date, *, site_ids: list[str] | None) -> list[dict[str, Any]]:
     start, end = digest_day_bounds(digest_date)
+    return _load_notices_between(start, end, site_ids=site_ids)
+
+
+def _load_notices_between(
+    start: datetime,
+    end: datetime,
+    *,
+    site_ids: list[str] | None,
+) -> list[dict[str, Any]]:
     parsed_qs = NoticeParsed.objects.filter(publish_time__gte=start, publish_time__lt=end)
     rows = list(
         parsed_qs.values(
@@ -80,6 +93,7 @@ def _load_day_notices(digest_date: date, *, site_ids: list[str] | None) -> list[
             "buyer_name",
             "region_name",
             "publish_time",
+            "notice_kind",
         )
     )
     if not rows:
@@ -106,6 +120,7 @@ def _load_day_notices(digest_date: date, *, site_ids: list[str] | None) -> list[
         tag = tags.get(rid)
         profile = tag.buyer_profile if tag and tag.buyer_profile_id else None
         title = (row.get("notice_title") or (raw.title if raw else "") or "").strip()
+        kind = (row.get("notice_kind") or getattr(raw, "notice_kind", "") or "").strip()
         result.append(
             {
                 "id": rid,
@@ -119,6 +134,7 @@ def _load_day_notices(digest_date: date, *, site_ids: list[str] | None) -> list[
                 "city": ((profile.city if profile else "") or "").strip(),
                 "district": ((profile.district if profile else "") or "").strip(),
                 "siteId": (raw.site_id if raw else "") or "",
+                "noticeKind": kind,
             }
         )
     return result
@@ -138,6 +154,7 @@ def match_notices_for_subscription(notices: list[dict[str, Any]], subscription: 
             city=item.get("city") or "",
             district=item.get("district") or "",
             region_name=item.get("regionName") or "",
+            notice_kind=item.get("noticeKind") or "",
         ):
             hits.append(item)
     return hits
@@ -262,13 +279,35 @@ def send_manual_template_for_account(
     }
 
 
-def _already_sent(account_id: str, digest_date: date) -> bool:
+def _already_sent(account_id: str, digest_date: date, *, push_slot: str = "") -> bool:
     return NoticePushLog.objects.filter(
         customer_account_id=account_id,
         channel=CHANNEL,
         digest_date=digest_date,
+        push_slot=str(push_slot or ""),
         status="sent",
     ).exists()
+
+
+def _exclude_already_inboxed(
+    *,
+    account_id: str,
+    digest_date: date,
+    notices: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    notice_ids = [int(item.get("id") or 0) for item in notices if int(item.get("id") or 0) > 0]
+    if not notice_ids:
+        return notices
+    already = set(
+        PortalNoticeInbox.objects.filter(
+            customer_account_id=account_id,
+            digest_date=digest_date,
+            notice_raw_id__in=notice_ids,
+        ).values_list("notice_raw_id", flat=True)
+    )
+    if not already:
+        return notices
+    return [item for item in notices if int(item.get("id") or 0) not in already]
 
 
 def send_digest_for_account(
@@ -282,9 +321,11 @@ def send_digest_for_account(
     dry_run: bool = False,
     force: bool = False,
     allow_empty: bool = False,
+    push_slot: str = "",
 ) -> dict[str, Any]:
-    if not force and _already_sent(record.id, digest_date):
-        return {"accountId": record.id, "status": "skipped", "reason": "already_sent"}
+    slot = str(push_slot or "").strip()
+    if not force and _already_sent(record.id, digest_date, push_slot=slot):
+        return {"accountId": record.id, "status": "skipped", "reason": "already_sent", "pushSlot": slot}
 
     scope = account_site_scope(account)
     notices = day_notices
@@ -293,6 +334,8 @@ def send_digest_for_account(
     elif scope is not None:
         allowed = set(scope)
         notices = [item for item in notices if item.get("siteId") in allowed]
+    if slot:
+        notices = _exclude_already_inboxed(account_id=record.id, digest_date=digest_date, notices=notices)
 
     hits = match_notices_for_subscription(notices, subscription)
     empty_test = False
@@ -319,6 +362,7 @@ def send_digest_for_account(
                 customer_account_id=record.id,
                 channel=CHANNEL,
                 digest_date=digest_date,
+                push_slot=slot,
                 defaults={
                     "openid": wechat["openid"],
                     "filter_snapshot": filter_snapshot,
@@ -327,7 +371,7 @@ def send_digest_for_account(
                 },
             )
             if not created and log.status == "sent" and not force:
-                return {"accountId": record.id, "status": "skipped", "reason": "already_sent"}
+                return {"accountId": record.id, "status": "skipped", "reason": "already_sent", "pushSlot": slot}
             if not created:
                 log.openid = wechat["openid"]
                 log.filter_snapshot = filter_snapshot
@@ -344,9 +388,9 @@ def send_digest_for_account(
                     push_log_id=log.id,
                 )
     except IntegrityError:
-        return {"accountId": record.id, "status": "skipped", "reason": "race"}
+        return {"accountId": record.id, "status": "skipped", "reason": "race", "pushSlot": slot}
 
-    client_msg_id = f"notice-digest-{record.id}-{digest_date.isoformat()}"
+    client_msg_id = f"notice-digest-{record.id}-{digest_date.isoformat()}-{slot or 'default'}"
     if force or empty_test:
         client_msg_id = f"{client_msg_id}-m{int(timezone.now().timestamp())}"
 
@@ -357,7 +401,7 @@ def send_digest_for_account(
         client_msg_id=client_msg_id,
     )
     log = NoticePushLog.objects.filter(
-        customer_account_id=record.id, channel=CHANNEL, digest_date=digest_date
+        customer_account_id=record.id, channel=CHANNEL, digest_date=digest_date, push_slot=slot
     ).first()
     if log:
         log.status = "sent" if result.get("ok") else "failed"
@@ -372,6 +416,7 @@ def send_digest_for_account(
         "status": "sent" if result.get("ok") else "failed",
         "matched": 0 if empty_test else len(hits),
         "emptyTest": empty_test,
+        "pushSlot": slot,
         "errcode": result.get("errcode"),
         "errmsg": result.get("errmsg"),
     }
@@ -417,13 +462,32 @@ def send_manual_digest_for_account(
     return outcome
 
 
-def run_notice_digest(*, digest_date: date | None = None, dry_run: bool = False, limit: int = 0) -> dict[str, Any]:
-    day = digest_date or default_digest_date()
+def run_notice_digest(
+    *,
+    digest_date: date | None = None,
+    dry_run: bool = False,
+    limit: int = 0,
+    push_slot: str = "",
+) -> dict[str, Any]:
+    slot = str(push_slot or "").strip()
+    if digest_date is None:
+        current = timezone.localtime(timezone.now(), SHANGHAI)
+        day = current.date() if slot else default_digest_date(now=current)
+    else:
+        day = digest_date
     # 全量日公告先按「不限站点」加载；各账号再按 allowedSiteIds 过滤
     all_notices = _load_day_notices(day, site_ids=None)
-    stats = {"date": day.isoformat(), "accounts": 0, "sent": 0, "failed": 0, "skipped": 0, "matchedAccounts": 0}
+    stats = {
+        "date": day.isoformat(),
+        "pushSlot": slot,
+        "accounts": 0,
+        "sent": 0,
+        "failed": 0,
+        "skipped": 0,
+        "matchedAccounts": 0,
+    }
     details: list[dict[str, Any]] = []
-    for record, account, subscription, wechat in _iter_eligible_accounts():
+    for record, account, subscription, wechat in _iter_eligible_accounts(push_slot=slot):
         if limit and stats["accounts"] >= limit:
             break
         stats["accounts"] += 1
@@ -442,6 +506,7 @@ def run_notice_digest(*, digest_date: date | None = None, dry_run: bool = False,
             digest_date=day,
             day_notices=day_notices,
             dry_run=dry_run,
+            push_slot=slot,
         )
         details.append(outcome)
         status = outcome.get("status")

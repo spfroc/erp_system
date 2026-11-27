@@ -198,8 +198,8 @@ CELERY_BEAT_SCHEDULE = {
     },
     "daily-notice-digest": {
         "task": "apps.data_store.notice_digest_tasks.run_daily_notice_digest",
-        # 每天 18:00（CELERY_TIMEZONE / TIME_ZONE）
-        "schedule": crontab(hour=18, minute=0),
+        # 每分钟检查账号自定义推送时刻（最多 5 个；1 小时内最多 3 个）
+        "schedule": crontab(minute="*"),
     },
     # 预热门户公告首屏 / 近30天统计，避免闲置后首屏冷查 5～10s
     "warm-portal-hot-paths": {
